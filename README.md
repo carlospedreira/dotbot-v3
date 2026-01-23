@@ -27,11 +27,28 @@ This creates a `.bot/` directory with:
 - Autonomous loop for Claude CLI
 - Agents, skills, and workflows
 
-### 3. Start the UI
+### 3. Configure MCP Server
+
+Add to your Claude/Warp MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "dotbot": {
+      "command": "pwsh",
+      "args": ["-NoProfile", "-File", ".bot/systems/mcp/dotbot-mcp.ps1"]
+    }
+  }
+}
+```
+
+### 4. Start the UI
 
 ```powershell
-.bot/go.ps1
+.bot\go.ps1
 ```
+
+Opens the web dashboard at `http://localhost:8686`
 
 ## Prerequisites
 
@@ -45,7 +62,15 @@ This creates a `.bot/` directory with:
 dotbot help          # Show all commands
 dotbot status        # Check installation status
 dotbot init          # Add dotbot to current project
-dotbot update        # Update global installation
+dotbot init -Force   # Reinitialize (overwrites existing)
+```
+
+### Update Installation
+
+```powershell
+cd ~/dotbot
+git pull
+./install.ps1
 ```
 
 ## Architecture
@@ -68,6 +93,18 @@ dotbot update        # Update global installation
 ├── init.ps1          # Claude Code integration setup
 └── go.ps1            # Launch UI server
 ```
+
+## MCP Tools
+
+The dotbot MCP server provides:
+
+**Task Management**: `task_create`, `task_get_next`, `task_mark_done`, `task_list`, `task_get_stats`
+
+**Session Management**: `session_initialize`, `session_get_state`, `session_get_stats`
+
+**Development**: `dev_start`, `dev_stop`
+
+See `.bot/README.md` for full documentation.
 
 ## License
 
