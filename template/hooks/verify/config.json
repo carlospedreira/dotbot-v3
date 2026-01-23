@@ -1,0 +1,28 @@
+{
+  "scripts": [
+    {
+      "name": "01-git-clean.ps1",
+      "description": "Check for uncommitted changes",
+      "required": true,
+      "timeout_seconds": 10
+    },
+    {
+      "name": "02-git-pushed.ps1",
+      "description": "Check for unpushed commits",
+      "required": true,
+      "timeout_seconds": 10
+    },
+    {
+      "name": "03-dotnet-build.ps1",
+      "description": "Verify dotnet build succeeds",
+      "required": true,
+      "timeout_seconds": 60
+    },
+    {
+      "name": "04-dotnet-format.ps1",
+      "description": "Verify code formatting",
+      "required": true,
+      "timeout_seconds": 60
+    }
+  ]
+}

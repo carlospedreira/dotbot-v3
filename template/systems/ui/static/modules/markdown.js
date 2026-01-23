@@ -1,0 +1,333 @@
+/**
+ * DOTBOT Control Panel - Markdown Parser
+ * Markdown to HTML conversion utilities
+ */
+
+/**
+ * Format cell content with inline code support
+ * @param {string} text - Cell text
+ * @returns {string} Formatted HTML
+ */
+function formatCellContent(text) {
+    // First escape HTML, then convert backticks to inline code
+    // We need to handle backticks before escaping
+    let result = '';
+    let i = 0;
+    while (i < text.length) {
+        if (text[i] === '`') {
+            // Find closing backtick
+            const end = text.indexOf('`', i + 1);
+            if (end !== -1) {
+                const code = text.substring(i + 1, end);
+                result += `<code class="inline">${escapeHtml(code)}</code>`;
+                i = end + 1;
+            } else {
+                result += escapeHtml(text[i]);
+                i++;
+            }
+        } else {
+            result += escapeHtml(text[i]);
+            i++;
+        }
+    }
+    return result;
+}
+
+/**
+ * Parse markdown table to HTML
+ * @param {string[]} tableLines - Array of table lines
+ * @returns {string|null} HTML table or null if invalid
+ */
+function parseMarkdownTable(tableLines) {
+    if (tableLines.length < 2) return null;
+
+    // Parse header row
+    const headerCells = tableLines[0]
+        .split('|')
+        .map(cell => cell.trim())
+        .filter(cell => cell !== '');
+
+    // Parse separator row for alignment
+    const separatorCells = tableLines[1]
+        .split('|')
+        .map(cell => cell.trim())
+        .filter(cell => cell !== '');
+
+    // Validate separator row (must contain dashes)
+    if (!separatorCells.every(cell => /^:?-+:?$/.test(cell))) {
+        return null;
+    }
+
+    // Determine alignment for each column
+    const alignments = separatorCells.map(cell => {
+        const left = cell.startsWith(':');
+        const right = cell.endsWith(':');
+        if (left && right) return 'center';
+        if (right) return 'right';
+        return 'left';
+    });
+
+    // Build HTML
+    let html = '<div class="table-wrapper"><table>';
+
+    // Header
+    html += '<thead><tr>';
+    headerCells.forEach((cell, i) => {
+        const align = alignments[i] || 'left';
+        html += `<th style="text-align: ${align}">${escapeHtml(cell)}</th>`;
+    });
+    html += '</tr></thead>';
+
+    // Body rows
+    html += '<tbody>';
+    for (let i = 2; i < tableLines.length; i++) {
+        const cells = tableLines[i]
+            .split('|')
+            .map(cell => cell.trim())
+            .filter(cell => cell !== '');
+
+        if (cells.length === 0) continue;
+
+        html += '<tr>';
+        cells.forEach((cell, j) => {
+            const align = alignments[j] || 'left';
+            html += `<td style="text-align: ${align}">${formatCellContent(cell)}</td>`;
+        });
+        html += '</tr>';
+    }
+    html += '</tbody>';
+
+    html += '</table></div>';
+    return html;
+}
+
+/**
+ * Parse fenced code block to HTML
+ * @param {string[]} codeLines - Array of code lines
+ * @param {string} language - Language identifier
+ * @returns {string} HTML code block
+ */
+function parseCodeBlock(codeLines, language) {
+    const code = codeLines.join('\n');
+    const langLabel = language ? `<div class="code-lang">${escapeHtml(language)}</div>` : '';
+    return `<div class="code-block">${langLabel}<pre><code>${escapeHtml(code)}</code></pre></div>`;
+}
+
+/**
+ * Helper to group consecutive list items into proper list tags
+ * @param {string} html - HTML with list placeholders
+ * @param {string} placeholderType - Type of placeholder (ULI or OLI)
+ * @param {string} listTag - HTML list tag (ul or ol)
+ * @returns {string} HTML with proper list tags
+ */
+function groupListItems(html, placeholderType, listTag) {
+    const startMarker = `___${placeholderType}_START___`;
+    const endMarker = `___${placeholderType}_END___`;
+
+    // Split into lines for processing
+    const lines = html.split('\n');
+    const result = [];
+    let inList = false;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const hasListItem = line.includes(startMarker) && line.includes(endMarker);
+
+        if (hasListItem) {
+            // Convert placeholder to <li>
+            const convertedLine = line.replace(
+                new RegExp(`${startMarker}(.+?)${endMarker}`, 'g'),
+                '<li>$1</li>'
+            );
+
+            if (!inList) {
+                // Start a new list
+                result.push(`<${listTag}>`);
+                inList = true;
+            }
+            result.push(convertedLine);
+        } else {
+            if (inList) {
+                // Close the list
+                result.push(`</${listTag}>`);
+                inList = false;
+            }
+            result.push(line);
+        }
+    }
+
+    // Close any unclosed list at the end
+    if (inList) {
+        result.push(`</${listTag}>`);
+    }
+
+    return result.join('\n');
+}
+
+/**
+ * Convert markdown to HTML
+ * @param {string} markdown - Markdown text
+ * @returns {string} HTML
+ */
+function markdownToHtml(markdown) {
+    if (!markdown) return '';
+
+    // Normalize line endings (Windows CRLF -> Unix LF)
+    markdown = markdown.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+    // First pass: parse tables and code blocks before escaping
+    const lines = markdown.split('\n');
+    const processedLines = [];
+    const placeholders = {};
+    let placeholderCount = 0;
+    let i = 0;
+
+    while (i < lines.length) {
+        const line = lines[i];
+
+        // Check if this is the start of a fenced code block (may be indented)
+        const codeBlockMatch = line.match(/^(\s*)```(\w*)\s*$/);
+        if (codeBlockMatch) {
+            const indent = codeBlockMatch[1] || '';
+            const language = codeBlockMatch[2] || '';
+            const codeLines = [];
+            i++; // Skip opening fence
+
+            // Collect lines until closing fence (with same or less indentation)
+            while (i < lines.length && !lines[i].match(/^\s*```\s*$/)) {
+                // Remove the indent prefix from code lines if present
+                let codeLine = lines[i];
+                if (indent && codeLine.startsWith(indent)) {
+                    codeLine = codeLine.substring(indent.length);
+                }
+                codeLines.push(codeLine);
+                i++;
+            }
+            i++; // Skip closing fence
+
+            // Create placeholder
+            const placeholder = `___CODE_PLACEHOLDER_${placeholderCount}___`;
+            placeholders[placeholder] = parseCodeBlock(codeLines, language);
+            processedLines.push(placeholder);
+            placeholderCount++;
+            continue;
+        }
+
+        // Check if this looks like the start of a table
+        if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+            // Collect consecutive table lines
+            const tableLines = [];
+            while (i < lines.length && lines[i].trim().startsWith('|')) {
+                tableLines.push(lines[i]);
+                i++;
+            }
+
+            // Try to parse as table
+            const tableHtml = parseMarkdownTable(tableLines);
+            if (tableHtml) {
+                const placeholder = `___TABLE_PLACEHOLDER_${placeholderCount}___`;
+                placeholders[placeholder] = tableHtml;
+                processedLines.push(placeholder);
+                placeholderCount++;
+            } else {
+                // Not a valid table, add lines back
+                tableLines.forEach(tl => processedLines.push(tl));
+            }
+            continue;
+        }
+
+        processedLines.push(line);
+        i++;
+    }
+
+    // Process inline code before escaping (need raw backticks)
+    let text = processedLines.join('\n');
+
+    // Replace inline code with placeholders
+    text = text.replace(/`([^`]+)`/g, (match, code) => {
+        const placeholder = `___INLINE_CODE_${placeholderCount}___`;
+        placeholders[placeholder] = `<code class="inline">${escapeHtml(code)}</code>`;
+        placeholderCount++;
+        return placeholder;
+    });
+
+    // Apply markdown transformations BEFORE escaping (while placeholders protect code blocks)
+    // Horizontal rules (document separators)
+    text = text.replace(/^---$/gm, '___HR_PLACEHOLDER___');
+
+    // Headers - only process lines that aren't placeholders
+    // Process from most specific (####) to least specific (#) to avoid conflicts
+    text = text.replace(/^#### (.+)$/gm, (match, p1) => {
+        if (p1.includes('___') && p1.includes('_PLACEHOLDER_')) return match;
+        return `___H4_START___${p1}___H4_END___`;
+    });
+    text = text.replace(/^### (.+)$/gm, (match, p1) => {
+        if (p1.includes('___') && p1.includes('_PLACEHOLDER_')) return match;
+        return `___H3_START___${p1}___H3_END___`;
+    });
+    text = text.replace(/^## (.+)$/gm, (match, p1) => {
+        if (p1.includes('___') && p1.includes('_PLACEHOLDER_')) return match;
+        return `___H2_START___${p1}___H2_END___`;
+    });
+    text = text.replace(/^# (.+)$/gm, (match, p1) => {
+        if (p1.includes('___') && p1.includes('_PLACEHOLDER_')) return match;
+        return `___H1_START___${p1}___H1_END___`;
+    });
+
+    // Bold and italic
+    text = text.replace(/\*\*(.+?)\*\*/g, '___BOLD_START___$1___BOLD_END___');
+    text = text.replace(/\*(.+?)\*/g, '___ITALIC_START___$1___ITALIC_END___');
+
+    // Lists - unordered (- item)
+    text = text.replace(/^- (.+)$/gm, '___ULI_START___$1___ULI_END___');
+
+    // Lists - ordered: First split inline numbered lists (e.g., "1. First 2. Second" -> separate lines)
+    // Insert newline before " 2. ", " 3. ", etc. (but not " 1. " to avoid breaking start of list)
+    text = text.replace(/ (\d+)\. /g, (match, num) => {
+        return parseInt(num) > 1 ? `\n${num}. ` : match;
+    });
+
+    // Now convert ordered list items (1. item, 2. item, etc.)
+    text = text.replace(/^\d+\.\s+(.+)$/gm, '___OLI_START___$1___OLI_END___');
+
+    // Now escape HTML
+    let html = escapeHtml(text);
+
+    // Restore markdown element placeholders
+    html = html.replace(/___HR_PLACEHOLDER___/g, '<hr class="doc-separator">');
+    html = html.replace(/___H4_START___(.+?)___H4_END___/g, '<h4>$1</h4>');
+    html = html.replace(/___H3_START___(.+?)___H3_END___/g, '<h3>$1</h3>');
+    html = html.replace(/___H2_START___(.+?)___H2_END___/g, '<h2>$1</h2>');
+    html = html.replace(/___H1_START___(.+?)___H1_END___/g, '<h1>$1</h1>');
+    html = html.replace(/___BOLD_START___(.+?)___BOLD_END___/g, '<strong>$1</strong>');
+    html = html.replace(/___ITALIC_START___(.+?)___ITALIC_END___/g, '<em>$1</em>');
+
+    // Convert list placeholders to HTML and group them
+    html = groupListItems(html, 'ULI', 'ul');
+    html = groupListItems(html, 'OLI', 'ol');
+
+    // Restore code/table placeholders (need to escape placeholder keys since text was escaped)
+    for (const [placeholder, content] of Object.entries(placeholders)) {
+        html = html.replace(escapeHtml(placeholder), content);
+    }
+
+    // Line breaks for paragraphs (double newline = new paragraph)
+    html = html.replace(/\n\n/g, '</p><p>');
+    html = '<p>' + html + '</p>';
+
+    // Clean up empty paragraphs
+    html = html.replace(/<p><\/p>/g, '');
+    html = html.replace(/<p>(<h[1234]>)/g, '$1');
+    html = html.replace(/(<\/h[1234]>)<\/p>/g, '$1');
+    html = html.replace(/<p>(<div class="code-block">)/g, '$1');
+    html = html.replace(/(<\/div>)<\/p>/g, '$1');
+    html = html.replace(/<p>(<ul>)/g, '$1');
+    html = html.replace(/(<\/ul>)<\/p>/g, '$1');
+    html = html.replace(/<p>(<ol>)/g, '$1');
+    html = html.replace(/(<\/ol>)<\/p>/g, '$1');
+    html = html.replace(/<p>(<div class="table-wrapper">)/g, '$1');
+    html = html.replace(/<p>(<hr)/g, '$1');
+    html = html.replace(/(<hr[^>]*>)<\/p>/g, '$1');
+
+    return html;
+}

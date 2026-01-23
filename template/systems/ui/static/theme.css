@@ -1,0 +1,140 @@
+/* DOTBOT Theme - Semantic Color System
+ * Single source of truth for all colors
+ * RGB values are set by JS from theme-config.json
+ */
+
+:root {
+    /* === Semantic Colors (RGB components for opacity variants) === */
+    /* These are the defaults - JS will override from theme-config.json */
+    --color-primary-rgb: 232 160 48;
+    --color-primary-dim-rgb: 184 120 32;
+    --color-secondary-rgb: 95 179 179;
+    --color-tertiary-rgb: 170 136 255;
+    --color-success-rgb: 0 255 136;
+    --color-success-dim-rgb: 0 170 92;
+    --color-error-rgb: 209 105 105;
+    --color-warning-rgb: 232 160 48;
+    --color-info-rgb: 68 136 255;
+    --color-muted-rgb: 136 136 153;
+    --color-bezel-rgb: 58 59 72;
+
+    /* === Solid Colors (computed from RGB) === */
+    --color-primary: rgb(var(--color-primary-rgb));
+    --color-primary-dim: rgb(var(--color-primary-dim-rgb));
+    --color-secondary: rgb(var(--color-secondary-rgb));
+    --color-tertiary: rgb(var(--color-tertiary-rgb));
+    --color-success: rgb(var(--color-success-rgb));
+    --color-success-dim: rgb(var(--color-success-dim-rgb));
+    --color-error: rgb(var(--color-error-rgb));
+    --color-warning: rgb(var(--color-warning-rgb));
+    --color-info: rgb(var(--color-info-rgb));
+    --color-muted: rgb(var(--color-muted-rgb));
+    --color-bezel: rgb(var(--color-bezel-rgb));
+
+    /* === Primary Opacity Variants === */
+    --primary-05: rgb(var(--color-primary-rgb) / 0.05);
+    --primary-08: rgb(var(--color-primary-rgb) / 0.08);
+    --primary-10: rgb(var(--color-primary-rgb) / 0.1);
+    --primary-12: rgb(var(--color-primary-rgb) / 0.12);
+    --primary-15: rgb(var(--color-primary-rgb) / 0.15);
+    --primary-20: rgb(var(--color-primary-rgb) / 0.2);
+    --primary-25: rgb(var(--color-primary-rgb) / 0.25);
+    --primary-30: rgb(var(--color-primary-rgb) / 0.3);
+    --primary-40: rgb(var(--color-primary-rgb) / 0.4);
+    --primary-50: rgb(var(--color-primary-rgb) / 0.5);
+
+    /* === Success (Green) Opacity Variants === */
+    --success-10: rgb(var(--color-success-rgb) / 0.1);
+    --success-15: rgb(var(--color-success-rgb) / 0.15);
+    --success-20: rgb(var(--color-success-rgb) / 0.2);
+    --success-50: rgb(var(--color-success-rgb) / 0.5);
+
+    /* === Secondary (Cyan) Opacity Variants === */
+    --secondary-12: rgb(var(--color-secondary-rgb) / 0.12);
+    --secondary-20: rgb(var(--color-secondary-rgb) / 0.2);
+    --secondary-25: rgb(var(--color-secondary-rgb) / 0.25);
+    --secondary-30: rgb(var(--color-secondary-rgb) / 0.3);
+    --secondary-50: rgb(var(--color-secondary-rgb) / 0.5);
+
+    /* === Info (Blue) Opacity Variants === */
+    --info-10: rgb(var(--color-info-rgb) / 0.1);
+    --info-15: rgb(var(--color-info-rgb) / 0.15);
+    --info-20: rgb(var(--color-info-rgb) / 0.2);
+    --info-25: rgb(var(--color-info-rgb) / 0.25);
+    --info-30: rgb(var(--color-info-rgb) / 0.3);
+
+    /* === Tertiary (Purple) Opacity Variants === */
+    --tertiary-20: rgb(var(--color-tertiary-rgb) / 0.2);
+    --tertiary-40: rgb(var(--color-tertiary-rgb) / 0.4);
+
+    /* === Error (Red) Opacity Variants === */
+    --error-15: rgb(var(--color-error-rgb) / 0.15);
+    --error-30: rgb(var(--color-error-rgb) / 0.3);
+    --error-50: rgb(var(--color-error-rgb) / 0.5);
+
+    /* === Glow variants (50% opacity for shadows) === */
+    --primary-glow: rgb(var(--color-primary-rgb) / 0.5);
+    --success-glow: rgb(var(--color-success-rgb) / 0.5);
+    --secondary-glow: rgb(var(--color-secondary-rgb) / 0.5);
+    --error-glow: rgb(var(--color-error-rgb) / 0.5);
+
+    /* === Legacy Aliases (for backwards compatibility) === */
+    /* Solid phosphor colors */
+    --phosphor-amber: var(--color-primary);
+    --phosphor-amber-dim: var(--color-primary-dim);
+    --phosphor-green: var(--color-success);
+    --phosphor-green-dim: var(--color-success-dim);
+    --phosphor-cyan: var(--color-secondary);
+    --phosphor-red: var(--color-error);
+    --phosphor-blue: var(--color-info);
+    --phosphor-purple: var(--color-tertiary);
+
+    /* Legacy glow variants */
+    --phosphor-amber-glow: var(--primary-glow);
+    --phosphor-green-glow: var(--success-glow);
+    --phosphor-cyan-glow: var(--secondary-glow);
+    --phosphor-red-glow: var(--error-glow);
+
+    /* Legacy amber opacity variants */
+    --amber-05: var(--primary-05);
+    --amber-08: var(--primary-08);
+    --amber-10: var(--primary-10);
+    --amber-12: var(--primary-12);
+    --amber-15: var(--primary-15);
+    --amber-20: var(--primary-20);
+    --amber-25: var(--primary-25);
+    --amber-30: var(--primary-30);
+
+    /* Legacy green opacity variants */
+    --green-10: var(--success-10);
+    --green-15: var(--success-15);
+    --green-20: var(--success-20);
+
+    /* Legacy cyan opacity variants */
+    --cyan-12: var(--secondary-12);
+    --cyan-20: var(--secondary-20);
+    --cyan-25: var(--secondary-25);
+    --cyan-30: var(--secondary-30);
+
+    /* Legacy blue opacity variants */
+    --blue-10: var(--info-10);
+    --blue-15: var(--info-15);
+    --blue-20: var(--info-20);
+    --blue-25: var(--info-25);
+    --blue-30: var(--info-30);
+
+    /* Legacy purple opacity variants */
+    --purple-20: var(--tertiary-20);
+    --purple-40: var(--tertiary-40);
+
+    /* Legacy red opacity variants */
+    --red-15: var(--error-15);
+    --red-30: var(--error-30);
+
+    /* Legacy label color */
+    --label-color: var(--color-muted);
+
+    /* === Grid colors (computed from primary) === */
+    --grid-color: var(--primary-05);
+    --grid-color-strong: rgb(var(--color-primary-rgb) / 0.075);
+}

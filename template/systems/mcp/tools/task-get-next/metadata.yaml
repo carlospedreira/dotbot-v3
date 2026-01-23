@@ -1,0 +1,5 @@
+name: task_get_next
+description: Get the highest priority todo task that has no unmet dependencies
+inputSchema:
+  type: object
+  properties: {}

@@ -1,0 +1,106 @@
+<#
+.SYNOPSIS
+Prompt building utilities for task execution
+
+.DESCRIPTION
+Provides functions for building prompts from templates with variable substitution
+#>
+
+function Build-TaskPrompt {
+    <#
+    .SYNOPSIS
+    Build a complete task prompt from template and task data
+    
+    .PARAMETER PromptTemplate
+    The template string containing {{VARIABLE}} placeholders
+    
+    .PARAMETER Task
+    Task object containing task properties
+    
+    .PARAMETER SessionId
+    Current session ID
+    
+    .PARAMETER ProductMission
+    Product mission description or file reference
+    
+    .PARAMETER EntityModel
+    Entity model description or file reference
+    
+    .PARAMETER StandardsList
+    Formatted list of applicable standards
+    
+    .OUTPUTS
+    String containing the completed prompt
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$PromptTemplate,
+        
+        [Parameter(Mandatory = $true)]
+        [object]$Task,
+        
+        [Parameter(Mandatory = $true)]
+        [string]$SessionId,
+        
+        [Parameter(Mandatory = $false)]
+        [string]$ProductMission = "No product mission file found.",
+        
+        [Parameter(Mandatory = $false)]
+        [string]$EntityModel = "No entity model file found.",
+        
+        [Parameter(Mandatory = $false)]
+        [string]$StandardsList = "No standards files found."
+    )
+    
+    # Start with template
+    $prompt = $PromptTemplate
+    
+    # Replace basic task info
+    $prompt = $prompt -replace '\{\{SESSION_ID\}\}', $SessionId
+    $prompt = $prompt -replace '\{\{TASK_ID\}\}', $Task.id
+    $prompt = $prompt -replace '\{\{TASK_NAME\}\}', $Task.name
+    $prompt = $prompt -replace '\{\{TASK_CATEGORY\}\}', $Task.category
+    $prompt = $prompt -replace '\{\{TASK_PRIORITY\}\}', $Task.priority
+    $prompt = $prompt -replace '\{\{TASK_DESCRIPTION\}\}', $Task.description
+    $prompt = $prompt -replace '\{\{PRODUCT_MISSION\}\}', $ProductMission
+    $prompt = $prompt -replace '\{\{ENTITY_MODEL\}\}', $EntityModel
+    
+    # Format and replace applicable standards
+    $applicableStandards = ""
+    if ($Task.applicable_standards -and $Task.applicable_standards.Count -gt 0) {
+        $applicableStandards = ($Task.applicable_standards | ForEach-Object { "- $_" }) -join "`n"
+    } else {
+        $applicableStandards = "No specific standards listed for this task - use global standards from .bot/prompts/standards/global/"
+    }
+    $prompt = $prompt -replace '\{\{APPLICABLE_STANDARDS\}\}', $applicableStandards
+    
+    # Format and replace applicable agents
+    $applicableAgents = ""
+    if ($Task.applicable_agents -and $Task.applicable_agents.Count -gt 0) {
+        $applicableAgents = ($Task.applicable_agents | ForEach-Object { "- $_" }) -join "`n"
+    } else {
+        $applicableAgents = "Use .bot/prompts/agents/implementer/AGENT.md as your default persona"
+    }
+    $prompt = $prompt -replace '\{\{APPLICABLE_AGENTS\}\}', $applicableAgents
+    
+    # Format and replace acceptance criteria
+    $acceptanceCriteria = if ($Task.acceptance_criteria) {
+        ($Task.acceptance_criteria | ForEach-Object { "- $_" }) -join "`n"
+    } else {
+        "No specific acceptance criteria defined."
+    }
+    $prompt = $prompt -replace '\{\{ACCEPTANCE_CRITERIA\}\}', $acceptanceCriteria
+    
+    # Format and replace steps
+    $steps = if ($Task.steps) {
+        ($Task.steps | ForEach-Object { "- $_" }) -join "`n"
+    } else {
+        "No specific steps defined."
+    }
+    $prompt = $prompt -replace '\{\{TASK_STEPS\}\}', $steps
+    
+    # Replace standards list
+    $prompt = $prompt -replace '\{\{STANDARDS_LIST\}\}', $StandardsList
+    
+    return $prompt
+}

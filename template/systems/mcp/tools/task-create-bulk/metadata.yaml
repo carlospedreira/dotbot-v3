@@ -1,0 +1,57 @@
+name: task_create_bulk
+description: Create multiple tasks at once from a roadmap or spec
+inputSchema:
+  type: object
+  properties:
+    tasks:
+      type: array
+      description: Array of task objects to create
+      items:
+        type: object
+        properties:
+          name:
+            type: string
+            description: Brief, descriptive name for the task
+          description:
+            type: string
+            description: Detailed description of what the task does
+          category:
+            type: string
+            description: Task category
+            enum: [core, feature, enhancement, bugfix, infrastructure, ui-ux]
+          priority:
+            type: integer
+            description: Priority (1=highest), auto-assigned if not provided
+            minimum: 1
+            maximum: 100
+          effort:
+            type: string
+            description: Effort estimate
+            enum: [XS, S, M, L, XL]
+          dependencies:
+            type: array
+            description: List of task IDs this depends on
+            items:
+              type: string
+          acceptance_criteria:
+            type: array
+            description: List of acceptance criteria
+            items:
+              type: string
+          steps:
+            type: array
+            description: Implementation or test steps
+            items:
+              type: string
+          applicable_standards:
+            type: array
+            description: List of standard file paths to read before implementing (e.g., .bot/standards/backend/api.md)
+            items:
+              type: string
+          applicable_agents:
+            type: array
+            description: List of agent persona file paths to read before implementing (e.g., .bot/agents/backend-developer.md)
+            items:
+              type: string
+        required: [name, description]
+  required: [tasks]

@@ -1,0 +1,60 @@
+{
+  "name": "Amber Classic",
+  "mappings": {
+    "primary": { "r": 232, "g": 160, "b": 48 },
+    "primary-dim": { "r": 184, "g": 120, "b": 32 },
+    "secondary": { "r": 95, "g": 179, "b": 179 },
+    "tertiary": { "r": 170, "g": 136, "b": 255 },
+    "success": { "r": 0, "g": 255, "b": 136 },
+    "success-dim": { "r": 0, "g": 170, "b": 92 },
+    "error": { "r": 209, "g": 105, "b": 105 },
+    "warning": { "r": 232, "g": 160, "b": 48 },
+    "info": { "r": 68, "g": 136, "b": 255 },
+    "muted": { "r": 136, "g": 136, "b": 153 },
+    "bezel": { "r": 58, "g": 59, "b": 72 }
+  },
+  "presets": {
+    "amber": {
+      "name": "Amber Classic",
+      "primary": [232, 160, 48],
+      "primary-dim": [184, 120, 32],
+      "success": [0, 255, 136],
+      "success-dim": [0, 170, 92]
+    },
+    "green": {
+      "name": "Matrix Green",
+      "primary": [0, 255, 136],
+      "primary-dim": [0, 170, 92],
+      "success": [0, 255, 136],
+      "success-dim": [0, 170, 92]
+    },
+    "cyan": {
+      "name": "Cyan Ice",
+      "primary": [95, 179, 179],
+      "primary-dim": [70, 140, 140],
+      "success": [0, 255, 136],
+      "success-dim": [0, 170, 92]
+    },
+    "blue": {
+      "name": "Deep Blue",
+      "primary": [68, 136, 255],
+      "primary-dim": [48, 100, 200],
+      "success": [0, 255, 136],
+      "success-dim": [0, 170, 92]
+    },
+    "purple": {
+      "name": "Violet Haze",
+      "primary": [170, 136, 255],
+      "primary-dim": [130, 100, 200],
+      "success": [232, 160, 48],
+      "success-dim": [184, 120, 32]
+    },
+    "white": {
+      "name": "Clean White",
+      "primary": [220, 220, 230],
+      "primary-dim": [170, 170, 180],
+      "success": [0, 255, 136],
+      "success-dim": [0, 170, 92]
+    }
+  }
+}

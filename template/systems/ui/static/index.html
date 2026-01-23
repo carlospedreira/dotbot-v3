@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DOTBOT // Control Panel</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="mobile-overlay" id="mobile-overlay"></div>
+    <div class="control-panel">
+        <!-- Header (v2 style) -->
+        <header class="header">
+            <button class="hamburger-menu" id="hamburger-menu" aria-label="Toggle menu">
+                <!-- Menu icon loaded dynamically -->
+            </button>
+            <div class="system-id">
+                <span class="logo">◈ DOTBOT</span>
+                <span class="project-badge" id="project-name">autonomous</span>
+            </div>
+            <div class="header-signals">
+                <div class="signal">
+                    <span class="led" id="connection-led"></span>
+                    <span id="connection-status">CONNECTING</span>
+                </div>
+                <div class="signal">
+                    <span class="led" id="running-led"></span>
+                    <span id="running-status">Idle</span>
+                </div>
+                <div class="signal">
+                    <span class="led off" id="control-led"></span>
+                    <span id="control-signal-status">No Signal</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Tab Bar (Full Width) -->
+        <div class="tab-bar-container">
+            <div class="tab-bar">
+                <button class="tab active" data-tab="overview">Overview</button>
+                <button class="tab" data-tab="product">Product</button>
+                <button class="tab" data-tab="pipeline">Roadmap</button>
+                <button class="tab" data-tab="workflow">Workflow</button>
+                <button class="tab" data-tab="settings">Settings</button>
+            </div>
+        </div>
+
+        <!-- Main Layout -->
+        <div class="main-layout">
+            <!-- Left Sidebar (Context-Aware) -->
+            <aside class="sidebar-left">
+                <!-- Overview Context: Control, Session, Verification (mirrors right sidebar) -->
+                <div class="context-panel" data-context="overview">
+                    <!-- Agent Control -->
+                    <div class="left-module">
+                        <div class="module-header">
+                            <span class="module-title">◈ Control</span>
+                            <span class="led" id="agent-led"></span>
+                        </div>
+                        <div class="module-content">
+                            <div class="agent-status" id="agent-status-block">
+                                <div class="agent-state" id="agent-state">
+                                    <span class="led off"></span>
+                                    <span>Idle</span>
+                                </div>
+                                <div class="agent-task" id="agent-current-task">No active task</div>
+                            </div>
+                            <div class="control-buttons" id="controls">
+                                <button class="ctrl-btn primary" data-action="start">PLAY</button>
+                                <button class="ctrl-btn" data-action="pause">PAUSE</button>
+                                <button class="ctrl-btn" data-action="resume">RESUME</button>
+                                <button class="ctrl-btn danger" data-action="stop">STOP</button>
+                            </div>
+                            <div class="signal-feedback" id="signal-status"></div>
+                        </div>
+                    </div>
+
+                    <!-- Session Info with Handoff -->
+                    <div class="left-module">
+                        <div class="module-header">
+                            <span class="module-title">◈ Session</span>
+                        </div>
+                        <div class="module-content">
+                            <div class="session-info">
+                                <div class="session-row">
+                                    <span class="session-label">ID</span>
+                                    <span class="session-value" id="session-id">--</span>
+                                </div>
+                                <div class="session-row">
+                                    <span class="session-label">Status</span>
+                                    <span class="session-value" id="session-status-detail">--</span>
+                                </div>
+                                <div class="session-row">
+                                    <span class="session-label">Started</span>
+                                    <span class="session-value" id="session-started">--</span>
+                                </div>
+                                <div class="session-row">
+                                    <span class="session-label">Runtime</span>
+                                    <span class="session-value" id="session-runtime">--</span>
+                                </div>
+                                <div class="session-row">
+                                    <span class="session-label">Completed</span>
+                                    <span class="session-value" id="session-tasks-completed">--</span>
+                                </div>
+                                <div class="session-row">
+                                    <span class="session-label">Skipped</span>
+                                    <span class="session-value" id="session-tasks-skipped">--</span>
+                                </div>
+                                <div class="session-row">
+                                    <span class="session-label">Failures</span>
+                                    <span class="session-value" id="session-failures">--</span>
+                                </div>
+                            </div>
+                            <!-- Handoff Preview -->
+                            <div class="handoff-preview" id="handoff-preview">
+                                <div class="handoff-title">◈ Latest Handoff</div>
+                                <div class="handoff-text" id="handoff-text">No handoff notes available</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Verification Status -->
+                    <div class="left-module">
+                        <div class="module-header">
+                            <span class="module-title">◈ Verification</span>
+                        </div>
+                        <div class="module-content">
+                            <div class="verify-grid">
+                                <div class="verify-item">
+                                    <span class="verify-dot off"></span>
+                                    <span>pre-flight</span>
+                                </div>
+                                <div class="verify-item">
+                                    <span class="verify-dot off"></span>
+                                    <span>dotnet-format</span>
+                                </div>
+                                <div class="verify-item">
+                                    <span class="verify-dot off"></span>
+                                    <span>error-handling</span>
+                                </div>
+                                <div class="verify-item">
+                                    <span class="verify-dot off"></span>
+                                    <span>mock-data</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panic Button - Reset stale state -->
+                    <div class="panic-section">
+                        <button class="panic-btn" id="panic-reset" data-action="reset" title="Clear stale state files and locks">
+                            <span class="panic-icon"><!-- Icon injected by JS --></span>
+                            <span class="panic-label">RESET</span>
+                        </button>
+                        <div class="panic-hint">Clear stale locks &amp; signals</div>
+                    </div>
+                </div>
+
+                <!-- Product Context: File Navigator -->
+                <div class="context-panel hidden" data-context="product">
+                    <div class="sidebar-section">
+                        <div class="sidebar-header">
+                            <span class="sidebar-title">◈ Product Docs</span>
+                        </div>
+                        <div class="sidebar-content" id="product-file-nav">
+                            <div class="loading-state">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pipeline/Roadmap Context: Task Summary -->
+                <div class="context-panel hidden" data-context="pipeline">
+                    <div class="sidebar-section">
+                        <div class="sidebar-header">
+                            <span class="sidebar-title">◈ Task Summary</span>
+                        </div>
+                        <div class="sidebar-content">
+                            <div class="task-summary">
+                                <div class="summary-item todo">
+                                    <span class="summary-label">Todo</span>
+                                    <span class="count-badge amber" id="context-todo-count">-</span>
+                                </div>
+                                <div class="summary-item in-progress">
+                                    <span class="summary-label">In Progress</span>
+                                    <span class="count-badge cyan" id="context-progress-count">-</span>
+                                </div>
+                                <div class="summary-item done">
+                                    <span class="summary-label">Done</span>
+                                    <span class="count-badge green" id="context-done-count">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-section">
+                        <div class="sidebar-header">
+                            <span class="sidebar-title">◈ Progress</span>
+                        </div>
+                        <div class="sidebar-content">
+                            <div class="progress-bar-container">
+                                <div class="progress-bar" id="context-progress-bar"></div>
+                            </div>
+                            <div class="progress-label" id="context-progress-label">0%</div>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-section">
+                        <div class="sidebar-header">
+                            <span class="sidebar-title">◈ Other</span>
+                        </div>
+                        <div class="sidebar-content">
+                            <div class="task-summary secondary">
+                                <div class="summary-item skipped">
+                                    <span class="summary-label">Skipped</span>
+                                    <span class="count-badge muted" id="context-skipped-count">-</span>
+                                </div>
+                                <div class="summary-item cancelled">
+                                    <span class="summary-label">Cancelled</span>
+                                    <span class="count-badge muted" id="context-cancelled-count">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Workflow Context: Dynamic Prompts Directories -->
+                <div class="context-panel hidden" data-context="workflow">
+                    <div id="prompts-sidebar">
+                        <!-- Dynamically populated based on /api/prompts/directories -->
+                        <div class="loading-state">Loading prompt directories...</div>
+                    </div>
+                </div>
+
+                <!-- Settings Context -->
+                <div class="context-panel hidden" data-context="settings">
+                    <div class="sidebar-section">
+                        <div class="sidebar-header">
+                            <span class="sidebar-title">◈ Settings</span>
+                        </div>
+                        <div class="sidebar-content">
+                            <div class="settings-nav">
+                                <div class="settings-nav-item active" data-settings-section="theme">Theme</div>
+                                <div class="settings-nav-item" data-settings-section="advanced">Advanced</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Main Content -->
+            <main class="main-content">
+                <!-- Tab Content -->
+                <div class="tab-content">
+                    <!-- Overview Tab -->
+                    <div class="tab-pane active" id="tab-overview">
+                        <!-- Executive Summary -->
+                        <div class="executive-summary" id="executive-summary" style="display: none;"></div>
+
+                        <!-- Stats Row -->
+                        <div class="stats-row">
+                            <div class="stat-card">
+                                <div class="stat-label">TODO</div>
+                                <div class="stat-value amber" id="todo-count">-</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">IN PROGRESS</div>
+                                <div class="stat-value cyan" id="progress-count">-</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">DONE</div>
+                                <div class="stat-value green" id="done-count">-</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">PROGRESS</div>
+                                <div class="stat-value" id="progress-percent">-</div>
+                            </div>
+                        </div>
+
+                        <!-- Activity Oscilloscope -->
+                        <div id="activity-scope" class="crt-monitor">
+                            <div class="crt-bezel">
+                                <div class="crt-screen">
+                                    <!-- Oscilloscope waveform (background) -->
+                                    <canvas id="scope-canvas" width="800" height="120"></canvas>
+                                    <!-- Message overlay on top of scope -->
+                                    <div class="crt-overlay">
+                                        <!-- Tool pill (top right) -->
+                                        <div class="tool-pill" id="tool-pill">IDLE</div>
+                                        <!-- Green text area (Claude's output) -->
+                                        <div class="text-output" id="text-output">Waiting for activity...</div>
+                                        <!-- Amber command area -->
+                                        <div class="command-text" id="command-text"></div>
+                                    </div>
+                                    <div class="crt-scanlines"></div>
+                                    <div class="crt-flicker"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Current Task Module -->
+                        <div class="module">
+                            <div class="module-header">
+                                <span class="module-title">◈ Current Task</span>
+                                <span class="module-badge" id="current-task-status">--</span>
+                            </div>
+                            <div class="module-screen">
+                                <div class="current-task" id="current-task">
+                                    <div class="empty-state">No task in progress</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Two Column: Upcoming + Completed -->
+                        <div class="two-column">
+                            <div class="module">
+                                <div class="module-header">
+                                    <span class="module-title">◈ Upcoming</span>
+                                </div>
+                                <div class="module-screen">
+                                    <div class="task-list" id="upcoming-tasks">
+                                        <div class="loading-state">Loading...</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="module">
+                                <div class="module-header">
+                                    <span class="module-title">◈ Recently Completed</span>
+                                </div>
+                                <div class="module-screen">
+                                    <div class="task-list" id="completed-tasks">
+                                        <div class="loading-state">Loading...</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Pipeline Tab -->
+                    <div class="tab-pane" id="tab-pipeline">
+                        <div class="pipeline-container">
+                            <!-- Todo Column -->
+                            <div class="pipeline-column">
+                                <div class="column-header">
+                                    <span class="column-label">◇ Todo</span>
+                                    <span class="column-count" id="pipeline-todo-count">0</span>
+                                </div>
+                                <div class="column-items" id="pipeline-todo">
+                                    <div class="loading-state">Loading...</div>
+                                </div>
+                            </div>
+
+                            <div class="flow-arrow">→</div>
+
+                            <!-- In Progress Column -->
+                            <div class="pipeline-column highlight">
+                                <div class="column-header">
+                                    <span class="column-label">◈ In Progress</span>
+                                    <span class="column-count" id="pipeline-progress-count">0</span>
+                                </div>
+                                <div class="column-items" id="pipeline-progress">
+                                    <div class="empty-state">No active tasks</div>
+                                </div>
+                            </div>
+
+                            <div class="flow-arrow">→</div>
+
+                            <!-- Done Column -->
+                            <div class="pipeline-column">
+                                <div class="column-header">
+                                    <span class="column-label">✓ Done</span>
+                                    <span class="column-count" id="pipeline-done-count">0</span>
+                                </div>
+                                <div class="column-items" id="pipeline-done">
+                                    <div class="loading-state">Loading...</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Workflow Tab -->
+                    <div class="tab-pane" id="tab-workflow">
+                        <div class="workflow-viewer">
+                            <!-- Left: Relationship Panel -->
+                            <div class="relationship-panel">
+                                <div class="relationship-header">◈ Relationships</div>
+                                <div class="relationship-tree" id="relationship-tree">
+                                    <!-- Populated dynamically -->
+                                    <div class="empty-state">Select an item from the sidebar</div>
+                                </div>
+                            </div>
+
+                            <!-- Right: Markdown Content Panel -->
+                            <div class="markdown-panel">
+                                <div class="markdown-header">
+                                    <span class="markdown-title" id="workflow-doc-title">Select an item</span>
+                                </div>
+                                <div class="markdown-content" id="workflow-doc-content">
+                                    <div class="doc-placeholder">Select a command, workflow, agent, or standard from the left sidebar</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Product Tab -->
+                    <div class="tab-pane" id="tab-product">
+                        <div class="product-viewer">
+                            <div class="product-content full-width">
+                                <div class="doc-viewer" id="doc-viewer">
+                                    <div class="doc-placeholder">Select a document from the left panel</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Settings Tab -->
+                    <div class="tab-pane" id="tab-settings">
+                        <div class="settings-container">
+                            <!-- Theme Section -->
+                            <div class="settings-section" id="settings-theme">
+                                <div class="module">
+                                    <div class="module-header">
+                                        <span class="module-title">◈ Theme</span>
+                                    </div>
+                                    <div class="module-screen">
+                                        <div class="settings-description">
+                                            Choose a color theme for the control panel. Changes are saved automatically.
+                                        </div>
+                                        <div class="theme-grid" id="theme-grid">
+                                            <!-- Theme options populated by JS -->
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Advanced Section -->
+                            <div class="settings-section hidden" id="settings-advanced">
+                                <div class="module">
+                                    <div class="module-header">
+                                        <span class="module-title">◈ Advanced</span>
+                                    </div>
+                                    <div class="module-screen">
+                                        <div class="settings-description">
+                                            Configure debug and verbose output for the autonomous loop.
+                                        </div>
+                                        <div class="settings-group">
+                                            <div class="setting-row">
+                                                <div class="setting-info">
+                                                    <span class="setting-label">Show Debug Output</span>
+                                                    <span class="setting-description">Display raw JSON events and Claude invocation details</span>
+                                                </div>
+                                                <label class="toggle-switch">
+                                                    <input type="checkbox" id="setting-show-debug">
+                                                    <span class="toggle-slider"></span>
+                                                </label>
+                                            </div>
+                                            <div class="setting-row">
+                                                <div class="setting-info">
+                                                    <span class="setting-label">Show Verbose Output</span>
+                                                    <span class="setting-description">Display detailed tool results and metadata</span>
+                                                </div>
+                                                <label class="toggle-switch">
+                                                    <input type="checkbox" id="setting-show-verbose">
+                                                    <span class="toggle-slider"></span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <!-- Model Selection -->
+                                        <div class="settings-subsection">
+                                            <div class="subsection-header">Model</div>
+                                            <div class="settings-description">
+                                                Select the Claude model to use for autonomous tasks.
+                                            </div>
+                                            <div class="model-grid" id="model-grid">
+                                                <!-- Model options populated by JS -->
+                                            </div>
+                                        </div>
+
+                                        <div class="settings-note primary">
+                                            Changes take effect on next autonomous loop start.
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Footer (v3 style) -->
+        <footer class="footer">
+            <div class="footer-left">
+                <span class="footer-label">LAST UPDATE:</span>
+                <span class="footer-value" id="last-update">--:--:--</span>
+                <span class="footer-sep">|</span>
+                <span class="footer-label">REFRESH:</span>
+                <span class="footer-value amber">5s</span>
+                <span class="footer-sep">|</span>
+                <span class="footer-label">CACHE:</span>
+                <span class="footer-value" id="cache-status">--</span>
+            </div>
+            <div class="footer-center">
+                <span class="footer-mission" id="footer-mission">◈ .bot autonomous development system</span>
+            </div>
+            <div class="footer-right">
+                <span class="footer-label">v0.4.0</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Task Detail Modal -->
+    <div class="modal-overlay" id="task-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title" id="modal-task-name">Task Details</span>
+                <button class="modal-close" id="modal-close"><!-- Close icon loaded dynamically --></button>
+            </div>
+            <div class="modal-body" id="modal-task-content">
+                <!-- Task details will be rendered here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- External dependencies -->
+    <script src="scope.js"></script>
+
+    <!-- Modules (dependency order) -->
+    <script src="modules/config.js"></script>
+    <script src="modules/utils.js"></script>
+    <script src="modules/icons.js"></script>
+    <script src="modules/theme.js"></script>
+    <script src="modules/markdown.js"></script>
+    <script src="modules/tabs.js"></script>
+    <script src="modules/sidebar.js"></script>
+    <script src="modules/workflow.js"></script>
+    <script src="modules/product.js"></script>
+    <script src="modules/tasks.js"></script>
+    <script src="modules/controls.js"></script>
+    <script src="modules/activity.js"></script>
+    <script src="modules/polling.js"></script>
+    <script src="modules/ui-updates.js"></script>
+
+    <!-- Main entry point (must be last) -->
+    <script src="app.js"></script>
+</body>
+</html>
