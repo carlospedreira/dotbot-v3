@@ -104,7 +104,11 @@ function Show-Help {
 function Invoke-Init {
     $initScript = Join-Path $ScriptsDir "init-project.ps1"
     if (Test-Path $initScript) {
-        & $initScript @Arguments
+        if ($Arguments.Count -gt 0) {
+            & $initScript @Arguments
+        } else {
+            & $initScript
+        }
     } else {
         Write-Host "  ✗ Init script not found" -ForegroundColor Red
     }
