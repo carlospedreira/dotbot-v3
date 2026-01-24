@@ -10,9 +10,9 @@
 
 ```powershell
 cd ~
-git clone https://github.com/andresharpe/dotbot-v3
-cd dotbot-v3
-pwsh init.ps1
+git clone https://github.com/andresharpe/dotbot-install
+cd dotbot-install
+pwsh install.ps1
 ```
 
 After installation, restart your terminal.
