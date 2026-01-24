@@ -9,9 +9,10 @@
 ### 1. Install dotbot globally (one-time)
 
 ```powershell
-git clone https://github.com/andresharpe/dotbot-v3 ~/dotbot
-cd ~/dotbot
-./install.ps1
+cd ~
+git clone https://github.com/andresharpe/dotbot-v3
+cd dotbot-v3
+pwsh init.ps1
 ```
 
 After installation, restart your terminal.
