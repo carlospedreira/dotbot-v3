@@ -2,6 +2,8 @@
 
 **Autonomous development system with MCP server, web UI, and Claude CLI integration.**
 
+![Overview](assets/overview.png)
+
 ## Quick Start
 
 ### 1. Install dotbot globally (one-time)
@@ -49,6 +51,12 @@ Add to your Claude/Warp MCP settings:
 ```
 
 Opens the web dashboard at `http://localhost:8686`
+
+## Screenshots
+
+| Overview | Product | Workflow | Settings |
+|----------|---------|----------|----------|
+| ![Overview](assets/overview.png) | ![Product](assets/product.png) | ![Workflow](assets/workflow.png) | ![Settings](assets/settings.png) |
 
 ## Prerequisites
 
