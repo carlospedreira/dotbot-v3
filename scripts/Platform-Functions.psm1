@@ -10,9 +10,9 @@ $script:IsLinux = $false
 
 function Initialize-PlatformVariables {
     if ($PSVersionTable.PSVersion.Major -ge 6) {
-        $script:IsWindows = $IsWindows
-        $script:IsMacOS = $IsMacOS
-        $script:IsLinux = $IsLinux
+        $script:IsWindows = $global:IsWindows
+        $script:IsMacOS = $global:IsMacOS
+        $script:IsLinux = $global:IsLinux
     } else {
         # PowerShell 5.x is Windows-only
         $script:IsWindows = $true
@@ -91,7 +91,7 @@ function Add-ToUnixPath {
     }
     $profileFiles += Join-Path $HOME ".profile"
     
-    $exportLine = "export PATH=`"$Directory:`$PATH`""
+    $exportLine = "export PATH=`"$Directory`":`$PATH`""
     
     foreach ($profileFile in $profileFiles) {
         if (Test-Path $profileFile) {
@@ -125,9 +125,10 @@ function Set-ExecutablePermission {
     
     if (-not $script:IsWindows) {
         if (Test-Path $FilePath) {
-            chmod +x $FilePath 2>$null
+            & chmod +x $FilePath 2>$null
         }
     }
+    # Windows doesn't need chmod - files are executable by default
 }
 
 function Write-Status {
