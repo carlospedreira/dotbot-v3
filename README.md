@@ -10,7 +10,7 @@
 
 ```powershell
 cd ~
-git clone https://github.com/andresharpe/dotbot-install
+git clone https://github.com/andresharpe/dotbot-v3 dotbot-install
 cd dotbot-install
 pwsh install.ps1
 ```
