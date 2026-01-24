@@ -2,7 +2,14 @@
 # Recursively parse references from .warp/workflows and identify orphaned files
 
 $ErrorActionPreference = "Stop"
-$projectRoot = "C:\Users\andre\repos\Flux"
+
+# Auto-detect project root by walking up from script location
+$projectRoot = $PSScriptRoot
+while ($projectRoot -and -not (Test-Path (Join-Path $projectRoot ".git"))) {
+    $parent = Split-Path -Parent $projectRoot
+    if ($parent -eq $projectRoot) { break }
+    $projectRoot = $parent
+}
 
 # Initialize tracking sets
 $referencedFiles = @{}
