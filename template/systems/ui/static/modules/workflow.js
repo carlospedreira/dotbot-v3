@@ -54,6 +54,10 @@ async function showWorkflowItem(type, file) {
         titleEl.textContent = `◈ ${file.replace(/\.md$/, '')}`;
         if (cachedData.content) {
             contentEl.innerHTML = markdownToHtml(cachedData.content);
+            // Render any Mermaid diagrams
+            if (typeof renderMermaidDiagrams === 'function') {
+                renderMermaidDiagrams(contentEl);
+            }
         } else {
             contentEl.innerHTML = '<div class="doc-placeholder">No content available</div>';
         }
@@ -92,6 +96,10 @@ async function showWorkflowItem(type, file) {
         // Render markdown content
         if (data.content) {
             contentEl.innerHTML = markdownToHtml(data.content);
+            // Render any Mermaid diagrams
+            if (typeof renderMermaidDiagrams === 'function') {
+                renderMermaidDiagrams(contentEl);
+            }
         } else {
             contentEl.innerHTML = '<div class="doc-placeholder">No content available</div>';
         }
@@ -263,7 +271,15 @@ async function updateWorkflowContent(type, file) {
     const cachedData = getCachedFileData(type, file);
     if (cachedData) {
         titleEl.textContent = `◈ ${file.replace(/\.md$/, '')}`;
-        contentEl.innerHTML = cachedData.content ? markdownToHtml(cachedData.content) : '<div class="doc-placeholder">No content available</div>';
+        if (cachedData.content) {
+            contentEl.innerHTML = markdownToHtml(cachedData.content);
+            // Render any Mermaid diagrams
+            if (typeof renderMermaidDiagrams === 'function') {
+                renderMermaidDiagrams(contentEl);
+            }
+        } else {
+            contentEl.innerHTML = '<div class="doc-placeholder">No content available</div>';
+        }
         return;
     }
 
@@ -288,7 +304,15 @@ async function updateWorkflowContent(type, file) {
 
         // Update content
         titleEl.textContent = `◈ ${file.replace(/\.md$/, '')}`;
-        contentEl.innerHTML = data.content ? markdownToHtml(data.content) : '<div class="doc-placeholder">No content available</div>';
+        if (data.content) {
+            contentEl.innerHTML = markdownToHtml(data.content);
+            // Render any Mermaid diagrams
+            if (typeof renderMermaidDiagrams === 'function') {
+                renderMermaidDiagrams(contentEl);
+            }
+        } else {
+            contentEl.innerHTML = '<div class="doc-placeholder">No content available</div>';
+        }
 
     } catch (error) {
         console.error('Error loading file data:', error);

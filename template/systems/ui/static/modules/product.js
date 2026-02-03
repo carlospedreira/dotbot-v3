@@ -69,6 +69,10 @@ async function loadProductDoc(docName) {
         if (data.success && data.content) {
             // Convert markdown to basic HTML
             viewer.innerHTML = markdownToHtml(data.content);
+            // Render any Mermaid diagrams
+            if (typeof renderMermaidDiagrams === 'function') {
+                renderMermaidDiagrams(viewer);
+            }
         } else {
             viewer.innerHTML = `<div class="doc-placeholder">Document not found: ${escapeHtml(docName)}</div>`;
         }

@@ -5,7 +5,7 @@ if (-not (Get-Module TaskIndexCache)) {
 }
 
 # Initialize index on first use
-$tasksBaseDir = Join-Path $PSScriptRoot "..\..\..\..\state\tasks"
+$tasksBaseDir = Join-Path $PSScriptRoot "..\..\..\..\workspace\tasks"
 Initialize-TaskIndex -TasksBaseDir $tasksBaseDir
 
 function Invoke-TaskList {
@@ -20,6 +20,7 @@ function Invoke-TaskList {
     $maxPriority = $Arguments['max_priority']
     $effort = $Arguments['effort']
     $limit = $Arguments['limit']
+    $verbose = $Arguments['verbose'] -eq $true
 
     Write-Verbose "[task-list] Using cached task index"
 
@@ -40,18 +41,31 @@ function Invoke-TaskList {
             $taskStatus = 'done'
         }
 
-        $sortedTasks += @{
-            id = $task.id
-            name = $task.name
-            description = $task.description
-            category = $task.category
-            priority = $task.priority
-            effort = $task.effort
-            dependencies = $task.dependencies
-            acceptance_criteria = $task.acceptance_criteria
-            steps = $task.steps
-            file_path = $task.file_path
-            status = $taskStatus
+        if ($verbose) {
+            $sortedTasks += @{
+                id = $task.id
+                name = $task.name
+                status = $taskStatus
+                priority = $task.priority
+                effort = $task.effort
+                category = $task.category
+                description = $task.description
+                dependencies = $task.dependencies
+                acceptance_criteria = $task.acceptance_criteria
+                steps = $task.steps
+                applicable_agents = $task.applicable_agents
+                applicable_standards = $task.applicable_standards
+                file_path = $task.file_path
+            }
+        } else {
+            $sortedTasks += @{
+                id = $task.id
+                name = $task.name
+                status = $taskStatus
+                priority = $task.priority
+                effort = $task.effort
+                category = $task.category
+            }
         }
     }
 

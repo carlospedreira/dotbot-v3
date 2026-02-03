@@ -1,336 +1,143 @@
 ---
 name: New Tasks
-description: Create change requests and generate tasks for new features, enhancements, or fixes
-version: 2.0
+description: Create change requests and generate tasks
+version: 2.1
 ---
 
 # New Tasks Workflow
 
-This workflow captures new requirements as a documented change request, then generates tasks using the same approach as the roadmap planning workflow.
+Capture requirements as a change request, then create tasks via `task_create_bulk`.
 
-## Goal
-Capture new requirements, document them as a change request, and create well-scoped tasks via the `task_create_bulk` MCP tool.
+**Use for:** New features, enhancements, bug fixes, tech debt, refactoring.
 
-## When to Use This
-- Adding new features after initial roadmap
-- Enhancement requests
-- Bug fixes that need planning
-- Technical debt or refactoring work
-- Any new work not covered by the original PRD
-
-## Process Overview
-
-```
-User Input → Document Change Request → Analyze & Break Down → Create Tasks via MCP
-```
-
----
+**Flow:** User Input → Change Request → Break Down → Create Tasks via MCP
 
 ## Step 1: Gather Requirements
 
-**Start with an open question:**
+Ask: What do you want to add/change? Why? Any constraints? Expected outcome?
 
-```
-What would you like to add or change?
+Wait for input. Ask clarifying questions one at a time if needed:
+- **Features:** Functionality, UX, edge cases, success criteria
+- **Enhancements:** Current state, limitation, desired improvement
+- **Fixes:** Current vs expected behavior, reproducibility
+- **Infrastructure:** Problem solved, affected components, success criteria
 
-Please describe:
-- What you want to accomplish
-- Why it's needed
-- Any specific requirements or constraints
-- Expected behavior or outcomes
+## Step 2: Create Change Request
 
-Paste your requirements below (can be detailed or brief - I'll ask clarifying questions if needed):
-```
-
-**Wait for user input before proceeding.**
-
----
-
-## Step 2: Clarify Requirements (if needed)
-
-If the input is unclear or incomplete, ask targeted questions:
-
-**For Features:**
-- What specific functionality do you want?
-- What's the expected user experience?
-- Are there edge cases to consider?
-- How will you know it's working?
-
-**For Enhancements:**
-- What currently exists that you want to improve?
-- What's the current limitation or pain point?
-- What does "better" look like?
-
-**For Fixes:**
-- What's the current (buggy) behavior?
-- What should happen instead?
-- Can you reproduce it reliably?
-
-**For Infrastructure/Chores:**
-- What problem does this solve?
-- Which components are affected?
-- What are the success criteria?
-
----
-
-## Step 3: Create Change Request Document
-
-**Generate a change request file:**
-
-Filename: `.bot/state/product/change-request-{yyyyMMdd_HHmmss}-{short-slug}.md`
-
-Example: `change-request-20260123_131500-email-snooze.md`
-
-**Template:**
+Save to: `.bot/workspace/product/change-request-{yyyyMMdd_HHmmss}-{slug}.md`
 
 ```markdown
 # Change Request: {Title}
-
-**Created:** {Date/Time}
-**Status:** Planning
-**Type:** feature | enhancement | fix | infrastructure
+**Created:** {DateTime}  **Status:** Planning  **Type:** feature|enhancement|fix|infrastructure
 
 ## Summary
-{One paragraph describing what this change accomplishes}
+{What this accomplishes}
 
 ## Background
-{Why this change is needed - context and motivation}
+{Why needed}
 
 ## Requirements
-
-### Functional Requirements
-- {Requirement 1}
-- {Requirement 2}
-- {Requirement 3}
-
-### Non-Functional Requirements
-- {Performance, security, or other constraints}
+- Functional: {list}
+- Non-functional: {constraints}
 
 ## Acceptance Criteria
-- [ ] {Testable criterion 1}
-- [ ] {Testable criterion 2}
-- [ ] {Testable criterion 3}
+- [ ] {Testable criteria}
 
 ## Technical Considerations
-- {Affected components}
-- {Dependencies on existing features}
-- {Integration points}
+{Affected components, dependencies, integration points}
 
 ## Out of Scope
-- {What this change does NOT include}
-
-## Related Documents
-- `.bot/state/product/prd.md` - Original PRD
-- `.bot/state/product/entity-model.md` - Entity model
+{Exclusions}
 ```
 
-**Save the change request before proceeding.**
+## Step 3: Load Context
 
----
+Read: `mission.md`, `tech-stack.md`, `entity-model.md`, `prd.md` (in `.bot/workspace/product/`)
 
-## Step 4: Load Context
+## Step 4: Break Down Into Tasks
 
-**Read existing product documents to understand current state:**
+Each task should be 1-4 hours, independently testable, single context window.
 
-1. `.bot/state/product/mission.md` - Core principles
-2. `.bot/state/product/tech-stack.md` - Technology choices
-3. `.bot/state/product/entity-model.md` - Data model
-4. `.bot/state/product/prd.md` - Original requirements
+**Effort:** XS (<1h), S (1-2h), M (2-4h), L (4-8h), XL (8h+, consider splitting)
 
-**Understand:**
-- How this change fits with existing architecture
-- Which existing components are affected
-- What patterns to follow
-- What dependencies exist
+**Categories:** `infrastructure`, `core`, `feature`, `enhancement`, `bugfix`, `ui-ux`
 
----
+### Dependencies
 
-## Step 5: Break Down Into Tasks
+**CRITICAL:** Use ONLY existing task names/IDs/slugs. Validated at creation - invalid deps cause errors.
 
-**Apply the same breakdown approach as roadmap planning:**
+If dependency missing: (1) Create it first in batch, (2) Omit and run parallel, or (3) Two-phase creation.
 
-1. Identify the functional area(s) affected
-2. List specific capabilities needed
-3. Break into implementation tasks
-4. Ensure each task is:
-   - Completable in 1-4 hours
-   - Independently testable where possible
-   - Small enough for a single context window
+**Best:** Minimize deps. Most tasks run independently.
 
-**Task sizing guide:**
+## Step 5: Present & Confirm
 
-| Effort | Duration | Examples |
-|--------|----------|----------|
-| XS | < 1 hour | Add field, simple config |
-| S | 1-2 hours | Simple handler, basic query |
-| M | 2-4 hours | Feature with tests |
-| L | 4-8 hours | Complex feature |
-| XL | 1-2 days | Major subsystem |
+Show proposed tasks with effort estimates and dependencies. Wait for user confirmation (Yes/Review/Adjust).
 
-**Categories:**
+## Step 6: Create Tasks
 
-| Category | Use For |
-|----------|----------|
-| `infrastructure` | Setup, database, config |
-| `core` | Essential functionality |
-| `feature` | User-facing capabilities |
-| `enhancement` | Improvements to existing |
-| `bugfix` | Corrections |
-
----
-
-## Step 6: Present Task Breakdown
-
-**Show the proposed tasks to user before creating:**
-
-```markdown
-## Proposed Tasks for: {Change Request Title}
-
-I've broken this down into {N} tasks:
-
-### Infrastructure ({count})
-1. {Task name} - {brief description} `{effort}`
-
-### Core/Feature ({count})
-2. {Task name} - {brief description} `{effort}`
-3. {Task name} - {brief description} `{effort}`
-
-### Dependencies:
-- Task 2 depends on Task 1
-- Task 3 depends on Task 2
-
-Total estimated effort: {sum}
-
-**Proceed with creating these tasks?**
-- A) Yes, create all tasks
-- B) Review in more detail
-- C) Adjust scope
-```
-
-**Wait for user confirmation before creating tasks.**
-
----
-
-## Step 7: Create Tasks via MCP
-
-**Use `task_create_bulk` to create all tasks:**
+**With dependencies?** Verify with `task_list` first.
 
 ```javascript
-task_create_bulk({
-  tasks: [
-    {
-      name: "{Task name}",
-      description: "{Detailed description referencing change request}",
-      category: "{category}",
-      priority: {calculated priority},
-      effort: "{XS|S|M|L|XL}",
-      dependencies: ["{dependency task IDs}"],
-      acceptance_criteria: [
-        "{Criterion 1}",
-        "{Criterion 2}"
-      ],
-      steps: [
-        "{Implementation step 1}",
-        "{Implementation step 2}"
-      ]
-    }
-    // ... all tasks
-  ]
+mcp__dotbot__task_create_bulk({
+  tasks: [{
+    name: "{Action-oriented title}",
+    description: "{What, where, why, how}",
+    category: "{category}",
+    effort: "{XS|S|M|L|XL}",
+    acceptance_criteria: ["{criteria}"],
+    steps: ["{steps}"],
+    dependencies: [],  // Existing task names/IDs/slugs only
+    applicable_agents: ["{path}"],
+    applicable_standards: ["{path}"]
+  }]
 })
 ```
 
-**Priority assignment:**
-- Check existing tasks with `task_list` to find current max priority
-- Assign new tasks with priorities after existing work
-- Or interleave based on urgency if user specifies
+**Batch deps:** Order correctly - dependency first, dependent second.
+
+Use `task_list` to find current max priority. Assign after existing or interleave by urgency.
+
+## Step 7: Finalize
+
+1. Update change request: `**Status:** Tasks Created` with task IDs
+2. Report to user: change request path, task count, IDs, total effort
+3. Suggest `task_get_next` to begin work
+
+## Step 8: Plans (Optional)
+
+Offer for L/XL or complex tasks. Use `mcp__dotbot__plan_create`. See `.bot/workspace/tasks/samples/sample-plan-retrospective.md`.
 
 ---
 
-## Step 8: Update Change Request Status
+## dotbot MCP Tools
 
-**After tasks are created, update the change request:**
-
-```markdown
-**Status:** Tasks Created
-**Tasks Created:** {count}
-**Task IDs:** {list of created task IDs}
-```
+| Tool | Purpose |
+|------|--------|
+| `mcp__dotbot__task_create_bulk` | Create multiple tasks at once |
+| `mcp__dotbot__plan_create` | Create implementation plan for a task |
 
 ---
 
-## Step 9: Confirm Completion
+## Task Schema
 
-**Report results to user:**
+| Field | Req | Description |
+|-------|-----|-------------|
+| `name` | Y | Action-oriented title |
+| `description` | Y | What, where, why, how |
+| `category` | Y | infrastructure/core/feature/enhancement/bugfix/ui-ux |
+| `effort` | Y | XS/S/M/L/XL |
+| `acceptance_criteria` | Y | Testable conditions |
+| `priority` | N | 1-100 (auto-assigned if omitted) |
+| `steps` | N | Implementation guidance |
+| `dependencies` | N | Array of task names/IDs/slugs from EXISTING tasks. Validated at creation. |
+| `applicable_agents` | N | Agent persona paths |
+| `applicable_standards` | N | Standards paths |
 
-```
-✓ Change request documented: .bot/state/product/change-request-{timestamp}-{slug}.md
-✓ Created {N} tasks in .bot/state/tasks/todo/
-
-Tasks created:
-- {Task 1 name} ({effort}) - ID: {id}
-- {Task 2 name} ({effort}) - ID: {id}
-- {Task 3 name} ({effort}) - ID: {id}
-
-Total estimated effort: {sum}
-
-Use `task_get_next` to get the next available task.
-```
-
----
-
-## Task Schema Reference
-
-Each task must include:
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `name` | Yes | Action-oriented title |
-| `description` | Yes | What, where, why, how |
-| `category` | Yes | infrastructure/core/feature/enhancement/bugfix |
-| `priority` | Yes | 1-100 (1 = highest) |
-| `effort` | Yes | XS/S/M/L/XL |
-| `dependencies` | No | Task IDs this depends on |
-| `acceptance_criteria` | Yes | Testable success conditions |
-| `steps` | No | Implementation guidance |
-
----
-
-## Guidelines
-
-### Good Change Request Titles
-- "Add email snooze functionality"
-- "Improve sender enrichment performance"
-- "Fix timezone handling in calendar"
-
-### Good Task Names
-- Action verb + specific component
-- "Implement {X} command handler"
-- "Add {X} entity and migration"
-- "Create {X} background job"
-
-### Good Acceptance Criteria
-- Specific and testable
-- Each starts with a verb
-- Covers happy path and key edge cases
+**Auto-managed:** `id`, `status`, `created_at`, `updated_at`, `plan_path`
 
 ---
 
 ## Error Handling
 
-- If MCP tools fail, report error and allow retry
-- If partial success, report which tasks were created
-- Change request document serves as recovery point
-- User can re-run task creation from saved change request
-
----
-
-## Success Criteria
-
-✅ User requirements captured completely
-✅ Change request documented in `.bot/state/product/`
-✅ Existing product context considered
-✅ Tasks broken down appropriately
-✅ User approved task breakdown before creation
-✅ Tasks created via `task_create_bulk` MCP tool
-✅ Change request status updated
-✅ User informed of results
+If MCP fails: report error, allow retry. Change request serves as recovery point.

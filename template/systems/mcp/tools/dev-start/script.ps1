@@ -20,13 +20,13 @@ function Invoke-DevStart {
                 -Summary "Failed: not in a project directory." `
                 -Data @{} `
                 -Errors @((New-ErrorObject -Code "PROJECT_NOT_FOUND" -Message "Not in a project directory (no .bot folder found)")) `
-                -Source ".bot/dev-scripts/Start-Dev.ps1" `
+                -Source ".bot/hooks/dev/Start-Dev.ps1" `
                 -DurationMs $duration `
                 -Host (Get-McpHost)
         }
         
         # Check for dev script
-        $scriptPath = Join-Path $solutionRoot '.bot\dev-scripts\Start-Dev.ps1'
+        $scriptPath = Join-Path $solutionRoot '.bot\hooks\dev\Start-Dev.ps1'
         if (-not (Test-Path $scriptPath)) {
             $duration = Get-ToolDuration -Stopwatch $timer
             return New-EnvelopeResponse `
@@ -35,16 +35,22 @@ function Invoke-DevStart {
                 -Summary "Failed: Start-Dev.ps1 not found." `
                 -Data @{ solution_root = $solutionRoot } `
                 -Errors @((New-ErrorObject -Code "SCRIPT_NOT_FOUND" -Message "Dev script not found at: $scriptPath")) `
-                -Source ".bot/dev-scripts/Start-Dev.ps1" `
+                -Source ".bot/hooks/dev/Start-Dev.ps1" `
                 -DurationMs $duration `
                 -Host (Get-McpHost)
+        }
+        
+        # Build arguments
+        $scriptArgs = @{}
+        if ($Arguments.noLayout -eq $true) {
+            $scriptArgs.NoLayout = $true
         }
         
         # Change to project root so git commands work
         Push-Location $solutionRoot
         try {
             # Execute the start script and capture return value
-            $result = & $scriptPath 2>&1
+            $result = & $scriptPath @scriptArgs 2>&1
             
             # Separate console output from return value
             $consoleOutput = @()
@@ -91,7 +97,7 @@ function Invoke-DevStart {
             -Version "1.0.0" `
             -Summary $summary `
             -Data $data `
-            -Source ".bot/dev-scripts/Start-Dev.ps1" `
+            -Source ".bot/hooks/dev/Start-Dev.ps1" `
             -DurationMs $duration `
             -Host (Get-McpHost)
     }
@@ -103,7 +109,7 @@ function Invoke-DevStart {
             -Summary "Failed to start dev environment: $_" `
             -Data @{} `
             -Errors @((New-ErrorObject -Code "EXECUTION_FAILED" -Message "$_")) `
-            -Source ".bot/dev-scripts/Start-Dev.ps1" `
+            -Source ".bot/hooks/dev/Start-Dev.ps1" `
             -DurationMs $duration `
             -Host (Get-McpHost)
     }

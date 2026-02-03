@@ -23,7 +23,7 @@ First, review any existing documentation:
 - Ask the user about the project if documentation is sparse
 
 ### Step 2: Extract Mission & Principles
-Create `.bot/state/product/mission.md` with:
+Create `.bot/workspace/product/mission.md` with:
 - **What it is**: 2-3 sentence overview of the product
 - **Core principles**: The key values and constraints that guide development (e.g., "security first", "simple over complex", "privacy-preserving")
 - **Primary goals**: What success looks like (e.g., "automate email triage", "reduce response time by 50%")
@@ -32,7 +32,7 @@ Create `.bot/state/product/mission.md` with:
 Keep this concise - it's a reference document, not marketing copy.
 
 ### Step 3: Document Tech Stack
-Create `.bot/state/product/tech-stack.md` with:
+Create `.bot/workspace/product/tech-stack.md` with:
 - **Runtime**: Language, framework, version (e.g., ".NET 10 with ASP.NET Core")
 - **Database**: Type and version (e.g., "SQLite 3.x embedded")
 - **Key libraries**: Major dependencies with purpose (e.g., "Wolverine for CQRS", "Telegram.Bot for UI")
@@ -43,7 +43,7 @@ Create `.bot/state/product/tech-stack.md` with:
 Format as a simple list or table - prioritize readability.
 
 ### Step 4: Define Entity Model
-Create `.bot/state/product/entity-model.md` with:
+Create `.bot/workspace/product/entity-model.md` with:
 - **Core entities**: Main domain objects (e.g., User, Email, Sender, Rule)
 - **Relationships**: How entities connect (e.g., "Email belongs to Sender", "Rule matches Email")
 - **Key fields**: Important properties per entity (don't list every field, just the critical ones)
@@ -76,10 +76,10 @@ When entity model is unclear:
 ```
 
 ## Output Location
-All files go in `.bot/state/product/`:
-- `.bot/state/product/mission.md`
-- `.bot/state/product/tech-stack.md`
-- `.bot/state/product/entity-model.md`
+All files go in `.bot/workspace/product/`:
+- `.bot/workspace/product/mission.md`
+- `.bot/workspace/product/tech-stack.md`
+- `.bot/workspace/product/entity-model.md`
 
 ## Success Criteria
 ✅ Three markdown files created

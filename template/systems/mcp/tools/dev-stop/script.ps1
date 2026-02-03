@@ -20,13 +20,13 @@ function Invoke-DevStop {
                 -Summary "Failed: not in a project directory." `
                 -Data @{} `
                 -Errors @((New-ErrorObject -Code "PROJECT_NOT_FOUND" -Message "Not in a project directory (no .bot folder found)")) `
-                -Source ".bot/dev-scripts/Stop-Dev.ps1" `
+                -Source ".bot/hooks/dev/Stop-Dev.ps1" `
                 -DurationMs $duration `
                 -Host (Get-McpHost)
         }
         
         # Check for dev script
-        $scriptPath = Join-Path $solutionRoot '.bot\dev-scripts\Stop-Dev.ps1'
+        $scriptPath = Join-Path $solutionRoot '.bot\hooks\dev\Stop-Dev.ps1'
         if (-not (Test-Path $scriptPath)) {
             $duration = Get-ToolDuration -Stopwatch $timer
             return New-EnvelopeResponse `
@@ -35,7 +35,7 @@ function Invoke-DevStop {
                 -Summary "Failed: Stop-Dev.ps1 not found." `
                 -Data @{ solution_root = $solutionRoot } `
                 -Errors @((New-ErrorObject -Code "SCRIPT_NOT_FOUND" -Message "Dev script not found at: $scriptPath")) `
-                -Source ".bot/dev-scripts/Stop-Dev.ps1" `
+                -Source ".bot/hooks/dev/Stop-Dev.ps1" `
                 -DurationMs $duration `
                 -Host (Get-McpHost)
         }
@@ -60,7 +60,7 @@ function Invoke-DevStop {
                 script_executed = $scriptPath
                 output = $output.Trim()
             } `
-            -Source ".bot/dev-scripts/Stop-Dev.ps1" `
+            -Source ".bot/hooks/dev/Stop-Dev.ps1" `
             -DurationMs $duration `
             -Host (Get-McpHost)
     }
@@ -72,7 +72,7 @@ function Invoke-DevStop {
             -Summary "Failed to stop dev environment: $_" `
             -Data @{} `
             -Errors @((New-ErrorObject -Code "EXECUTION_FAILED" -Message "$_")) `
-            -Source ".bot/dev-scripts/Stop-Dev.ps1" `
+            -Source ".bot/hooks/dev/Stop-Dev.ps1" `
             -DurationMs $duration `
             -Host (Get-McpHost)
     }

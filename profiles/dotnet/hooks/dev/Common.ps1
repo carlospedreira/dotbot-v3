@@ -12,12 +12,12 @@ function Invoke-InProjectRoot {
 
 function Load-EnvFile {
     param(
-        [string]$Path = ".env",
+        [string]$Path = ".env.local",
         [switch]$Export
     )
     
     if (-not (Test-Path $Path)) {
-        throw ".env file not found at $Path"
+        throw "Environment file not found at $Path"
     }
     
     $env = @{}

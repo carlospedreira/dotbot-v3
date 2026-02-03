@@ -46,6 +46,53 @@ function Invoke-TaskCreate {
     if (-not $applicableStandards) { $applicableStandards = @() }
     if (-not $applicableAgents) { $applicableAgents = @() }
     
+    # Validate dependencies exist
+    if ($dependencies -and $dependencies.Count -gt 0) {
+        # Import task index module
+        $indexModule = Join-Path $PSScriptRoot "..\..\modules\TaskIndexCache.psm1"
+        if (-not (Get-Module TaskIndexCache)) {
+            Import-Module $indexModule -Force
+        }
+        
+        # Initialize index
+        $tasksBaseDir = Join-Path $PSScriptRoot "..\..\..\..\workspace\tasks"
+        Initialize-TaskIndex -TasksBaseDir $tasksBaseDir
+        $index = Get-TaskIndex
+        
+        $invalidDeps = @()
+        foreach ($dep in $dependencies) {
+            $depLower = $dep.ToLower()
+            $found = $false
+            
+            # Check all tasks (todo, in-progress, done)
+            $allTasks = @($index.Todo.Values) + @($index.InProgress.Values) + @($index.Done.Values)
+            
+            foreach ($task in $allTasks) {
+                # Check ID match
+                if ($task.id -eq $dep) { $found = $true; break }
+                
+                # Check name match
+                if ($task.name -eq $dep) { $found = $true; break }
+                
+                # Check slug match (generated from name)
+                $taskSlug = ($task.name -replace '[^\w\s-]', '' -replace '\s+', '-').ToLower()
+                if ($taskSlug -eq $depLower) { $found = $true; break }
+                
+                # Fuzzy match
+                if ($taskSlug -like "*$depLower*" -or $depLower -like "*$taskSlug*") { $found = $true; break }
+            }
+            
+            if (-not $found) {
+                $invalidDeps += $dep
+            }
+        }
+        
+        if ($invalidDeps.Count -gt 0) {
+            $depList = $invalidDeps -join "', '"
+            throw "Invalid dependencies: '$depList'. These tasks do not exist. Create dependency tasks first or remove these dependencies."
+        }
+    }
+    
     # Generate unique ID
     $id = [System.Guid]::NewGuid().ToString()
     
@@ -69,7 +116,7 @@ function Invoke-TaskCreate {
     }
     
     # Define file path
-    $tasksDir = Join-Path $PSScriptRoot "..\..\..\..\state\tasks\todo"
+    $tasksDir = Join-Path $PSScriptRoot "..\..\..\..\workspace\tasks\todo"
     
     # Ensure directory exists
     if (-not (Test-Path $tasksDir)) {

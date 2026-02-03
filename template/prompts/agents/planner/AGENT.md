@@ -1,4 +1,5 @@
 ---
+name: planner
 model: claude-opus-4-20250514
 tools: []
 description: Plans features, conducts requirement interviews, and breaks down work into logical tasks. Used for product planning and new feature requests.

@@ -125,35 +125,43 @@ function updateRunningStatus(session, control) {
 
     const status = session.status || 'unknown';
 
+    // Helper to set LED state
+    const setLed = (el, type, pulse) => {
+        if (!el) return;
+        el.className = pulse ? 'led pulse' : 'led';
+        if (type) el.dataset.type = type;
+        else delete el.dataset.type;
+    };
+
     switch (status) {
         case 'running':
-            if (runningLed) runningLed.className = 'led pulse';
+            setLed(runningLed, null, true);
             if (runningStatus) runningStatus.textContent = 'Running';
-            if (agentLed) agentLed.className = 'led pulse';
+            setLed(agentLed, null, true);
             if (agentState) agentState.innerHTML = '<span class="led pulse"></span><span>Processing</span>';
             // Update oscilloscope to running state
             if (activityScope) activityScope.setState('running');
             break;
         case 'paused':
-            if (runningLed) runningLed.className = 'led amber';
+            setLed(runningLed, 'warning', false);
             if (runningStatus) runningStatus.textContent = 'Paused';
-            if (agentLed) agentLed.className = 'led amber';
-            if (agentState) agentState.innerHTML = '<span class="led amber"></span><span>Paused</span>';
+            setLed(agentLed, 'warning', false);
+            if (agentState) agentState.innerHTML = '<span class="led" data-type="warning"></span><span>Paused</span>';
             // Update oscilloscope to paused state
             if (activityScope) activityScope.setState('paused');
             break;
         case 'stopping':
-            if (runningLed) runningLed.className = 'led amber pulse';
+            setLed(runningLed, 'warning', true);
             if (runningStatus) runningStatus.textContent = 'Stopping';
-            if (agentLed) agentLed.className = 'led amber pulse';
-            if (agentState) agentState.innerHTML = '<span class="led amber pulse"></span><span>Stopping</span>';
+            setLed(agentLed, 'warning', true);
+            if (agentState) agentState.innerHTML = '<span class="led pulse" data-type="warning"></span><span>Stopping</span>';
             // Update oscilloscope to paused (stopping is similar)
             if (activityScope) activityScope.setState('paused');
             break;
         case 'idle':
-            if (runningLed) runningLed.className = 'led';
+            setLed(runningLed, null, false);
             if (runningStatus) runningStatus.textContent = 'Idle';
-            if (agentLed) agentLed.className = 'led';
+            setLed(agentLed, null, false);
             if (agentState) agentState.innerHTML = '<span class="led"></span><span>Idle</span>';
             // Update oscilloscope to idle state
             if (activityScope) activityScope.setState('idle');
@@ -192,8 +200,8 @@ function updateCurrentTask(task) {
             <div class="task-name">${escapeHtml(task.name || task.id || 'Unknown')}</div>
             ${task.description ? `<div class="task-description">${escapeHtml(task.description)}</div>` : ''}
             <div class="task-meta">
-                ${task.category ? `<span><span class="amber">◈</span> ${escapeHtml(task.category)}</span>` : ''}
-                ${task.priority ? `<span><span class="cyan">↑</span> P${escapeHtml(task.priority)}</span>` : ''}
+                ${task.category ? `<span><span data-type="primary">◈</span> ${escapeHtml(task.category)}</span>` : ''}
+                ${task.priority ? `<span><span data-type="secondary">↑</span> P${escapeHtml(task.priority)}</span>` : ''}
             </div>
         `;
     }
@@ -358,14 +366,21 @@ function updateControlSignalStatus(control) {
         return;
     }
 
+    const setControlLed = (type) => {
+        if (!controlLed) return;
+        controlLed.className = 'led';
+        if (type) controlLed.dataset.type = type;
+        else delete controlLed.dataset.type;
+    };
+
     if (control.stop) {
-        if (controlLed) controlLed.className = 'led red';
+        setControlLed('error');
         if (controlStatus) controlStatus.textContent = 'Stop Pending';
     } else if (control.pause) {
-        if (controlLed) controlLed.className = 'led amber';
+        setControlLed('warning');
         if (controlStatus) controlStatus.textContent = 'Pause Pending';
     } else if (control.resume) {
-        if (controlLed) controlLed.className = 'led cyan';
+        setControlLed('info');
         if (controlStatus) controlStatus.textContent = 'Resume Pending';
     } else {
         if (controlLed) controlLed.className = 'led off';
@@ -431,16 +446,19 @@ function setConnectionStatus(status) {
     switch (status) {
         case 'connected':
             led.className = 'led';
+            delete led.dataset.type;
             text.textContent = 'CONNECTED';
             isConnected = true;
             break;
         case 'error':
-            led.className = 'led red';
+            led.className = 'led';
+            led.dataset.type = 'error';
             text.textContent = 'ERROR';
             isConnected = false;
             break;
         default:
-            led.className = 'led amber pulse';
+            led.className = 'led pulse';
+            led.dataset.type = 'warning';
             text.textContent = 'CONNECTING';
             isConnected = false;
     }

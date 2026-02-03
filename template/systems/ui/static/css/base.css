@@ -1,0 +1,163 @@
+/* DOTBOT Control Panel - Base Styles
+ * Foundation: variables, reset, body, scrollbar
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
+
+:root {
+    /* === Background colors (from theme) === */
+    --bg-deep: rgb(var(--color-bg-deep-rgb));
+    --bg-panel: rgb(var(--color-bg-panel-rgb));
+    --bg-module: rgb(var(--color-bg-module-rgb));
+    --bg-screen: rgb(var(--color-bg-screen-rgb));
+    --bg-black-overlay: rgba(0, 0, 0, 0.2);
+    --bg-black-overlay-light: rgba(0, 0, 0, 0.08);
+    --bg-black-overlay-medium: rgba(0, 0, 0, 0.3);
+    --bg-black-overlay-heavy: rgba(0, 0, 0, 0.4);
+    --bg-black-overlay-darker: rgba(0, 0, 0, 0.5);
+    --bg-black-overlay-darkest: rgba(0, 0, 0, 0.8);
+
+    /* === White variants === */
+    --white-20: rgba(255, 255, 255, 0.2);
+
+    /* === UI chrome (derived from theme bezel color) === */
+    --bezel-edge: rgb(var(--color-bezel-rgb));
+    --bezel-light: color-mix(in srgb, rgb(var(--color-bezel-rgb)) 70%, black);
+    --bezel-dark: color-mix(in srgb, rgb(var(--color-bezel-rgb)) 45%, black);
+    --led-off: #333;
+
+    /* === Typography === */
+    --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+    --font-ui: 'Inter', -apple-system, sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+
+body {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.5;
+    background: var(--bg-deep);
+    color: var(--color-primary);
+    overflow: hidden;
+}
+
+/* Scanline overlay */
+body::after {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+        0deg, transparent, transparent 2px,
+        rgba(0, 0, 0, 0.08) 2px, rgba(0, 0, 0, 0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+}
+
+/* ========== SCROLLBAR ========== */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-screen);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--bezel-edge);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--color-primary-dim);
+}
+
+/* ========== STATES ========== */
+.loading-state,
+.empty-state {
+    padding: 20px;
+    text-align: center;
+    color: var(--label-color);
+    font-style: italic;
+    font-size: 11px;
+}
+
+.error-state {
+    color: var(--color-error);
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Loading and Error States */
+.loading-spinner {
+    color: var(--color-primary-dim);
+    animation: pulse 1s ease-in-out infinite;
+}
+
+/* CRT Loading Indicator */
+.crt-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    color: var(--color-primary);
+}
+
+.crt-loading-text {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    text-shadow: 0 0 10px var(--primary-glow);
+    margin-bottom: 16px;
+}
+
+.crt-loading-dots::after {
+    content: '';
+    animation: loadingDots 1.5s steps(4, end) infinite;
+}
+
+@keyframes loadingDots {
+    0% { content: ''; }
+    25% { content: '.'; }
+    50% { content: '..'; }
+    75% { content: '...'; }
+    100% { content: ''; }
+}
+
+.crt-loading-bar {
+    width: 200px;
+    height: 4px;
+    background: var(--bg-screen);
+    border: 1px solid var(--primary-30);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.crt-loading-progress {
+    width: 30%;
+    height: 100%;
+    background: var(--color-primary);
+    box-shadow: 0 0 8px var(--primary-glow);
+    animation: loadingProgress 1s ease-in-out infinite;
+}
+
+@keyframes loadingProgress {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(400%); }
+}
+
+.crt-loading-mini {
+    text-align: center;
+    padding: 20px;
+    color: var(--color-primary-dim);
+    font-family: var(--font-mono);
+    animation: pulse 1s ease-in-out infinite;
+}

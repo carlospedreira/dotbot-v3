@@ -12,7 +12,6 @@ function startPolling() {
     setInterval(pollState, POLL_INTERVAL);
 
     // Start activity polling
-    console.log('Starting activity polling...');
     pollActivity();
     activityTimer = setInterval(pollActivity, 2000);
 }
@@ -31,6 +30,11 @@ async function pollState() {
 
         setConnectionStatus('connected');
         updateUI(state);
+
+        // Aether ambient feedback
+        if (typeof Aether !== 'undefined') {
+            Aether.processState(state);
+        }
 
     } catch (error) {
         console.error('Poll error:', error);
@@ -60,11 +64,6 @@ async function pollActivity() {
 
         // Process events if any
         if (data.events && data.events.length > 0) {
-            if (!activityInitialized) {
-                console.log('Activity: loaded last', data.events.length, 'events');
-            } else {
-                console.log('Activity:', data.events.length, 'new events');
-            }
             activityInitialized = true;
 
             // Find latest text, rate_limit, and command for display
@@ -87,6 +86,11 @@ async function pollActivity() {
                 if (activityScope) {
                     const scopeEvent = mapEventToScope(event);
                     activityScope.addEvent(scopeEvent);
+                }
+
+                // Send to Aether for light effects
+                if (typeof Aether !== 'undefined') {
+                    Aether.processActivity(event);
                 }
             }
 

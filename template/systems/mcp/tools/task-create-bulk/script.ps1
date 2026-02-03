@@ -19,8 +19,19 @@ function Invoke-TaskCreateBulk {
     $validCategories = @('core', 'feature', 'enhancement', 'bugfix', 'infrastructure', 'ui-ux')
     $validEfforts = @('XS', 'S', 'M', 'L', 'XL')
     
+    # Import task index module for dependency validation
+    $indexModule = Join-Path $PSScriptRoot "..\..\modules\TaskIndexCache.psm1"
+    if (-not (Get-Module TaskIndexCache)) {
+        Import-Module $indexModule -Force
+    }
+    
+    # Initialize task index
+    $tasksBaseDir = Join-Path $PSScriptRoot "..\..\..\..\workspace\tasks"
+    Initialize-TaskIndex -TasksBaseDir $tasksBaseDir
+    $index = Get-TaskIndex
+    
     # Define tasks directory
-    $tasksDir = Join-Path $PSScriptRoot "..\..\..\..\state\tasks\todo"
+    $tasksDir = Join-Path $PSScriptRoot "..\..\..\..\workspace\tasks\todo"
     
     # Ensure directory exists
     if (-not (Test-Path $tasksDir)) {
@@ -64,6 +75,52 @@ function Invoke-TaskCreateBulk {
             $steps = if ($task.steps) { $task.steps } else { @() }
             $applicableStandards = if ($task.applicable_standards) { $task.applicable_standards } else { @() }
             $applicableAgents = if ($task.applicable_agents) { $task.applicable_agents } else { @() }
+            
+            # Validate dependencies exist
+            if ($dependencies -and $dependencies.Count -gt 0) {
+                $invalidDeps = @()
+                foreach ($dep in $dependencies) {
+                    $depLower = $dep.ToLower()
+                    $found = $false
+                    
+                    # Check all existing tasks
+                    $allTasks = @($index.Todo.Values) + @($index.InProgress.Values) + @($index.Done.Values)
+                    
+                    # Also check previously created tasks in this batch
+                    $allTasks += $createdTasks | ForEach-Object {
+                        $taskSlug = ($_.name -replace '[^\w\s-]', '' -replace '\s+', '-').ToLower()
+                        [PSCustomObject]@{
+                            id = $_.id
+                            name = $_.name
+                            slug = $taskSlug
+                        }
+                    }
+                    
+                    foreach ($t in $allTasks) {
+                        # Check ID match
+                        if ($t.id -eq $dep) { $found = $true; break }
+                        
+                        # Check name match
+                        if ($t.name -eq $dep) { $found = $true; break }
+                        
+                        # Check slug match
+                        $taskSlug = if ($t.slug) { $t.slug } else { ($t.name -replace '[^\w\s-]', '' -replace '\s+', '-').ToLower() }
+                        if ($taskSlug -eq $depLower) { $found = $true; break }
+                        
+                        # Fuzzy match
+                        if ($taskSlug -like "*$depLower*" -or $depLower -like "*$taskSlug*") { $found = $true; break }
+                    }
+                    
+                    if (-not $found) {
+                        $invalidDeps += $dep
+                    }
+                }
+                
+                if ($invalidDeps.Count -gt 0) {
+                    $depList = $invalidDeps -join "', '"
+                    throw "Invalid dependencies: '$depList'. These tasks do not exist in the system or earlier in this batch."
+                }
+            }
             
             # Generate unique ID
             $id = [System.Guid]::NewGuid().ToString()

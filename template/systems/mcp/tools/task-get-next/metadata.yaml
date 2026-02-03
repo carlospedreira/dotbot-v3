@@ -2,4 +2,8 @@ name: task_get_next
 description: Get the highest priority todo task that has no unmet dependencies
 inputSchema:
   type: object
-  properties: {}
+  properties:
+    verbose:
+      type: boolean
+      description: "Return full task details. WARNING: Consumes significant context window. Only use when you need description, steps, or acceptance_criteria. Default returns summary fields only (id, name, status, priority, effort, category)."
+      default: false

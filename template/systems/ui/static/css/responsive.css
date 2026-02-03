@@ -1,0 +1,62 @@
+/* DOTBOT Control Panel - Responsive
+ * Media queries and mobile styles
+ */
+
+/* ========== RESPONSIVE ========== */
+@media (max-width: 1200px) {
+    .main-layout {
+        grid-template-columns: 260px 1fr;
+    }
+
+    .stats-row {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .two-column {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 900px) {
+    .main-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .hamburger-menu {
+        display: flex;
+    }
+
+    .system-id {
+        display: none;
+    }
+
+    .sidebar-left {
+        position: fixed;
+        top: 0;
+        left: -280px;
+        width: 280px;
+        height: 100vh;
+        z-index: 1001;
+        transition: left 0.3s ease;
+        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.5);
+    }
+
+    .sidebar-left.mobile-open {
+        left: 0;
+    }
+
+    .mobile-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 1000;
+        display: none;
+    }
+
+    .mobile-overlay.active {
+        display: block;
+    }
+}

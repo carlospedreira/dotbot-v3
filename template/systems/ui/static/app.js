@@ -34,6 +34,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     initModalClose();
     initPipelineInfiniteScroll();
 
+    // Initialize Aether (ambient feedback)
+    Aether.init().then(result => {
+        if (result.status === 'linked' || result.status === 'detected') {
+            Aether.initSettingsPanel();
+        }
+    });
+
     // Start data flows
     startPolling();
     startRuntimeTimer();

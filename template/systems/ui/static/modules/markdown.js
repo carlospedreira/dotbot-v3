@@ -114,6 +114,25 @@ function parseCodeBlock(codeLines, language) {
 }
 
 /**
+ * Parse Mermaid diagram block to HTML
+ * Creates a container with loading state, hidden syntax, and fallback
+ * @param {string[]} codeLines - Array of mermaid syntax lines
+ * @returns {string} HTML mermaid container
+ */
+function parseMermaidBlock(codeLines) {
+    const code = codeLines.join('\n');
+    const escapedCode = escapeHtml(code);
+
+    return `<div class="mermaid-container" data-pending="true">
+        <div class="mermaid-label">Diagram</div>
+        <div class="mermaid-loading">Rendering diagram...</div>
+        <div class="mermaid-rendered" style="display: none;"></div>
+        <pre class="mermaid-syntax" style="display: none;">${escapedCode}</pre>
+        <div class="mermaid-fallback" style="display: none;"><pre>${escapedCode}</pre></div>
+    </div>`;
+}
+
+/**
  * Helper to group consecutive list items into proper list tags
  * @param {string} html - HTML with list placeholders
  * @param {string} placeholderType - Type of placeholder (ULI or OLI)
@@ -165,6 +184,56 @@ function groupListItems(html, placeholderType, listTag) {
 }
 
 /**
+ * Check if content looks like valid YAML frontmatter
+ * Must have at least one "key: value" line where key has no spaces
+ * @param {string} content - Potential frontmatter content
+ * @returns {boolean} True if looks like YAML
+ */
+function looksLikeYaml(content) {
+    const lines = content.split('\n').filter(line => line.trim());
+    // Must have at least one proper key: value pair
+    return lines.some(line => {
+        const colonIndex = line.indexOf(':');
+        if (colonIndex <= 0) return false;
+        const key = line.substring(0, colonIndex).trim();
+        // Key should be a simple identifier (no spaces, starts with letter)
+        return /^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(key);
+    });
+}
+
+/**
+ * Parse YAML frontmatter to HTML
+ * @param {string} frontmatter - YAML frontmatter content (without delimiters)
+ * @returns {string} HTML formatted frontmatter
+ */
+function parseFrontmatter(frontmatter) {
+    const lines = frontmatter.split('\n').filter(line => line.trim());
+    if (lines.length === 0) return '';
+
+    let html = '<div class="frontmatter"><div class="frontmatter-title">Metadata</div>';
+
+    for (const line of lines) {
+        const colonIndex = line.indexOf(':');
+        if (colonIndex > 0) {
+            const key = line.substring(0, colonIndex).trim();
+            let value = line.substring(colonIndex + 1).trim();
+
+            // Format arrays nicely
+            if (value.startsWith('[') && value.endsWith(']')) {
+                const items = value.slice(1, -1).split(',').map(s => s.trim());
+                value = items.map(item => `<span class="frontmatter-tag">${escapeHtml(item)}</span>`).join(' ');
+                html += `<div class="frontmatter-field"><span class="frontmatter-key">${escapeHtml(key)}:</span> <span class="frontmatter-value">${value}</span></div>`;
+            } else {
+                html += `<div class="frontmatter-field"><span class="frontmatter-key">${escapeHtml(key)}:</span> <span class="frontmatter-value">${escapeHtml(value)}</span></div>`;
+            }
+        }
+    }
+
+    html += '</div>';
+    return html;
+}
+
+/**
  * Convert markdown to HTML
  * @param {string} markdown - Markdown text
  * @returns {string} HTML
@@ -174,6 +243,30 @@ function markdownToHtml(markdown) {
 
     // Normalize line endings (Windows CRLF -> Unix LF)
     markdown = markdown.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+    // Handle YAML frontmatter (must be at very start of document)
+    let frontmatterHtml = '';
+    if (markdown.startsWith('---\n')) {
+        const endIndex = markdown.indexOf('\n---\n', 4);
+        if (endIndex !== -1) {
+            const frontmatter = markdown.substring(4, endIndex);
+            // Only treat as frontmatter if it looks like valid YAML
+            if (looksLikeYaml(frontmatter)) {
+                frontmatterHtml = parseFrontmatter(frontmatter);
+                markdown = markdown.substring(endIndex + 5); // Skip past closing ---\n
+            }
+        } else if (markdown.indexOf('\n---', 4) === markdown.lastIndexOf('\n---')) {
+            // Frontmatter at end of file (no trailing newline after ---)
+            const altEndIndex = markdown.indexOf('\n---', 4);
+            if (altEndIndex !== -1 && altEndIndex + 4 >= markdown.length) {
+                const frontmatter = markdown.substring(4, altEndIndex);
+                if (looksLikeYaml(frontmatter)) {
+                    frontmatterHtml = parseFrontmatter(frontmatter);
+                    markdown = '';
+                }
+            }
+        }
+    }
 
     // First pass: parse tables and code blocks before escaping
     const lines = markdown.split('\n');
@@ -205,9 +298,13 @@ function markdownToHtml(markdown) {
             }
             i++; // Skip closing fence
 
-            // Create placeholder
+            // Create placeholder - use mermaid parser for mermaid blocks
             const placeholder = `___CODE_PLACEHOLDER_${placeholderCount}___`;
-            placeholders[placeholder] = parseCodeBlock(codeLines, language);
+            if (language.toLowerCase() === 'mermaid') {
+                placeholders[placeholder] = parseMermaidBlock(codeLines);
+            } else {
+                placeholders[placeholder] = parseCodeBlock(codeLines, language);
+            }
             processedLines.push(placeholder);
             placeholderCount++;
             continue;
@@ -306,20 +403,23 @@ function markdownToHtml(markdown) {
     html = groupListItems(html, 'ULI', 'ul');
     html = groupListItems(html, 'OLI', 'ol');
 
+    // Line breaks for paragraphs (double newline = new paragraph)
+    // IMPORTANT: Do this BEFORE restoring code/mermaid placeholders to preserve whitespace in code blocks
+    html = html.replace(/\n\n/g, '</p><p>');
+    html = '<p>' + html + '</p>';
+
     // Restore code/table placeholders (need to escape placeholder keys since text was escaped)
+    // This is done AFTER paragraph replacement to preserve newlines inside code/mermaid blocks
     for (const [placeholder, content] of Object.entries(placeholders)) {
         html = html.replace(escapeHtml(placeholder), content);
     }
-
-    // Line breaks for paragraphs (double newline = new paragraph)
-    html = html.replace(/\n\n/g, '</p><p>');
-    html = '<p>' + html + '</p>';
 
     // Clean up empty paragraphs
     html = html.replace(/<p><\/p>/g, '');
     html = html.replace(/<p>(<h[1234]>)/g, '$1');
     html = html.replace(/(<\/h[1234]>)<\/p>/g, '$1');
     html = html.replace(/<p>(<div class="code-block">)/g, '$1');
+    html = html.replace(/<p>(<div class="mermaid-container")/g, '$1');
     html = html.replace(/(<\/div>)<\/p>/g, '$1');
     html = html.replace(/<p>(<ul>)/g, '$1');
     html = html.replace(/(<\/ul>)<\/p>/g, '$1');
@@ -329,5 +429,6 @@ function markdownToHtml(markdown) {
     html = html.replace(/<p>(<hr)/g, '$1');
     html = html.replace(/(<hr[^>]*>)<\/p>/g, '$1');
 
-    return html;
+    // Prepend frontmatter if present
+    return frontmatterHtml + html;
 }

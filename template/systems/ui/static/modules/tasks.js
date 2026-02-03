@@ -142,6 +142,18 @@ function showTaskModal(task) {
         `;
     }
 
+    // Plan Link Section
+    if (task.plan_path) {
+        html += `<div class="task-detail-section">`;
+        html += `<div class="section-title">Implementation Plan</div>`;
+        html += `<div class="task-plan-actions">`;
+        html += `<button class="ctrl-btn primary" onclick="showPlanModal('${escapeHtml(task.id)}')">`;
+        html += `<span class="btn-icon">&#128203;</span> View Plan`;
+        html += `</button>`;
+        html += `</div>`;
+        html += `</div>`;
+    }
+
     // Commits & Changes section (for completed tasks)
     if (task.commit_sha || task.commits) {
         html += `<div class="task-detail-section">`;
@@ -244,6 +256,68 @@ function initModalClose() {
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             modal?.classList.remove('visible');
+            document.getElementById('plan-modal')?.classList.remove('visible');
+        }
+    });
+
+    // Initialize plan modal close handlers
+    initPlanModalClose();
+}
+
+/**
+ * Show plan in modal with markdown rendering
+ * @param {string} taskId - The task ID to show the plan for
+ */
+async function showPlanModal(taskId) {
+    const planModal = document.getElementById('plan-modal');
+    const contentEl = document.getElementById('plan-modal-content');
+    const titleEl = document.getElementById('plan-modal-title');
+
+    if (!planModal || !contentEl || !titleEl) return;
+
+    // Show loading state
+    contentEl.innerHTML = '<div class="loading-state">Loading plan...</div>';
+    planModal.classList.add('visible');
+
+    // Fetch plan content via API endpoint
+    try {
+        const response = await fetch(`/api/plan/${taskId}`);
+        const data = await response.json();
+
+        if (data.has_plan) {
+            titleEl.textContent = `Plan: ${data.task_name}`;
+            // Use existing markdown renderer if available, otherwise show raw
+            if (typeof markdownToHtml === 'function') {
+                contentEl.innerHTML = markdownToHtml(data.content);
+                // Render any Mermaid diagrams
+                if (typeof renderMermaidDiagrams === 'function') {
+                    renderMermaidDiagrams(contentEl);
+                }
+            } else {
+                contentEl.innerHTML = `<pre>${escapeHtml(data.content)}</pre>`;
+            }
+        } else {
+            contentEl.innerHTML = '<p class="no-plan">No plan found for this task.</p>';
+        }
+    } catch (err) {
+        contentEl.innerHTML = `<p class="error">Error loading plan: ${escapeHtml(err.message)}</p>`;
+    }
+}
+
+/**
+ * Initialize plan modal close handlers
+ */
+function initPlanModalClose() {
+    const modal = document.getElementById('plan-modal');
+    const closeBtn = document.getElementById('plan-modal-close');
+    const backBtn = document.getElementById('plan-modal-back');
+
+    closeBtn?.addEventListener('click', () => modal?.classList.remove('visible'));
+    backBtn?.addEventListener('click', () => modal?.classList.remove('visible'));
+
+    modal?.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.classList.remove('visible');
         }
     });
 }

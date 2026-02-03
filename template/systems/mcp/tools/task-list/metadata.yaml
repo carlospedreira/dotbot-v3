@@ -29,3 +29,7 @@ inputSchema:
       type: integer
       description: Maximum number of tasks to return
       minimum: 1
+    verbose:
+      type: boolean
+      description: "Return full task details. WARNING: Consumes significant context window. Only use when you need description, steps, or acceptance_criteria. Default returns summary fields only (id, name, status, priority, effort, category)."
+      default: false

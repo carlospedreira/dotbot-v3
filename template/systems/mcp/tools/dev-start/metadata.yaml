@@ -5,7 +5,10 @@ category: dev-workflow
 
 inputSchema:
   type: object
-  properties: {}
+  properties:
+    noLayout:
+      type: boolean
+      description: Skip opening dev layout windows
   required: []
   additionalProperties: false
 

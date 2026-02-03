@@ -5,13 +5,15 @@ if (-not (Get-Module TaskIndexCache)) {
 }
 
 # Initialize index on first use
-$tasksBaseDir = Join-Path $PSScriptRoot "..\..\..\..\state\tasks"
+$tasksBaseDir = Join-Path $PSScriptRoot "..\..\..\..\workspace\tasks"
 Initialize-TaskIndex -TasksBaseDir $tasksBaseDir
 
 function Invoke-TaskGetNext {
     param(
         [hashtable]$Arguments
     )
+
+    $verbose = $Arguments['verbose'] -eq $true
 
     Write-Verbose "[task-get-next] Using cached task index"
 
@@ -29,15 +31,15 @@ function Invoke-TaskGetNext {
     Write-Verbose "[task-get-next] Selected task: $($nextTask.id) - $($nextTask.name) (Priority: $($nextTask.priority))"
 
     # Return the highest priority task
-    return @{
-        success = $true
-        task = @{
+    if ($verbose) {
+        $taskObj = @{
             id = $nextTask.id
             name = $nextTask.name
-            description = $nextTask.description
-            category = $nextTask.category
+            status = 'todo'
             priority = $nextTask.priority
             effort = $nextTask.effort
+            category = $nextTask.category
+            description = $nextTask.description
             dependencies = $nextTask.dependencies
             acceptance_criteria = $nextTask.acceptance_criteria
             steps = $nextTask.steps
@@ -45,6 +47,20 @@ function Invoke-TaskGetNext {
             applicable_standards = $nextTask.applicable_standards
             file_path = $nextTask.file_path
         }
+    } else {
+        $taskObj = @{
+            id = $nextTask.id
+            name = $nextTask.name
+            status = 'todo'
+            priority = $nextTask.priority
+            effort = $nextTask.effort
+            category = $nextTask.category
+        }
+    }
+
+    return @{
+        success = $true
+        task = $taskObj
         message = "Next task to work on: $($nextTask.name) (Priority: $($nextTask.priority), Effort: $($nextTask.effort))"
     }
 }

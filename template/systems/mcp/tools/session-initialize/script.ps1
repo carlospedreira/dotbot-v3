@@ -6,7 +6,7 @@ function Invoke-SessionInitialize {
     $sessionType = $Arguments.session_type
     
     # Define paths
-    $autonomousDir = Join-Path $PSScriptRoot "..\..\..\..\state\sessions\runs"
+    $autonomousDir = Join-Path $PSScriptRoot "..\..\..\..\workspace\sessions\runs"
     $stateFile = Join-Path $autonomousDir "session-state.json"
     $lockFile = Join-Path $autonomousDir "session.lock"
     

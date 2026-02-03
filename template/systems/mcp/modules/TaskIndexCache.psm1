@@ -13,6 +13,7 @@ $script:TaskIndex = @{
     Done = @{}
     DoneIds = @()       # Quick lookup for dependency checking (by id)
     DoneNames = @()     # Quick lookup for dependency checking (by name)
+    DoneSlugs = @()     # Quick lookup for dependency checking (by slug)
     BaseDir = $null
 }
 
@@ -42,6 +43,7 @@ function Update-TaskIndex {
     $script:TaskIndex.Done = @{}
     $script:TaskIndex.DoneIds = @()
     $script:TaskIndex.DoneNames = @()
+    $script:TaskIndex.DoneSlugs = @()
 
     foreach ($status in @('todo', 'in-progress', 'done')) {
         $dir = Join-Path $baseDir $status
@@ -79,6 +81,9 @@ function Update-TaskIndex {
                         $script:TaskIndex.Done[$content.id] = $entry
                         $script:TaskIndex.DoneIds += $content.id
                         $script:TaskIndex.DoneNames += $content.name
+                        # Also store slug version of name for dependency matching
+                        $slug = ($content.name -replace '[^a-zA-Z0-9\s-]', '' -replace '\s+', '-').ToLower()
+                        $script:TaskIndex.DoneSlugs += $slug
                     }
                 }
             } catch {
@@ -142,7 +147,7 @@ function Get-DoneTasks {
     )
 
     $index = Get-TaskIndex
-    $tasks = @($index.Done.Values) | Sort-Object { $_.last_write } -Descending
+    $tasks = @($index.Done.Values) | Sort-Object { [DateTime]$_.completed_at } -Descending
 
     if ($Limit -gt 0) {
         $tasks = $tasks | Select-Object -First $Limit
@@ -201,19 +206,47 @@ function Get-AllTasks {
     return @($tasks)
 }
 
+function Test-DependencyMet {
+    param(
+        [string]$Dependency,
+        [array]$DoneNames,
+        [array]$DoneSlugs,
+        [array]$DoneIds
+    )
+    
+    $depLower = $Dependency.ToLower()
+    
+    # Exact match on ID
+    if ($Dependency -in $DoneIds) { return $true }
+    
+    # Exact match on name
+    if ($Dependency -in $DoneNames) { return $true }
+    
+    # Exact match on slug
+    if ($depLower -in $DoneSlugs) { return $true }
+    
+    # No fuzzy matching - dependencies must be exact
+    # If a dependency doesn't exist, the task should not proceed
+    return $false
+}
+
 function Get-NextTask {
     $index = Get-TaskIndex
     $doneNames = $index.DoneNames
+    $doneSlugs = $index.DoneSlugs
+    $doneIds = $index.DoneIds
 
     # Filter tasks with unmet dependencies
-    # Dependencies are stored as task names, not IDs
+    # Dependencies can be stored as task names, slugs, or IDs
     $eligible = @($index.Todo.Values) | Where-Object {
         if (-not $_.dependencies -or $_.dependencies.Count -eq 0) {
             return $true
         }
         # Handle both string and array dependencies
         $deps = if ($_.dependencies -is [array]) { $_.dependencies } else { @($_.dependencies) }
-        $unmet = $deps | Where-Object { $_ -notin $doneNames }
+        $unmet = $deps | Where-Object {
+            -not (Test-DependencyMet -Dependency $_ -DoneNames $doneNames -DoneSlugs $doneSlugs -DoneIds $doneIds)
+        }
         return $unmet.Count -eq 0
     }
 
@@ -349,6 +382,7 @@ Export-ModuleMember -Function @(
     'Get-AllTasks',
     'Get-NextTask',
     'Test-TaskDone',
+    'Test-DependencyMet',
     'Get-TaskById',
     'Get-TaskStats',
     'Get-RemainingEffort',

@@ -132,7 +132,7 @@ Work on this task autonomously. When complete, ensure you call task_mark_done vi
                     $taskId = $matches[1]
                     
                     # Check if task was moved to done directory
-                    $doneFile = Join-Path $PSScriptRoot "..\..\state\tasks\done\$taskId.json"
+                    $doneFile = Join-Path $PSScriptRoot "..\..\workspace\tasks\done\$taskId.json"
                     if (Test-Path $doneFile) {
                         Write-Host "  Task marked as done" -ForegroundColor Green
                         break

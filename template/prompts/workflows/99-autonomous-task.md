@@ -59,6 +59,16 @@ Read and adopt the appropriate persona for this task:
 
 ---
 
+## Implementation Plan
+
+First, check for a linked plan:
+```
+mcp__dotbot__plan_get({ task_id: "{{TASK_ID}}" })
+```
+If `has_plan: true`, read and follow the documented approach. Otherwise, proceed based on acceptance criteria.
+
+---
+
 ## Available Agent Personas
 
 Read these for specialized perspectives:
@@ -76,16 +86,14 @@ Read these for specialized perspectives:
 
 ## Available Skills
 
-Invoke skills for specialized guidance:
+Invoke skills for specialized guidance. Available skills depend on installed profiles.
 
 | Skill | Use When |
-|-------|----------|
+|-------|---------|
 | `/write-unit-tests` | Writing comprehensive test suites |
-| `/implement-api-endpoint` | Creating REST API endpoints |
-| `/create-migration` | Database schema changes |
-| `/integrate-graph-api` | Microsoft Graph integration |
-| `/implement-telegram-bot` | Telegram bot handlers |
-| `/setup-background-job` | Quartz.NET scheduled jobs |
+
+**Profile-specific skills** (if profile installed):
+Check `.bot/prompts/skills/` for available skills in your project.
 
 Skills provide detailed patterns, examples, and best practices.
 
@@ -93,35 +101,29 @@ Skills provide detailed patterns, examples, and best practices.
 
 ## Dotbot MCP Tools
 
-Use these tools for task management and session tracking:
+Check tool schema for parameters before calling.
 
-### Task Management
-| Tool | Description |
-|------|-------------|
-| `task_mark_done` | Mark task complete (triggers verification) |
-| `task_mark_in_progress` | Mark task as in-progress |
-| `task_mark_todo` | Revert task to todo status |
-| `task_mark_skipped` | Skip task with reason ("non-recoverable" or "max-retries") |
-| `task_get_stats` | Get overall task statistics |
-| `task_list` | List tasks by status |
-| `task_create` | Create a new task |
-| `task_create_bulk` | Create multiple tasks at once |
-| `task_get_next` | Get next available task |
-
-### Session Management
-| Tool | Description |
-|------|-------------|
-| `session_initialize` | Start autonomous session |
-| `session_get_state` | Check current session state |
-| `session_get_stats` | Get session statistics |
-| `session_update` | Update session metadata |
-| `session_increment_completed` | Record task completion |
-
-### Development Environment
-| Tool | Description |
-|------|-------------|
-| `dev_start` | Start development environment |
-| `dev_stop` | Stop development environment |
+| Tool | Purpose |
+|------|---------|
+| `mcp__dotbot__plan_get` | Get linked implementation plan (call first) |
+| `mcp__dotbot__plan_create` | Create plan for a task |
+| `mcp__dotbot__plan_update` | Update existing plan |
+| `mcp__dotbot__task_mark_in_progress` | Mark task started |
+| `mcp__dotbot__task_mark_done` | Mark task complete |
+| `mcp__dotbot__task_mark_todo` | Revert to todo |
+| `mcp__dotbot__task_mark_skipped` | Skip with reason |
+| `mcp__dotbot__task_get_next` | Get next available task |
+| `mcp__dotbot__task_list` | List tasks (use verbose sparingly) |
+| `mcp__dotbot__task_get_stats` | Task statistics |
+| `mcp__dotbot__task_create` | Create new task |
+| `mcp__dotbot__task_create_bulk` | Bulk create tasks |
+| `mcp__dotbot__session_initialize` | Start session |
+| `mcp__dotbot__session_get_state` | Current session state |
+| `mcp__dotbot__session_get_stats` | Session statistics |
+| `mcp__dotbot__session_update` | Update session |
+| `mcp__dotbot__session_increment_completed` | Record completion |
+| `mcp__dotbot__dev_start` | Start dev environment |
+| `mcp__dotbot__dev_stop` | Stop dev environment |
 
 ---
 
@@ -161,14 +163,89 @@ For UI verification and browser-based testing:
 
 ## Implementation Protocol
 
-### Phase 1: Context Loading
+### Phase 1: Quick Start
 
-1. **Read the task-specific standards** listed in "Applicable Standards" above
-2. **Read the agent persona** to adopt the correct mindset
-3. **Read product context files:**
-   - `.bot/state/product/mission.md` - Product mission and principles
-   - `.bot/state/product/entity-model.md` - Domain model design
-4. **Understand existing patterns** by exploring related code
+0. **Establish clean baseline:**
+   ```bash
+   pwsh -ExecutionPolicy Bypass -File ".bot/hooks/scripts/commit-bot-state.ps1"
+   ```
+   Commits any pre-existing `.bot/workspace/` changes (task logs, plans, etc.) to separate autonomous state from your implementation work.
+
+1. **Immediately mark task in-progress** to record start time:
+   ```
+   mcp__dotbot__task_mark_in_progress({ task_id: "{{TASK_ID}}" })
+   ```
+
+2. **Check for implementation plan** (DO THIS FIRST):
+   ```
+   mcp__dotbot__plan_get({ task_id: "{{TASK_ID}}" })
+   ```
+   - If plan exists: Read it and follow documented approach
+   - If no plan: Skip to step 3
+
+3. **Read ONLY what you need, when you need it:**
+   - Read `.bot/core/requirements.md` ONLY if dealing with:
+     - Privacy/security concerns
+     - Git workflow questions
+     - Verification script issues
+   - Read agent persona ONLY if task specifies a non-default agent
+   - Read applicable standards ONLY after understanding the task context
+   - Read product context files ONLY if you need domain knowledge
+
+4. **Start with targeted exploration:**
+   - Use `grep` for exact symbols/function names
+   - Use `codebase_semantic_search` for concepts
+   - Read 1-2 key files to understand patterns
+   - DON'T read entire directories or multiple similar files
+
+**Key principle:** Just-in-time context loading. Read when you need it, not before.
+
+### Efficiency Guidelines
+
+**File Reading:**
+- NEVER read the same file twice in quick succession
+- Use line ranges for large files (read_files with ranges parameter)
+- Batch related file reads in a single tool call
+- Keep a mental note of files already read
+
+**Search Strategy:**
+- Use `grep` for exact matches (class names, method names)
+- Use `codebase_semantic_search` for concepts
+- DON'T use both grep and glob for the same search
+- Prefer targeted reads over broad searches
+
+**Example - GOOD:**
+```
+grep({ queries: ["UserRepository"], path: "." })
+// Found in src/Data/Repositories/UserRepository.cs
+read_files({ files: [{ path: "src/Data/Repositories/UserRepository.cs" }] })
+```
+
+**Example - BAD:**
+```
+glob({ patterns: ["**/*Settings*.cs"] })  // Returns 20 files
+glob({ patterns: ["**/*Repository*.cs"] })  // Returns 30 files
+read_files for each one individually
+```
+
+### Phase 1.5: Baseline Verification
+
+Before making any changes, verify the baseline by running the verification scripts:
+
+```bash
+pwsh -ExecutionPolicy Bypass -File ".bot/hooks/verify/00-privacy-scan.ps1" 2>&1
+pwsh -ExecutionPolicy Bypass -File ".bot/hooks/verify/01-git-clean.ps1" 2>&1
+```
+
+**Why:**
+- Catches environment issues early
+- Confirms baseline is clean
+- Establishes starting point for your changes
+
+**If baseline verification fails:**
+1. Don't proceed with implementation
+2. Investigate and fix the issue first
+3. Document the issue if it's a blocker
 
 ### Phase 2: Implementation
 
@@ -202,22 +279,40 @@ For UI verification and browser-based testing:
 
 ### Phase 3: Verification
 
-Before marking the task complete, run verification scripts:
+Before marking complete, verify your changes:
 
-```powershell
-# Run all verification scripts in order
-Get-ChildItem ".bot/hooks/verify/*.ps1" | Sort-Object Name | ForEach-Object {
-    & $_.FullName
-}
+#### 3.1 Run Tests
+Run your project's test suite (if applicable).
+
+#### 3.2 Run Verification Scripts
+
+Run ALL verification scripts configured in `.bot/hooks/verify/config.json`. If ANY fail, fix before proceeding:
+
+```bash
+# Core verification (always available)
+pwsh -ExecutionPolicy Bypass -File ".bot/hooks/verify/00-privacy-scan.ps1" 2>&1
+pwsh -ExecutionPolicy Bypass -File ".bot/hooks/verify/01-git-clean.ps1" 2>&1
+pwsh -ExecutionPolicy Bypass -File ".bot/hooks/verify/02-git-pushed.ps1" 2>&1
+
+# Profile-specific verification (if profile installed)
+# Check .bot/hooks/verify/config.json for additional scripts
 ```
 
-**Available verification scripts:**
-- `.bot/hooks/verify/01-git-clean.ps1` - Check uncommitted changes
-- `.bot/hooks/verify/02-git-pushed.ps1` - Check unpushed commits
-- `.bot/hooks/verify/03-dotnet-build.ps1` - Verify build succeeds
-- `.bot/hooks/verify/04-dotnet-format.ps1` - Verify code formatting
+#### 3.3 Handle Verification Failures
 
-All scripts must pass before marking the task complete.
+**Privacy Scan Failures:**
+- Check if failure is in YOUR changed files or pre-existing files
+- If pre-existing: Ignore (file path patterns in old task logs are false positives)
+- If in your files: Fix immediately (likely a real secret or local path)
+
+**Git Clean Failures:**
+- Check if failures are `.bot/workspace/tasks/` files (expected, can ignore)
+- Check if failures are your implementation files (fix before continuing)
+- Use `git status` to see exactly what's uncommitted
+
+**Build/Format Failures:**
+- Always fix before proceeding
+- These are real issues with your code
 
 ### Phase 4: Task Completion
 
@@ -226,7 +321,7 @@ All scripts must pass before marking the task complete.
 3. **Create a problem log** if you encountered significant blockers (see below)
 4. **Mark the task complete:**
    ```
-   Use MCP tool: task_mark_done({ task_id: "{{TASK_ID}}" })
+   Use MCP tool: mcp__dotbot__task_mark_done({ task_id: "{{TASK_ID}}" })
    ```
 
 ---
@@ -244,13 +339,13 @@ If you encounter significant problems during implementation, create a problem lo
 
 ### How to Create a Problem Log
 
-1. **Copy the template:** `.bot/state/feedback/TEMPLATE.json`
-2. **Save to:** `.bot/state/feedback/pending/{task_id}-problems.json`
+1. **Copy the template:** `.bot/workspace/feedback/TEMPLATE.json`
+2. **Save to:** `.bot/workspace/feedback/pending/{task_id}-problems.json`
 3. **Fill in all relevant fields** with specific, actionable information
 
 ### Problem Log Schema
 
-See `.bot/state/feedback/TEMPLATE.json` for the complete schema including:
+See `.bot/workspace/feedback/TEMPLATE.json` for the complete schema including:
 - Problem identification and classification
 - Root cause analysis
 - Solution documentation
@@ -283,11 +378,79 @@ See `.bot/state/feedback/TEMPLATE.json` for the complete schema including:
 2. Consider if the task should be split
 3. Mark task as skipped with reason if truly unrecoverable:
    ```
-   Use MCP tool: task_mark_skipped({
+   Use MCP tool: mcp__dotbot__task_mark_skipped({
      task_id: "{{TASK_ID}}",
      skip_reason: "non-recoverable"
    })
    ```
+
+---
+
+## Anti-Patterns to Avoid
+
+Based on analysis of completed tasks, avoid these common inefficiencies:
+
+### ❌ Reading Too Much Context Upfront
+**Don't:**
+- Read requirements.md
+- Read mission.md
+- Read entity-model.md
+- Read agent persona
+- THEN start exploring code
+
+**Do:**
+- Mark in-progress immediately
+- Check for plan
+- Start exploring code
+- Read context files ONLY when needed
+
+### ❌ Redundant File Reads
+**Don't:**
+```python
+read_files("ResponseFormatter.cs")
+read_files("ResponseFormatter.cs")  # Again? Why?
+read_files("ResponseFormatter.cs")  # Still again?
+```
+
+**Do:**
+```python
+read_files("ResponseFormatter.cs")
+# Remember what you read, refer back to it
+```
+
+### ❌ Overlapping Searches
+**Don't:**
+```python
+glob(["**/*Settings*.cs"])  # 20 files
+glob(["**/*Config*.cs"])   # 30 files
+grep(["settings"])          # 50 files
+```
+
+**Do:**
+```python
+grep(["SettingsRepository"])  # 1 exact match
+read_files(result)
+```
+
+### ❌ Spending Time on False Positives
+**Don't:**
+- Spend 5+ minutes investigating pre-existing privacy scan failures
+- Try to fix unrelated uncommitted files
+- Debug issues in files you didn't touch
+
+**Do:**
+- Quickly check if issue is in YOUR files
+- If not, ignore and proceed
+- Focus verification on your changes
+
+### ❌ Not Building Before Editing
+**Don't:**
+- Jump straight into editing code
+- Assume the baseline is clean
+
+**Do:**
+- Run quick baseline build first
+- Catch environment issues early
 
 ---
 
@@ -300,7 +463,7 @@ Your task is complete when:
 - [ ] All verification scripts pass
 - [ ] Tests pass (if applicable)
 - [ ] Changes are committed with proper messages
-- [ ] Task is marked complete via `task_mark_done`
+- [ ] Task is marked complete via `mcp__dotbot__task_mark_done`
 
 ---
 
@@ -312,5 +475,6 @@ Your task is complete when:
 4. **Verify before completing** - run all verification scripts
 5. **Log problems** that could help improve future tasks
 6. **Ask for help** via problem logs if truly stuck
+7. **Never emit secrets or local paths** - Use relative paths, never `C:\Users\...` or `/home/...`. Run `00-privacy-scan.ps1` before commit.
 
 You are operating autonomously. Complete this task to the best of your ability, following all protocols above.

@@ -12,7 +12,7 @@ function Invoke-TaskMarkInProgress {
     }
     
     # Define tasks directories
-    $tasksBaseDir = Join-Path $PSScriptRoot "..\..\..\..\state\tasks"
+    $tasksBaseDir = Join-Path $PSScriptRoot "..\..\..\..\workspace\tasks"
     $todosDir = Join-Path $tasksBaseDir "todo"
     $inProgressDir = Join-Path $tasksBaseDir "in-progress"
     

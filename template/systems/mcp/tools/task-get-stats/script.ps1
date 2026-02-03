@@ -5,7 +5,7 @@ if (-not (Get-Module TaskIndexCache)) {
 }
 
 # Initialize index on first use
-$tasksBaseDir = Join-Path $PSScriptRoot "..\..\..\..\state\tasks"
+$tasksBaseDir = Join-Path $PSScriptRoot "..\..\..\..\workspace\tasks"
 Initialize-TaskIndex -TasksBaseDir $tasksBaseDir
 
 function Invoke-TaskGetStats {

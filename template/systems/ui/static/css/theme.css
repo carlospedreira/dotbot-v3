@@ -18,6 +18,12 @@
     --color-muted-rgb: 136 136 153;
     --color-bezel-rgb: 58 59 72;
 
+    /* === Background Colors (RGB components) === */
+    --color-bg-deep-rgb: 5 5 8;
+    --color-bg-panel-rgb: 10 11 15;
+    --color-bg-module-rgb: 13 14 20;
+    --color-bg-screen-rgb: 7 10 8;
+
     /* === Solid Colors (computed from RGB) === */
     --color-primary: rgb(var(--color-primary-rgb));
     --color-primary-dim: rgb(var(--color-primary-dim-rgb));
@@ -137,4 +143,41 @@
     /* === Grid colors (computed from primary) === */
     --grid-color: var(--primary-05);
     --grid-color-strong: rgb(var(--color-primary-rgb) / 0.075);
+}
+
+/* ========== SEMANTIC DATA ATTRIBUTES ========== */
+/* Status-based coloring (task states) */
+[data-status="todo"] {
+    --status-color: var(--color-primary);
+    --status-glow: var(--primary-glow);
+}
+[data-status="in-progress"] {
+    --status-color: var(--color-secondary);
+    --status-glow: var(--secondary-glow);
+}
+[data-status="done"] {
+    --status-color: var(--color-success);
+    --status-glow: var(--success-glow);
+}
+
+/* Type-based coloring (semantic meaning) */
+[data-type="primary"] {
+    --type-color: var(--color-primary);
+    --type-glow: var(--primary-glow);
+}
+[data-type="secondary"], [data-type="info"] {
+    --type-color: var(--color-secondary);
+    --type-glow: var(--secondary-glow);
+}
+[data-type="success"] {
+    --type-color: var(--color-success);
+    --type-glow: var(--success-glow);
+}
+[data-type="warning"] {
+    --type-color: var(--color-primary);
+    --type-glow: var(--primary-glow);
+}
+[data-type="error"] {
+    --type-color: var(--color-error);
+    --type-glow: var(--error-glow);
 }

@@ -11,13 +11,16 @@ async function loadTheme() {
         const response = await fetch('/api/theme');
         if (!response.ok) {
             console.warn('Failed to load theme, using defaults');
+            document.body.classList.add('theme-loaded');
             return;
         }
         const config = await response.json();
         currentTheme = config;
         applyTheme(config.mappings);
+        document.body.classList.add('theme-loaded');
     } catch (error) {
         console.warn('Error loading theme:', error);
+        document.body.classList.add('theme-loaded');
     }
 }
 
@@ -133,6 +136,14 @@ async function selectTheme(themeKey) {
             opt.classList.toggle('active', opt.dataset.theme === themeKey);
         });
     }
+
+    // Pulse Aether lights to preview new theme color
+    if (typeof Aether !== 'undefined' && Aether.isLinked()) {
+        // Small delay to ensure CSS variables are updated
+        setTimeout(() => {
+            Aether.pulseBright('primary');
+        }, 100);
+    }
 }
 
 /**
@@ -155,6 +166,11 @@ function initSettingsNav() {
                 const sectionId = section.id.replace('settings-', '');
                 section.classList.toggle('hidden', sectionId !== targetSection);
             });
+
+            // Initialize Aether panel when selected
+            if (targetSection === 'aether' && typeof Aether !== 'undefined') {
+                Aether.initSettingsPanel();
+            }
         });
     });
 }

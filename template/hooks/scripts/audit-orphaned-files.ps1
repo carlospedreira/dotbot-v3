@@ -3,12 +3,21 @@
 
 $ErrorActionPreference = "Stop"
 
-# Auto-detect project root by walking up from script location
-$projectRoot = $PSScriptRoot
-while ($projectRoot -and -not (Test-Path (Join-Path $projectRoot ".git"))) {
-    $parent = Split-Path -Parent $projectRoot
-    if ($parent -eq $projectRoot) { break }
-    $projectRoot = $parent
+# Auto-detect project root by walking up from script location to find .git folder
+$currentPath = $PSScriptRoot
+while ($currentPath) {
+    if (Test-Path (Join-Path $currentPath ".git")) {
+        $projectRoot = $currentPath
+        break
+    }
+    $parent = Split-Path $currentPath -Parent
+    if ($parent -eq $currentPath) { break }
+    $currentPath = $parent
+}
+
+if (-not $projectRoot) {
+    Write-Host "Error: Could not find project root (.git folder)" -ForegroundColor Red
+    exit 1
 }
 
 # Initialize tracking sets

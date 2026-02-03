@@ -4,7 +4,7 @@ function Invoke-SessionGetStats {
     )
     
     # Define paths
-    $stateFile = Join-Path $PSScriptRoot "..\..\..\..\state\sessions\runs\session-state.json"
+    $stateFile = Join-Path $PSScriptRoot "..\..\..\..\workspace\sessions\runs\session-state.json"
     
     # Check if state file exists
     if (-not (Test-Path $stateFile)) {

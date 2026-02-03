@@ -4,11 +4,30 @@
     Initialize .bot in the current project
 
 .DESCRIPTION
-    Copies the template .bot structure to the current project directory
+    Copies the template .bot structure to the current project directory.
+    Optionally installs a profile for tech-specific features.
+
+.PARAMETER Profile
+    Profile to install (e.g., 'dotnet'). Can be specified multiple times.
+
+.PARAMETER Force
+    Overwrite existing .bot directory.
+
+.PARAMETER DryRun
+    Preview changes without applying.
+
+.EXAMPLE
+    init-project.ps1
+    Installs base template only.
+
+.EXAMPLE
+    init-project.ps1 -Profile dotnet
+    Installs base template + dotnet profile.
 #>
 
 [CmdletBinding()]
 param(
+    [string[]]$Profile,
     [switch]$Force,
     [switch]$DryRun
 )
@@ -66,23 +85,24 @@ if ((Test-Path $BotDir) -and $Force) {
 Write-Status "Copying template files"
 Copy-Item -Path $TemplateDir -Destination $BotDir -Recurse -Force
 
-# Create empty state directories (template has structure, but ensure they exist)
-$stateDirs = @(
-    "state\tasks\todo",
-    "state\tasks\in-progress",
-    "state\tasks\done",
-    "state\tasks\skipped",
-    "state\tasks\cancelled",
-    "state\sessions",
-    "state\sessions\runs",
-    "state\sessions\history",
-    "state\product",
-    "state\feedback\pending",
-    "state\feedback\applied",
-    "state\feedback\archived"
+# Create empty workspace directories
+$workspaceDirs = @(
+    "workspace\tasks\todo",
+    "workspace\tasks\in-progress",
+    "workspace\tasks\done",
+    "workspace\tasks\skipped",
+    "workspace\tasks\cancelled",
+    "workspace\sessions",
+    "workspace\sessions\runs",
+    "workspace\sessions\history",
+    "workspace\plans",
+    "workspace\product",
+    "workspace\feedback\pending",
+    "workspace\feedback\applied",
+    "workspace\feedback\archived"
 )
 
-foreach ($dir in $stateDirs) {
+foreach ($dir in $workspaceDirs) {
     $fullPath = Join-Path $BotDir $dir
     if (-not (Test-Path $fullPath)) {
         New-Item -ItemType Directory -Path $fullPath -Force | Out-Null
@@ -95,6 +115,59 @@ foreach ($dir in $stateDirs) {
 }
 
 Write-Success "Created .bot directory structure"
+
+# Install profiles if specified
+$ProfilesDir = Join-Path $DotbotBase "profiles"
+if ($Profile -and $Profile.Count -gt 0) {
+    foreach ($profileName in $Profile) {
+        $profileDir = Join-Path $ProfilesDir $profileName
+        
+        if (-not (Test-Path $profileDir)) {
+            Write-Warning "Profile not found: $profileName"
+            Write-Host "  Available profiles:" -ForegroundColor Yellow
+            Get-ChildItem -Path $ProfilesDir -Directory | ForEach-Object { Write-Host "    - $($_.Name)" }
+            continue
+        }
+        
+        Write-Status "Installing profile: $profileName"
+        
+        # Copy profile files (overlay on top of template)
+        Get-ChildItem -Path $profileDir -Recurse -File | ForEach-Object {
+            $relativePath = $_.FullName.Substring($profileDir.Length + 1)
+            $destPath = Join-Path $BotDir $relativePath
+            $destDir = Split-Path $destPath -Parent
+            
+            # Handle config.json merging for hooks/verify
+            if ($relativePath -eq "hooks\verify\config.json") {
+                $baseConfigPath = Join-Path $BotDir "hooks\verify\config.json"
+                if (Test-Path $baseConfigPath) {
+                    # Merge scripts arrays
+                    $baseConfig = Get-Content $baseConfigPath -Raw | ConvertFrom-Json
+                    $profileConfig = Get-Content $_.FullName -Raw | ConvertFrom-Json
+                    
+                    # Add profile scripts to base scripts
+                    $mergedScripts = @($baseConfig.scripts) + @($profileConfig.scripts)
+                    $baseConfig.scripts = $mergedScripts
+                    
+                    $baseConfig | ConvertTo-Json -Depth 10 | Set-Content $baseConfigPath
+                    Write-Host "    Merged: $relativePath" -ForegroundColor Gray
+                    return
+                }
+            }
+            
+            # Create directory if needed
+            if (-not (Test-Path $destDir)) {
+                New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+            }
+            
+            # Copy file
+            Copy-Item -Path $_.FullName -Destination $destPath -Force
+            Write-Host "    Copied: $relativePath" -ForegroundColor Gray
+        }
+        
+        Write-Success "Installed profile: $profileName"
+    }
+}
 
 # Run .bot/init.ps1 to set up .claude integration
 $initScript = Join-Path $BotDir "init.ps1"
@@ -122,6 +195,15 @@ Write-Host "    .bot/systems/runtime/" -NoNewline -ForegroundColor Yellow
 Write-Host "Autonomous loop for Claude CLI" -ForegroundColor White
 Write-Host "    .bot/prompts/        " -NoNewline -ForegroundColor Yellow
 Write-Host "Agents, skills, workflows" -ForegroundColor White
+if ($Profile -and $Profile.Count -gt 0) {
+    Write-Host ""
+    Write-Host "  PROFILES INSTALLED" -ForegroundColor Blue
+    Write-Host "  ────────────────────────────────────────────" -ForegroundColor DarkGray
+    Write-Host ""
+    foreach ($p in $Profile) {
+        Write-Host "    $p" -ForegroundColor Cyan
+    }
+}
 Write-Host ""
 Write-Host "  NEXT STEPS" -ForegroundColor Blue
 Write-Host "  ────────────────────────────────────────────" -ForegroundColor DarkGray

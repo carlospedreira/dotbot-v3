@@ -4,7 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DOTBOT // Control Panel</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="css/theme.css">
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/layout.css">
+    <link rel="stylesheet" href="css/sidebar.css">
+    <link rel="stylesheet" href="css/modules.css">
+    <link rel="stylesheet" href="css/views.css">
+    <link rel="stylesheet" href="css/modal.css">
+    <link rel="stylesheet" href="css/crt.css">
+    <link rel="stylesheet" href="css/responsive.css">
+    <style>
+        /* Hide body until theme is loaded to prevent flash */
+        body { opacity: 0; transition: opacity 0.15s ease-in; }
+        body.theme-loaded { opacity: 1; }
+    </style>
 </head>
 <body>
     <div class="mobile-overlay" id="mobile-overlay"></div>
@@ -178,15 +191,15 @@
                             <div class="task-summary">
                                 <div class="summary-item todo">
                                     <span class="summary-label">Todo</span>
-                                    <span class="count-badge amber" id="context-todo-count">-</span>
+                                    <span class="count-badge" data-status="todo" id="context-todo-count">-</span>
                                 </div>
                                 <div class="summary-item in-progress">
                                     <span class="summary-label">In Progress</span>
-                                    <span class="count-badge cyan" id="context-progress-count">-</span>
+                                    <span class="count-badge" data-status="in-progress" id="context-progress-count">-</span>
                                 </div>
                                 <div class="summary-item done">
                                     <span class="summary-label">Done</span>
-                                    <span class="count-badge green" id="context-done-count">-</span>
+                                    <span class="count-badge" data-status="done" id="context-done-count">-</span>
                                 </div>
                             </div>
                         </div>
@@ -241,6 +254,7 @@
                             <div class="settings-nav">
                                 <div class="settings-nav-item active" data-settings-section="theme">Theme</div>
                                 <div class="settings-nav-item" data-settings-section="advanced">Advanced</div>
+                                <div class="settings-nav-item" data-settings-section="aether" id="aetherNavItem" style="display:none">Aether</div>
                             </div>
                         </div>
                     </div>
@@ -260,15 +274,15 @@
                         <div class="stats-row">
                             <div class="stat-card">
                                 <div class="stat-label">TODO</div>
-                                <div class="stat-value amber" id="todo-count">-</div>
+                                <div class="stat-value" data-status="todo" id="todo-count">-</div>
                             </div>
                             <div class="stat-card">
                                 <div class="stat-label">IN PROGRESS</div>
-                                <div class="stat-value cyan" id="progress-count">-</div>
+                                <div class="stat-value" data-status="in-progress" id="progress-count">-</div>
                             </div>
                             <div class="stat-card">
                                 <div class="stat-label">DONE</div>
-                                <div class="stat-value green" id="done-count">-</div>
+                                <div class="stat-value" data-status="done" id="done-count">-</div>
                             </div>
                             <div class="stat-card">
                                 <div class="stat-label">PROGRESS</div>
@@ -482,6 +496,79 @@
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Aether Section -->
+                            <div class="settings-section hidden" id="settings-aether">
+                                <div class="module">
+                                    <div class="module-header">
+                                        <span class="module-title">◈ Aether</span>
+                                    </div>
+                                    <div class="module-screen">
+                                        <!-- Bond Panel (pre-link) -->
+                                        <div class="aether-screen" id="aetherBondPanel">
+                                            <div class="aether-mystery">
+                                                <div class="aether-glyph">◈</div>
+                                                <div class="aether-prompt">Something resonates nearby...</div>
+                                                <div class="aether-bond-status idle" id="aetherBondStatus">
+                                                    <span id="aetherBondMessage">Press to begin bonding</span>
+                                                    <span class="aether-countdown" id="aetherCountdown" style="display:none">30</span>
+                                                </div>
+                                                <button class="ctrl-btn primary" id="aetherBondBtn">BOND</button>
+                                            </div>
+                                        </div>
+
+                                        <!-- Config Panel (post-link) -->
+                                        <div class="aether-screen" id="aetherConfigPanel" style="display:none">
+                                            <!-- Activity indicator -->
+                                            <div class="aether-activity">
+                                                <div class="aether-activity-dot"></div>
+                                                <span class="aether-activity-label">Monitoring</span>
+                                            </div>
+
+                                            <!-- Stats -->
+                                            <div class="aether-stats">
+                                                <div class="aether-stat">
+                                                    <div class="aether-stat-value" data-type="success" id="aetherStartCount">0</div>
+                                                    <div class="aether-stat-label">Starts</div>
+                                                </div>
+                                                <div class="aether-stat">
+                                                    <div class="aether-stat-value" data-type="info" id="aetherCompleteCount">0</div>
+                                                    <div class="aether-stat-label">Complete</div>
+                                                </div>
+                                                <div class="aether-stat">
+                                                    <div class="aether-stat-value" data-type="warning" id="aetherErrorCount">0</div>
+                                                    <div class="aether-stat-label">Errors</div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Last event -->
+                                            <div class="aether-last-event" id="aetherLastEvent">
+                                                <span class="event-type">--</span>
+                                                <span class="event-time">waiting for events</span>
+                                            </div>
+
+                                            <div class="settings-group">
+                                                <div class="setting-row">
+                                                    <div class="setting-info">
+                                                        <span class="setting-label">Conduit</span>
+                                                        <span class="setting-description" id="aetherConduitInfo">--</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="aether-node-section">
+                                                <div class="subsection-header">Nodes</div>
+                                                <div class="aether-node-list" id="aetherNodeList">
+                                                    <div class="aether-empty">Loading nodes...</div>
+                                                </div>
+                                            </div>
+                                            <div class="aether-actions">
+                                                <button class="ctrl-btn" id="aetherTestBtn">TEST PULSE</button>
+                                                <button class="ctrl-btn danger" id="aetherUnlinkBtn">UNLINK</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -495,7 +582,7 @@
                 <span class="footer-value" id="last-update">--:--:--</span>
                 <span class="footer-sep">|</span>
                 <span class="footer-label">REFRESH:</span>
-                <span class="footer-value amber">5s</span>
+                <span class="footer-value" data-type="primary">5s</span>
                 <span class="footer-sep">|</span>
                 <span class="footer-label">CACHE:</span>
                 <span class="footer-value" id="cache-status">--</span>
@@ -522,6 +609,22 @@
         </div>
     </div>
 
+    <!-- Plan Viewer Modal -->
+    <div class="modal-overlay" id="plan-modal">
+        <div class="modal modal-wide">
+            <div class="modal-header">
+                <span class="modal-title" id="plan-modal-title">Implementation Plan</span>
+                <button class="modal-close" id="plan-modal-close"><!-- Close icon loaded dynamically --></button>
+            </div>
+            <div class="modal-body markdown-content" id="plan-modal-content">
+                <!-- Plan markdown rendered here -->
+            </div>
+            <div class="modal-footer">
+                <button class="ctrl-btn" id="plan-modal-back">Back to Task</button>
+            </div>
+        </div>
+    </div>
+
     <!-- External dependencies -->
     <script src="scope.js"></script>
 
@@ -531,6 +634,7 @@
     <script src="modules/icons.js"></script>
     <script src="modules/theme.js"></script>
     <script src="modules/markdown.js"></script>
+    <script src="modules/mermaid-loader.js"></script>
     <script src="modules/tabs.js"></script>
     <script src="modules/sidebar.js"></script>
     <script src="modules/workflow.js"></script>
@@ -540,6 +644,7 @@
     <script src="modules/activity.js"></script>
     <script src="modules/polling.js"></script>
     <script src="modules/ui-updates.js"></script>
+    <script src="modules/aether.js"></script>
 
     <!-- Main entry point (must be last) -->
     <script src="app.js"></script>

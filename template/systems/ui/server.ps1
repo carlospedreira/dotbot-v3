@@ -575,8 +575,8 @@ function Get-BotState {
     }
 
     # Build fresh state
-    $tasksDir = Join-Path $botRoot "state\tasks"
-    $sessionsDir = Join-Path $botRoot "state\sessions"
+    $tasksDir = Join-Path $botRoot "workspace\tasks"
+    $sessionsDir = Join-Path $botRoot "workspace\sessions"
     $stateFile = Join-Path $botRoot ".project-state.json"
 
     # Count tasks
@@ -603,6 +603,7 @@ function Get-BotState {
             dependencies = $taskContent.dependencies
             applicable_agents = $taskContent.applicable_agents
             applicable_standards = $taskContent.applicable_standards
+            plan_path = $taskContent.plan_path
             created_at = $taskContent.created_at
             updated_at = $taskContent.updated_at
             started_at = $taskContent.started_at
@@ -613,38 +614,44 @@ function Get-BotState {
     $recentCompleted = @()
     if ($doneTasks.Count -gt 0) {
         $recentCompleted = $doneTasks |
-            Sort-Object LastWriteTime -Descending |
-            Select-Object -First 100 |
             ForEach-Object {
-                $taskContent = Get-Content $_.FullName -Raw | ConvertFrom-Json
-                @{
-                    id = $taskContent.id
-                    name = $taskContent.name
-                    description = $taskContent.description
-                    category = $taskContent.category
-                    priority = $taskContent.priority
-                    effort = $taskContent.effort
-                    status = $taskContent.status
-                    acceptance_criteria = $taskContent.acceptance_criteria
-                    steps = $taskContent.steps
-                    dependencies = $taskContent.dependencies
-                    applicable_agents = $taskContent.applicable_agents
-                    applicable_standards = $taskContent.applicable_standards
-                    created_at = $taskContent.created_at
-                    updated_at = $taskContent.updated_at
-                    started_at = $taskContent.started_at
-                    completed_at = $taskContent.completed_at
-                    # Commit info (for completed tasks)
-                    commit_sha = $taskContent.commit_sha
-                    commit_subject = $taskContent.commit_subject
-                    files_created = $taskContent.files_created
-                    files_modified = $taskContent.files_modified
-                    files_deleted = $taskContent.files_deleted
-                    commits = $taskContent.commits
-                    # Activity log
-                    activity_log = $taskContent.activity_log
+                try {
+                    $taskContent = Get-Content $_.FullName -Raw | ConvertFrom-Json
+                    @{
+                        id = $taskContent.id
+                        name = $taskContent.name
+                        description = $taskContent.description
+                        category = $taskContent.category
+                        priority = $taskContent.priority
+                        effort = $taskContent.effort
+                        status = $taskContent.status
+                        acceptance_criteria = $taskContent.acceptance_criteria
+                        steps = $taskContent.steps
+                        dependencies = $taskContent.dependencies
+                        applicable_agents = $taskContent.applicable_agents
+                        applicable_standards = $taskContent.applicable_standards
+                        plan_path = $taskContent.plan_path
+                        created_at = $taskContent.created_at
+                        updated_at = $taskContent.updated_at
+                        started_at = $taskContent.started_at
+                        completed_at = $taskContent.completed_at
+                        # Commit info (for completed tasks)
+                        commit_sha = $taskContent.commit_sha
+                        commit_subject = $taskContent.commit_subject
+                        files_created = $taskContent.files_created
+                        files_modified = $taskContent.files_modified
+                        files_deleted = $taskContent.files_deleted
+                        commits = $taskContent.commits
+                        # Activity log
+                        activity_log = $taskContent.activity_log
+                    }
+                } catch {
+                    # File may have been moved/deleted since enumeration - skip it
+                    $null
                 }
-            }
+            } | Where-Object { $_ -ne $null } |
+            Sort-Object { [DateTime]$_.completed_at } -Descending |
+            Select-Object -First 100
     }
 
     # Get upcoming tasks (up to 100 in priority order for infinite scroll)
@@ -653,25 +660,32 @@ function Get-BotState {
     if ($todoTasks.Count -gt 0) {
         $upcomingTasks = $todoTasks |
             ForEach-Object {
-                $taskContent = Get-Content $_.FullName -Raw | ConvertFrom-Json
-                [PSCustomObject]@{
-                    id = $taskContent.id
-                    name = $taskContent.name
-                    description = $taskContent.description
-                    category = $taskContent.category
-                    priority = $taskContent.priority
-                    effort = $taskContent.effort
-                    status = $taskContent.status
-                    acceptance_criteria = $taskContent.acceptance_criteria
-                    steps = $taskContent.steps
-                    dependencies = $taskContent.dependencies
-                    applicable_agents = $taskContent.applicable_agents
-                    applicable_standards = $taskContent.applicable_standards
-                    created_at = $taskContent.created_at
-                    updated_at = $taskContent.updated_at
-                    priority_num = [int]$taskContent.priority
+                try {
+                    $taskContent = Get-Content $_.FullName -Raw | ConvertFrom-Json
+                    [PSCustomObject]@{
+                        id = $taskContent.id
+                        name = $taskContent.name
+                        description = $taskContent.description
+                        category = $taskContent.category
+                        priority = $taskContent.priority
+                        effort = $taskContent.effort
+                        status = $taskContent.status
+                        acceptance_criteria = $taskContent.acceptance_criteria
+                        steps = $taskContent.steps
+                        dependencies = $taskContent.dependencies
+                        applicable_agents = $taskContent.applicable_agents
+                        applicable_standards = $taskContent.applicable_standards
+                        plan_path = $taskContent.plan_path
+                        created_at = $taskContent.created_at
+                        updated_at = $taskContent.updated_at
+                        priority_num = [int]$taskContent.priority
+                    }
+                } catch {
+                    # File may have been moved/deleted since enumeration - skip it
+                    $null
                 }
             } |
+            Where-Object { $_ -ne $null } |
             Sort-Object priority_num |
             Select-Object -First 100 |
             ForEach-Object {
@@ -688,6 +702,7 @@ function Get-BotState {
                     dependencies = $_.dependencies
                     applicable_agents = $_.applicable_agents
                     applicable_standards = $_.applicable_standards
+                    plan_path = $_.plan_path
                     created_at = $_.created_at
                     updated_at = $_.updated_at
                 }
@@ -780,6 +795,98 @@ function Get-BotState {
     Set-CachedState -State $state
 
     return $state
+}
+
+# Helper: Scan for Aether conduit via SSDP/mDNS discovery
+function Find-Conduit {
+    # Method 0: Try last known IP from cached config (fastest)
+    $configFile = Join-Path $controlDir "aether-config.json"
+    if (Test-Path $configFile) {
+        try {
+            $cachedConfig = Get-Content $configFile -Raw | ConvertFrom-Json
+            if ($cachedConfig.conduit) {
+                $response = Invoke-RestMethod -Uri "http://$($cachedConfig.conduit)/api/config" -TimeoutSec 2 -ErrorAction Stop
+                if ($response.bridgeid) {
+                    return @{
+                        IP = $cachedConfig.conduit
+                        Id = $response.bridgeid
+                    }
+                }
+            }
+        } catch {
+            # Cached IP no longer valid, continue with discovery
+        }
+    }
+
+    # Method 1: Try Philips discovery endpoint (meethue.com)
+    try {
+        $discoveryResponse = Invoke-RestMethod -Uri "https://discovery.meethue.com/" -TimeoutSec 5 -ErrorAction Stop
+        if ($discoveryResponse -and $discoveryResponse.Count -gt 0) {
+            return @{
+                IP = $discoveryResponse[0].internalipaddress
+                Id = $discoveryResponse[0].id
+            }
+        }
+    } catch {
+        # Discovery endpoint failed, try SSDP
+    }
+
+    # Method 2: SSDP multicast discovery
+    try {
+        $ssdpMessage = @"
+M-SEARCH * HTTP/1.1
+HOST: 239.255.255.250:1900
+MAN: "ssdp:discover"
+MX: 3
+ST: urn:schemas-upnp-org:device:basic:1
+
+"@
+        $udpClient = New-Object System.Net.Sockets.UdpClient
+        $udpClient.Client.ReceiveTimeout = 3000
+        $udpClient.Client.SetSocketOption([System.Net.Sockets.SocketOptionLevel]::Socket, [System.Net.Sockets.SocketOptionName]::ReuseAddress, $true)
+
+        $groupEndpoint = New-Object System.Net.IPEndPoint ([System.Net.IPAddress]::Parse("239.255.255.250")), 1900
+        $bytes = [System.Text.Encoding]::ASCII.GetBytes($ssdpMessage)
+        $udpClient.Send($bytes, $bytes.Length, $groupEndpoint) | Out-Null
+
+        $remoteEndpoint = New-Object System.Net.IPEndPoint ([System.Net.IPAddress]::Any), 0
+        $responses = @()
+
+        # Collect responses for up to 3 seconds
+        $deadline = (Get-Date).AddSeconds(3)
+        while ((Get-Date) -lt $deadline) {
+            try {
+                $receiveBytes = $udpClient.Receive([ref]$remoteEndpoint)
+                $response = [System.Text.Encoding]::ASCII.GetString($receiveBytes)
+
+                # Look for bridge identifier in response
+                if ($response -match "IpBridge|hue-bridgeid") {
+                    $ip = $remoteEndpoint.Address.ToString()
+
+                    # Extract bridge ID from response if available
+                    $bridgeId = ""
+                    if ($response -match "hue-bridgeid:\s*([A-F0-9]+)") {
+                        $bridgeId = $matches[1]
+                    }
+
+                    $udpClient.Close()
+                    return @{
+                        IP = $ip
+                        Id = $bridgeId
+                    }
+                }
+            } catch [System.Net.Sockets.SocketException] {
+                # Timeout - no more responses
+                break
+            }
+        }
+
+        $udpClient.Close()
+    } catch {
+        # SSDP failed
+    }
+
+    return $null
 }
 
 # Helper: Set control signal
@@ -877,11 +984,11 @@ function Set-ControlSignal {
             }
 
             # Clear session lock
-            $lockFile = Join-Path $botRoot "state\sessions\runs\session.lock"
+            $lockFile = Join-Path $botRoot "workspace\sessions\runs\session.lock"
             if (Test-Path $lockFile) { Remove-Item $lockFile -Force }
 
             # Update session state to stopped
-            $stateFile = Join-Path $botRoot "state\sessions\runs\session-state.json"
+            $stateFile = Join-Path $botRoot "workspace\sessions\runs\session-state.json"
             if (Test-Path $stateFile) {
                 $state = Get-Content $stateFile -Raw | ConvertFrom-Json
                 $state.status = "stopped"
@@ -948,7 +1055,7 @@ try {
                     
                     # Try to extract executive summary from product docs (in priority order)
                     $executiveSummary = $null
-                    $productDir = Join-Path $botRoot "state\product"
+                    $productDir = Join-Path $botRoot "workspace\product"
                     if (Test-Path $productDir) {
                         # Priority order for scanning
                         $priorityFiles = @('overview.md', 'mission.md', 'roadmap.md', 'roadmap-overview.md')
@@ -986,7 +1093,7 @@ try {
 
                 "/api/product/list" {
                     $contentType = "application/json; charset=utf-8"
-                    $productDir = Join-Path $botRoot "state\product"
+                    $productDir = Join-Path $botRoot "workspace\product"
                     $docs = @()
                     if (Test-Path $productDir) {
                         $mdFiles = @(Get-ChildItem -Path $productDir -Filter "*.md" -ErrorAction SilentlyContinue)
@@ -1121,7 +1228,7 @@ try {
                 { $_ -like "/api/product/*" -and $_ -ne "/api/product/list" } {
                     $contentType = "application/json; charset=utf-8"
                     $docName = $url -replace "^/api/product/", ""
-                    $productDir = Join-Path $botRoot "state\product"
+                    $productDir = Join-Path $botRoot "workspace\product"
                     $docPath = Join-Path $productDir "$docName.md"
                     
                     if (Test-Path $docPath) {
@@ -1176,22 +1283,60 @@ try {
                 "/api/theme" {
                     $contentType = "application/json; charset=utf-8"
                     $themePath = Join-Path $staticRoot "theme-config.json"
-                    $defaultPath = Join-Path $staticRoot "theme-config.default.json"
-
-                    # Copy default if config doesn't exist
-                    if (-not (Test-Path $themePath) -and (Test-Path $defaultPath)) {
-                        Copy-Item $defaultPath $themePath
-                    }
+                    $settingsFile = Join-Path $controlDir "ui-settings.json"
 
                     if ($method -eq "GET") {
-                        if (Test-Path $themePath) {
-                            $content = Get-Content $themePath -Raw
-                        } else {
+                        if (-not (Test-Path $themePath)) {
                             $statusCode = 404
                             $content = @{
                                 success = $false
                                 error = "Theme config not found"
                             } | ConvertTo-Json -Compress
+                        } else {
+                            try {
+                                # Load presets from theme-config.json
+                                $themeConfig = Get-Content $themePath -Raw | ConvertFrom-Json
+                                
+                                # Get active theme from ui-settings.json (default to "amber")
+                                $activeTheme = "amber"
+                                if (Test-Path $settingsFile) {
+                                    try {
+                                        $settings = Get-Content $settingsFile -Raw | ConvertFrom-Json
+                                        if ($settings.theme) {
+                                            $activeTheme = $settings.theme
+                                        }
+                                    } catch { }
+                                }
+                                
+                                # Validate active theme exists
+                                if (-not $themeConfig.presets.($activeTheme)) {
+                                    $activeTheme = "amber"
+                                }
+                                
+                                # Build response with computed mappings
+                                $preset = $themeConfig.presets.($activeTheme)
+                                $mappings = @{}
+                                foreach ($key in $preset.PSObject.Properties.Name) {
+                                    if ($key -ne "name") {
+                                        $rgb = $preset.$key
+                                        $mappings[$key] = @{ r = $rgb[0]; g = $rgb[1]; b = $rgb[2] }
+                                    }
+                                }
+                                
+                                $themeResponse = @{
+                                    name = $preset.name
+                                    mappings = $mappings
+                                    presets = $themeConfig.presets
+                                }
+                                
+                                $content = $themeResponse | ConvertTo-Json -Depth 5 -Compress
+                            } catch {
+                                $statusCode = 500
+                                $content = @{
+                                    success = $false
+                                    error = "Failed to load theme: $($_.Exception.Message)"
+                                } | ConvertTo-Json -Compress
+                            }
                         }
                     }
                     elseif ($method -eq "POST") {
@@ -1200,23 +1345,65 @@ try {
                             $body = $reader.ReadToEnd() | ConvertFrom-Json
                             $reader.Close()
 
-                            $config = Get-Content $themePath -Raw | ConvertFrom-Json
-
-                            if ($body.preset -and $config.presets.($body.preset)) {
-                                # Apply preset
-                                $preset = $config.presets.($body.preset)
-                                foreach ($key in $preset.PSObject.Properties.Name) {
-                                    if ($key -eq "name") {
-                                        $config.name = $preset.$key
-                                    } else {
-                                        $rgb = $preset.$key
-                                        $config.mappings.$key = @{ r = $rgb[0]; g = $rgb[1]; b = $rgb[2] }
+                            if (-not (Test-Path $themePath)) {
+                                $statusCode = 404
+                                $content = @{
+                                    success = $false
+                                    error = "Theme config not found"
+                                } | ConvertTo-Json -Compress
+                            } else {
+                                # Load presets
+                                $themeConfig = Get-Content $themePath -Raw | ConvertFrom-Json
+                                
+                                # Validate preset exists
+                                if (-not $body.preset -or -not $themeConfig.presets.($body.preset)) {
+                                    $statusCode = 400
+                                    $content = @{
+                                        success = $false
+                                        error = "Invalid preset: $($body.preset)"
+                                    } | ConvertTo-Json -Compress
+                                } else {
+                                    # Load or create settings as hashtable
+                                    $settings = @{
+                                        showDebug = $false
+                                        showVerbose = $false
+                                        theme = "amber"
                                     }
+                                    if (Test-Path $settingsFile) {
+                                        try {
+                                            $existingSettings = Get-Content $settingsFile -Raw | ConvertFrom-Json
+                                            # Copy existing properties to hashtable
+                                            foreach ($prop in $existingSettings.PSObject.Properties) {
+                                                $settings[$prop.Name] = $prop.Value
+                                            }
+                                        } catch { }
+                                    }
+                                    
+                                    # Update theme preference
+                                    $settings.theme = $body.preset
+                                    
+                                    # Save settings
+                                    $settings | ConvertTo-Json -Depth 5 | Set-Content $settingsFile -Force
+                                    
+                                    # Build response with computed mappings
+                                    $preset = $themeConfig.presets.($body.preset)
+                                    $mappings = @{}
+                                    foreach ($key in $preset.PSObject.Properties.Name) {
+                                        if ($key -ne "name") {
+                                            $rgb = $preset.$key
+                                            $mappings[$key] = @{ r = $rgb[0]; g = $rgb[1]; b = $rgb[2] }
+                                        }
+                                    }
+                                    
+                                    $themeResponse = @{
+                                        name = $preset.name
+                                        mappings = $mappings
+                                        presets = $themeConfig.presets
+                                    }
+                                    
+                                    $content = $themeResponse | ConvertTo-Json -Depth 5 -Compress
                                 }
                             }
-
-                            $config | ConvertTo-Json -Depth 5 | Set-Content $themePath
-                            $content = $config | ConvertTo-Json -Depth 5 -Compress
                         } catch {
                             $statusCode = 500
                             $content = @{
@@ -1350,6 +1537,145 @@ try {
                     break
                 }
 
+                { $_ -like "/api/plan/*" } {
+                    $contentType = "application/json; charset=utf-8"
+                    $taskId = $url -replace "^/api/plan/", ""
+                    $taskId = [System.Web.HttpUtility]::UrlDecode($taskId)
+
+                    # Search for task file by ID
+                    $tasksDir = Join-Path $botRoot "workspace\tasks"
+                    $statusDirs = @('todo', 'in-progress', 'done', 'skipped', 'cancelled')
+                    $task = $null
+                    $taskFile = $null
+
+                    foreach ($status in $statusDirs) {
+                        $statusDir = Join-Path $tasksDir $status
+                        if (Test-Path $statusDir) {
+                            $files = Get-ChildItem -Path $statusDir -Filter "*.json" -ErrorAction SilentlyContinue
+                            foreach ($file in $files) {
+                                try {
+                                    $taskContent = Get-Content $file.FullName -Raw | ConvertFrom-Json
+                                    if ($taskContent.id -eq $taskId) {
+                                        $task = $taskContent
+                                        $taskFile = $file.FullName
+                                        break
+                                    }
+                                } catch {
+                                    # Skip malformed files
+                                }
+                            }
+                            if ($task) { break }
+                        }
+                    }
+
+                    if (-not $task) {
+                        $statusCode = 404
+                        $content = @{
+                            success = $false
+                            has_plan = $false
+                            error = "Task not found: $taskId"
+                        } | ConvertTo-Json -Compress
+                    } elseif (-not $task.plan_path) {
+                        $content = @{
+                            success = $true
+                            has_plan = $false
+                            task_name = $task.name
+                        } | ConvertTo-Json -Compress
+                    } else {
+                        # Resolve plan path (relative to project root)
+                        $planFullPath = Join-Path $projectRoot $task.plan_path
+
+                        if (-not (Test-Path $planFullPath)) {
+                            $content = @{
+                                success = $true
+                                has_plan = $false
+                                task_name = $task.name
+                                error = "Plan file not found"
+                            } | ConvertTo-Json -Compress
+                        } else {
+                            $planContent = Get-Content $planFullPath -Raw
+                            $content = @{
+                                success = $true
+                                has_plan = $true
+                                task_name = $task.name
+                                content = $planContent
+                            } | ConvertTo-Json -Depth 5 -Compress
+                        }
+                    }
+                    break
+                }
+
+                "/api/aether/scan" {
+                    $contentType = "application/json; charset=utf-8"
+                    $conduit = Find-Conduit
+                    if ($conduit) {
+                        Write-Status "Aether conduit discovered: $($conduit.IP) (ID: $($conduit.Id))" -Type Success
+                        $content = @{
+                            found = $true
+                            conduit = $conduit.IP
+                            id = $conduit.Id
+                        } | ConvertTo-Json -Compress
+                    } else {
+                        $content = @{
+                            found = $false
+                            conduit = $null
+                            id = $null
+                        } | ConvertTo-Json -Compress
+                    }
+                    break
+                }
+
+                "/api/aether/config" {
+                    $contentType = "application/json; charset=utf-8"
+                    $configFile = Join-Path $controlDir "aether-config.json"
+
+                    if ($method -eq "GET") {
+                        if (Test-Path $configFile) {
+                            try {
+                                $content = Get-Content $configFile -Raw
+                            } catch {
+                                $content = @{ linked = $false } | ConvertTo-Json -Compress
+                            }
+                        } else {
+                            $content = @{ linked = $false } | ConvertTo-Json -Compress
+                        }
+                    }
+                    elseif ($method -eq "POST") {
+                        try {
+                            $reader = New-Object System.IO.StreamReader($request.InputStream)
+                            $body = $reader.ReadToEnd()
+                            $reader.Close()
+
+                            # Validate and save
+                            $config = $body | ConvertFrom-Json
+                            $config | ConvertTo-Json -Depth 5 | Set-Content $configFile -Force
+
+                            # Log bond result with details
+                            if ($config.linked) {
+                                $nodeCount = if ($config.nodes) { $config.nodes.Count } else { 0 }
+                                Write-Status "Aether bonded to $($config.conduit) with $nodeCount node(s)" -Type Success
+                            } else {
+                                Write-Status "Aether unlinked" -Type Warn
+                            }
+                            $content = @{
+                                success = $true
+                                config = $config
+                            } | ConvertTo-Json -Depth 5 -Compress
+                        } catch {
+                            $statusCode = 500
+                            $content = @{
+                                success = $false
+                                error = "Failed to save config: $($_.Exception.Message)"
+                            } | ConvertTo-Json -Compress
+                        }
+                    }
+                    else {
+                        $statusCode = 405
+                        $content = "Method not allowed"
+                    }
+                    break
+                }
+
                 "/api/control" {
                     if ($method -eq "POST") {
                         $contentType = "application/json; charset=utf-8"
@@ -1476,13 +1802,31 @@ try {
             Write-Host "  Statement: $($_.InvocationInfo.Line.Trim())" -ForegroundColor Red
         }
         
-        # Send response
-        $response.StatusCode = $statusCode
-        $response.ContentType = $contentType
-        $buffer = [System.Text.Encoding]::UTF8.GetBytes($content)
-        $response.ContentLength64 = $buffer.Length
-        $response.OutputStream.Write($buffer, 0, $buffer.Length)
-        $response.Close()
+        # Send response (wrapped to handle client disconnects gracefully)
+        try {
+            if ($null -eq $content) {
+                $content = "{}"
+            }
+            $response.StatusCode = $statusCode
+            $response.ContentType = $contentType
+            $buffer = [System.Text.Encoding]::UTF8.GetBytes($content)
+            $response.ContentLength64 = $buffer.Length
+            if ($null -ne $response.OutputStream) {
+                $response.OutputStream.Write($buffer, 0, $buffer.Length)
+                $response.Close()
+            }
+        } catch {
+            # Client disconnected before response could be sent - this is normal
+            # Common causes: browser tab closed, network timeout, page refresh
+            if ($_.Exception.Message -match "network name is no longer available|connection was forcibly closed|broken pipe") {
+                # Silent handling for expected disconnects
+            } else {
+                # Log unexpected write errors but don't crash
+                Write-Host ""
+                Write-Status "Response write failed: $($_.Exception.Message)" -Type Warn
+            }
+            try { $response.Close() } catch { }
+        }
     }
 } finally {
     # Stop file watchers

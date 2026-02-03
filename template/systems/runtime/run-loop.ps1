@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Main orchestration loop for autonomous task implementation using Go Mode
 
@@ -110,12 +110,68 @@ Import-Module "$PSScriptRoot\..\mcp\modules\TaskIndexCache.psm1" -Force
 . "$PSScriptRoot\..\mcp\tools\task-mark-in-progress\script.ps1"
 . "$PSScriptRoot\..\mcp\tools\task-mark-skipped\script.ps1"
 
+# Helper function to sanitize paths in activity log messages
+function Convert-ToRelativePath {
+    param(
+        [string]$Message,
+        [string]$ProjectRoot
+    )
+    
+    if (-not $Message) { return $Message }
+    
+    $result = $Message
+    
+    if ($ProjectRoot) {
+        # Standard Windows path
+        $escapedRoot = [regex]::Escape($ProjectRoot)
+        $result = $result -replace $escapedRoot, '.'
+        
+        # Forward slash variant
+        $normalizedRoot = $ProjectRoot -replace '\\', '/'
+        $escapedNormalizedRoot = [regex]::Escape($normalizedRoot)
+        $result = $result -replace $escapedNormalizedRoot, '.'
+        
+        # Double-escaped backslashes (JSON strings)
+        $doubleEscapedRoot = $ProjectRoot -replace '\\', '\\\\'
+        $escapedDoubleEscapedRoot = [regex]::Escape($doubleEscapedRoot)
+        $result = $result -replace $escapedDoubleEscapedRoot, '.'
+        
+        # Git Bash MSYS path: /c/Users/... -> .
+        $msysRoot = $ProjectRoot -replace '^([A-Za-z]):\\', '/$1/' -replace '\\', '/'
+        $msysRoot = $msysRoot.ToLower().Substring(0,3) + $msysRoot.Substring(3)
+        $escapedMsysRoot = [regex]::Escape($msysRoot)
+        $result = $result -replace $escapedMsysRoot, '.'
+    }
+    
+    # Replace user home paths with ~ (cross-platform)
+    $userHome = [Environment]::GetFolderPath('UserProfile')
+    if ($userHome) {
+        $escapedHome = [regex]::Escape($userHome)
+        $result = $result -replace $escapedHome, '~'
+        
+        $normalizedHome = $userHome -replace '\\', '/'
+        $escapedNormalizedHome = [regex]::Escape($normalizedHome)
+        $result = $result -replace $escapedNormalizedHome, '~'
+        
+        $doubleEscapedHome = $userHome -replace '\\', '\\\\'
+        $escapedDoubleEscapedHome = [regex]::Escape($doubleEscapedHome)
+        $result = $result -replace $escapedDoubleEscapedHome, '~'
+    }
+    
+    # Clean up redundant "cd "." &&" patterns
+    $result = $result -replace 'cd "?\."? && ', ''
+    $result = $result -replace 'cd "?\."?/', ''
+    
+    return $result
+}
+
 # Helper function to extract activity logs and attach to completed tasks
 function Add-ActivityLogToCompletedTask {
     param(
         [string]$TaskId,
         [string]$ControlDir,
-        [string]$TasksDir
+        [string]$TasksDir,
+        [string]$ProjectRoot
     )
 
     $activityFile = Join-Path $ControlDir "activity.jsonl"
@@ -129,7 +185,11 @@ function Add-ActivityLogToCompletedTask {
         try {
             $entry = $_ | ConvertFrom-Json
             if ($entry.task_id -eq $TaskId) {
-                $taskActivities += $entry | Select-Object -Property type, message, timestamp
+                # Sanitize paths in message to be relative to project root
+                $sanitizedMessage = Convert-ToRelativePath -Message $entry.message -ProjectRoot $ProjectRoot
+                $sanitizedEntry = $entry | Select-Object -Property type, timestamp
+                $sanitizedEntry | Add-Member -NotePropertyName 'message' -NotePropertyValue $sanitizedMessage -Force
+                $taskActivities += $sanitizedEntry
             }
         } catch { }
     }
@@ -194,7 +254,7 @@ if ($cleanupCount -gt 0) {
 
 # Reset any in-progress tasks to todo
 Write-Status "Checking for unfinished tasks..." -Type Process
-$tasksBaseDir = Join-Path $PSScriptRoot "..\..\state\tasks"
+$tasksBaseDir = Join-Path $PSScriptRoot "..\..\workspace\tasks"
 $resetInProgressTasks = Reset-InProgressTasks -TasksBaseDir $tasksBaseDir
 $resetSkippedTasks = Reset-SkippedTasks -TasksBaseDir $tasksBaseDir
 $totalReset = $resetInProgressTasks.Count + $resetSkippedTasks.Count
@@ -288,18 +348,18 @@ if ($standardsList) {
 
 
 # Load product-specific documentation
-$productDir = Join-Path $PSScriptRoot "..\..\state\product"
+$productDir = Join-Path $PSScriptRoot "..\..\workspace\product"
 $productMissionFile = Join-Path $productDir "mission.md"
 $productEntityModelFile = Join-Path $productDir "entity-model.md"
 
 $productMission = if (Test-Path $productMissionFile) {
-    "Read the product mission and context from: .bot/state/product/mission.md"
+    "Read the product mission and context from: .bot/workspace/product/mission.md"
 } else {
     "No product mission file found."
 }
 
 $entityModel = if (Test-Path $productEntityModelFile) {
-    "Read the entity model design from: .bot/state/product/entity-model.md"
+    "Read the entity model design from: .bot/workspace/product/entity-model.md"
 } else {
     "No entity model file found."
 }
@@ -660,8 +720,8 @@ Work on this task autonomously. When complete, ensure you call task_mark_done vi
             $sessionState.tasks_completed += @($task.id)
             $sessionState.notes += "Task $($task.id) ($($task.name)): COMPLETED"
 
-            # Extract and attach activity log to completed task
-            Add-ActivityLogToCompletedTask -TaskId $task.id -ControlDir $controlDir -TasksDir (Join-Path $PSScriptRoot "..\..\state\tasks")
+            # Extract and attach activity log to completed task (with sanitized paths)
+            Add-ActivityLogToCompletedTask -TaskId $task.id -ControlDir $controlDir -TasksDir (Join-Path $PSScriptRoot "..\..\workspace\tasks") -ProjectRoot $projectRoot
         } else {
             # Task failed - update counters
             $state = Invoke-SessionGetState -Arguments @{}
@@ -800,7 +860,7 @@ Work on this task autonomously. When complete, ensure you call task_mark_done vi
     }
     
     # Release lock
-    $lockFile = Join-Path $PSScriptRoot "..\..\state\sessions\runs\session.lock"
+    $lockFile = Join-Path $PSScriptRoot "..\..\workspace\sessions\runs\session.lock"
     if (Test-Path $lockFile) {
         Remove-Item $lockFile -Force
     }

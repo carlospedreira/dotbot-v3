@@ -9,11 +9,11 @@ version: 2.0
 This workflow automatically generates a comprehensive task roadmap from your product specification documents.
 
 ## Goal
-Transform product specifications into granular, context-window-sized tasks tracked in `.bot/state/tasks/todo/` using the `task_create_bulk` MCP tool.
+Transform product specifications into granular, context-window-sized tasks tracked in `.bot/workspace/tasks/todo/` using the `task_create_bulk` MCP tool.
 
 ## Required Product Documents
 
-Before running this workflow, ensure these files exist in `.bot/state/product/`:
+Before running this workflow, ensure these files exist in `.bot/workspace/product/`:
 
 | Document | Purpose |
 |----------|----------|
@@ -28,10 +28,10 @@ Before running this workflow, ensure these files exist in `.bot/state/product/`:
 
 **Read ALL product documents in sequence:**
 
-1. `.bot/state/product/mission.md` - Understand core principles and goals
-2. `.bot/state/product/tech-stack.md` - Know the technology stack and libraries
-3. `.bot/state/product/entity-model.md` - Understand data model and relationships
-4. `.bot/state/product/prd.md` - Full specification with features and requirements
+1. `.bot/workspace/product/mission.md` - Understand core principles and goals
+2. `.bot/workspace/product/tech-stack.md` - Know the technology stack and libraries
+3. `.bot/workspace/product/entity-model.md` - Understand data model and relationships
+4. `.bot/workspace/product/prd.md` - Full specification with features and requirements
 
 **Extract from these documents:**
 - Major functional areas and features
@@ -186,7 +186,7 @@ task_create_bulk({
 
 ### Step 7: Generate Roadmap Overview
 
-After creating tasks, generate `.bot/state/product/roadmap-overview.md`:
+After creating tasks, generate `.bot/workspace/product/roadmap-overview.md`:
 
 ```markdown
 # Task Roadmap Overview
@@ -243,7 +243,7 @@ Created [N] tasks:
 
 Total estimated effort: [sum]
 
-Roadmap overview saved to: .bot/state/product/roadmap-overview.md
+Roadmap overview saved to: .bot/workspace/product/roadmap-overview.md
 
 Ready to begin implementation!
 Use task_get_next to get the first task.
@@ -302,6 +302,6 @@ Include:
 ✅ All features from PRD represented as tasks
 ✅ Tasks properly categorized and prioritized
 ✅ Dependencies correctly mapped
-✅ Tasks created in `.bot/state/tasks/todo/` via MCP
+✅ Tasks created in `.bot/workspace/tasks/todo/` via MCP
 ✅ Roadmap overview generated
 ✅ User informed of results
