@@ -4,6 +4,11 @@
  */
 
 /**
+ * Current loop mode ("analysis", "execution", or "both")
+ */
+let currentLoopMode = 'execution';
+
+/**
  * Model options configuration
  */
 const MODEL_OPTIONS = [
@@ -176,6 +181,48 @@ function initControlButtons() {
             await sendControlSignal('reset');
         });
     }
+    
+    // Initialize mode selector
+    initModeSelector();
+}
+
+/**
+ * Initialize loop mode selector
+ */
+function initModeSelector() {
+    const modeSelector = document.getElementById('mode-selector');
+    if (!modeSelector) return;
+    
+    modeSelector.querySelectorAll('.mode-option').forEach(option => {
+        option.addEventListener('click', () => {
+            const mode = option.dataset.mode;
+            selectLoopMode(mode);
+        });
+    });
+}
+
+/**
+ * Select loop mode and update UI
+ * @param {string} mode - Mode to select ("analysis", "execution", or "both")
+ */
+function selectLoopMode(mode) {
+    currentLoopMode = mode;
+    
+    const modeSelector = document.getElementById('mode-selector');
+    if (!modeSelector) return;
+    
+    // Update active state
+    modeSelector.querySelectorAll('.mode-option').forEach(option => {
+        option.classList.toggle('active', option.dataset.mode === mode);
+    });
+}
+
+/**
+ * Get the current loop mode
+ * @returns {string} Current mode
+ */
+function getLoopMode() {
+    return currentLoopMode;
 }
 
 /**
@@ -189,10 +236,16 @@ async function sendControlSignal(action) {
         const buttons = document.querySelectorAll('.ctrl-btn, .panic-btn');
         buttons.forEach(btn => btn.disabled = true);
 
+        // Include mode for start action
+        const body = { action };
+        if (action === 'start') {
+            body.mode = currentLoopMode;
+        }
+
         const response = await fetch(`${API_BASE}/api/control`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action })
+            body: JSON.stringify(body)
         });
 
         const result = await response.json();

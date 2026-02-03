@@ -579,8 +579,12 @@ function Get-BotState {
     $sessionsDir = Join-Path $botRoot "workspace\sessions"
     $stateFile = Join-Path $botRoot ".project-state.json"
 
-    # Count tasks
+    # Count tasks (including new analysis statuses)
     $todoTasks = @(Get-ChildItem -Path (Join-Path $tasksDir "todo") -Filter "*.json" -ErrorAction SilentlyContinue)
+    $analysingTasks = @(Get-ChildItem -Path (Join-Path $tasksDir "analysing") -Filter "*.json" -ErrorAction SilentlyContinue)
+    $needsInputTasks = @(Get-ChildItem -Path (Join-Path $tasksDir "needs-input") -Filter "*.json" -ErrorAction SilentlyContinue)
+    $analysedTasks = @(Get-ChildItem -Path (Join-Path $tasksDir "analysed") -Filter "*.json" -ErrorAction SilentlyContinue)
+    $splitTasks = @(Get-ChildItem -Path (Join-Path $tasksDir "split") -Filter "*.json" -ErrorAction SilentlyContinue)
     $inProgressTasks = @(Get-ChildItem -Path (Join-Path $tasksDir "in-progress") -Filter "*.json" -ErrorAction SilentlyContinue)
     $doneTasks = @(Get-ChildItem -Path (Join-Path $tasksDir "done") -Filter "*.json" -ErrorAction SilentlyContinue)
     $skippedTasks = @(Get-ChildItem -Path (Join-Path $tasksDir "skipped") -Filter "*.json" -ErrorAction SilentlyContinue)
@@ -773,10 +777,17 @@ function Get-BotState {
         }
     }
     
+    # Check analysis loop status
+    $isAnalysisRunning = Test-Path (Join-Path $controlDir "analysing.signal")
+    
     $state = @{
         timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
         tasks = @{
             todo = $todoTasks.Count
+            analysing = $analysingTasks.Count
+            needs_input = $needsInputTasks.Count
+            analysed = $analysedTasks.Count
+            split = $splitTasks.Count
             in_progress = $inProgressTasks.Count
             done = $doneTasks.Count
             skipped = $skippedTasks.Count
@@ -786,9 +797,13 @@ function Get-BotState {
             upcoming_total = if ($todoTasks.Count) { $todoTasks.Count } else { 0 }
             recent_completed = @($recentCompleted)  # Ensure array even with single item
             completed_total = if ($doneTasks.Count) { $doneTasks.Count } else { 0 }
+            action_required = $needsInputTasks.Count + $splitTasks.Count
         }
         session = $sessionInfo
         control = $controlSignals
+        analysis = @{
+            running = $isAnalysisRunning
+        }
     }
 
     # Cache the result
@@ -891,14 +906,22 @@ ST: urn:schemas-upnp-org:device:basic:1
 
 # Helper: Set control signal
 function Set-ControlSignal {
-    param([string]$Action)
+    param(
+        [string]$Action,
+        [string]$Mode = "execution"  # "execution", "analysis", or "both"
+    )
 
     # .control is at .bot/.control - server is at .bot/systems/ui
     $controlDir = Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) ".control"
     $validActions = @("start", "stop", "pause", "resume", "reset")
+    $validModes = @("execution", "analysis", "both")
     
     if ($Action -notin $validActions) {
         return @{ success = $false; message = "Invalid action: $Action" }
+    }
+    
+    if ($Mode -and $Mode -notin $validModes) {
+        $Mode = "execution"  # Default to execution if invalid
     }
     
     # Ensure control directory exists
@@ -942,42 +965,72 @@ function Set-ControlSignal {
             } | ConvertTo-Json | Set-Content -Path $signalFile -Force
         }
         "start" {
-            # Start action - launch the autonomous loop in a new PowerShell window
-            $scriptPath = Join-Path $botRoot "systems\runtime\run-loop.ps1"
-            if (Test-Path $scriptPath) {
-                # Check settings for debug mode
-                $settingsFile = Join-Path $controlDir "ui-settings.json"
-                $showDebug = $false
-                $showVerbose = $false
-                if (Test-Path $settingsFile) {
-                    try {
-                        $settings = Get-Content $settingsFile -Raw | ConvertFrom-Json
-                        $showDebug = [bool]$settings.showDebug
-                        $showVerbose = [bool]$settings.showVerbose
-                    } catch {
-                        # Ignore settings parse errors
-                    }
+            # Start action - launch loop(s) based on mode
+            $runLoopPath = Join-Path $botRoot "systems\runtime\run-loop.ps1"
+            $analyseLoopPath = Join-Path $botRoot "systems\runtime\analyse-loop.ps1"
+            
+            # Check settings for debug mode
+            $settingsFile = Join-Path $controlDir "ui-settings.json"
+            $showDebug = $false
+            $showVerbose = $false
+            if (Test-Path $settingsFile) {
+                try {
+                    $settings = Get-Content $settingsFile -Raw | ConvertFrom-Json
+                    $showDebug = [bool]$settings.showDebug
+                    $showVerbose = [bool]$settings.showVerbose
+                } catch {
+                    # Ignore settings parse errors
                 }
-
-                # Build arguments
-                $args = @("-NoExit", "-File", "`"$scriptPath`"")
-                if ($showDebug) { $args += "-ShowDebug" }
-                if ($showVerbose) { $args += "-ShowVerbose" }
-
-                # Launch in a new PowerShell window
-                Start-Process pwsh -ArgumentList $args -WindowStyle Normal
-                Write-Status "Launched autonomous loop in new window (Debug: $showDebug, Verbose: $showVerbose)" -Type Success
-            } else {
-                Write-Status "Script not found at $scriptPath" -Type Warn
+            }
+            
+            $launched = @()
+            
+            # Launch analysis loop if mode is "analysis" or "both"
+            if ($Mode -in @("analysis", "both")) {
+                if (Test-Path $analyseLoopPath) {
+                    $args = @("-NoExit", "-File", "`"$analyseLoopPath`"")
+                    if ($showDebug) { $args += "-ShowDebug" }
+                    if ($showVerbose) { $args += "-ShowVerbose" }
+                    Start-Process pwsh -ArgumentList $args -WindowStyle Normal
+                    $launched += "analysis"
+                    Write-Status "Launched analysis loop" -Type Success
+                } else {
+                    Write-Status "Analysis loop script not found at $analyseLoopPath" -Type Warn
+                }
+            }
+            
+            # Launch execution loop if mode is "execution" or "both"
+            if ($Mode -in @("execution", "both")) {
+                if (Test-Path $runLoopPath) {
+                    $args = @("-NoExit", "-File", "`"$runLoopPath`"")
+                    if ($showDebug) { $args += "-ShowDebug" }
+                    if ($showVerbose) { $args += "-ShowVerbose" }
+                    Start-Process pwsh -ArgumentList $args -WindowStyle Normal
+                    $launched += "execution"
+                    Write-Status "Launched execution loop" -Type Success
+                } else {
+                    Write-Status "Execution loop script not found at $runLoopPath" -Type Warn
+                }
+            }
+            
+            if ($launched.Count -eq 0) {
                 return @{
                     success = $false
-                    message = "Autonomous loop script not found"
+                    message = "No loop scripts found"
                 }
+            }
+            
+            return @{
+                success = $true
+                action = $Action
+                mode = $Mode
+                launched = $launched
+                message = "Launched: $($launched -join ', ')"
             }
         }
         "reset" {
-            # Clear all control signals
-            $signalFiles = @("running.signal", "stop.signal", "pause.signal", "resume.signal")
+            # Clear all control signals (including analysis loop)
+            $signalFiles = @("running.signal", "stop.signal", "pause.signal", "resume.signal", "analysing.signal")
             foreach ($signal in $signalFiles) {
                 $signalPath = Join-Path $controlDir $signal
                 if (Test-Path $signalPath) { Remove-Item $signalPath -Force }
@@ -1684,8 +1737,131 @@ try {
                         $reader.Close()
 
                         $data = $body | ConvertFrom-Json
-                        $result = Set-ControlSignal -Action $data.action
+                        $result = Set-ControlSignal -Action $data.action -Mode $data.mode
                         $content = $result | ConvertTo-Json -Compress
+                    } else {
+                        $statusCode = 405
+                        $content = "Method not allowed"
+                    }
+                    break
+                }
+
+                "/api/tasks/action-required" {
+                    # Get all tasks needing human input (questions and split approvals)
+                    $contentType = "application/json; charset=utf-8"
+                    $tasksDir = Join-Path $botRoot "workspace\tasks"
+                    $actionItems = @()
+                    
+                    # Get needs-input tasks (questions)
+                    $needsInputDir = Join-Path $tasksDir "needs-input"
+                    if (Test-Path $needsInputDir) {
+                        $files = Get-ChildItem -Path $needsInputDir -Filter "*.json" -ErrorAction SilentlyContinue
+                        foreach ($file in $files) {
+                            try {
+                                $task = Get-Content $file.FullName -Raw | ConvertFrom-Json
+                                $actionItems += @{
+                                    type = "question"
+                                    task_id = $task.id
+                                    task_name = $task.name
+                                    question = $task.pending_question
+                                    created_at = $task.updated_at
+                                }
+                            } catch { }
+                        }
+                    }
+                    
+                    # Get split tasks (approvals)
+                    $splitDir = Join-Path $tasksDir "split"
+                    if (Test-Path $splitDir) {
+                        $files = Get-ChildItem -Path $splitDir -Filter "*.json" -ErrorAction SilentlyContinue
+                        foreach ($file in $files) {
+                            try {
+                                $task = Get-Content $file.FullName -Raw | ConvertFrom-Json
+                                $actionItems += @{
+                                    type = "split"
+                                    task_id = $task.id
+                                    task_name = $task.name
+                                    split_proposal = $task.split_proposal
+                                    created_at = $task.updated_at
+                                }
+                            } catch { }
+                        }
+                    }
+                    
+                    $content = @{
+                        success = $true
+                        items = $actionItems
+                        count = $actionItems.Count
+                    } | ConvertTo-Json -Depth 10 -Compress
+                    break
+                }
+
+                "/api/task/answer" {
+                    # Submit answer to a question
+                    if ($method -eq "POST") {
+                        $contentType = "application/json; charset=utf-8"
+                        try {
+                            $reader = New-Object System.IO.StreamReader($request.InputStream)
+                            $body = $reader.ReadToEnd() | ConvertFrom-Json
+                            $reader.Close()
+                            
+                            $taskId = $body.task_id
+                            $answer = $body.answer  # Array of selected keys or single key
+                            $customText = $body.custom_text  # Optional free text
+                            
+                            # Import and call the MCP tool
+                            . "$botRoot\systems\mcp\tools\task-answer-question\script.ps1"
+                            $result = Invoke-TaskAnswerQuestion -Arguments @{
+                                task_id = $taskId
+                                answer = $answer
+                                custom_text = $customText
+                            }
+                            
+                            $content = $result | ConvertTo-Json -Depth 5 -Compress
+                            Write-Status "Answered question for task: $taskId" -Type Success
+                        } catch {
+                            $statusCode = 500
+                            $content = @{
+                                success = $false
+                                error = "Failed to submit answer: $($_.Exception.Message)"
+                            } | ConvertTo-Json -Compress
+                        }
+                    } else {
+                        $statusCode = 405
+                        $content = "Method not allowed"
+                    }
+                    break
+                }
+
+                "/api/task/approve-split" {
+                    # Approve or reject a split proposal
+                    if ($method -eq "POST") {
+                        $contentType = "application/json; charset=utf-8"
+                        try {
+                            $reader = New-Object System.IO.StreamReader($request.InputStream)
+                            $body = $reader.ReadToEnd() | ConvertFrom-Json
+                            $reader.Close()
+                            
+                            $taskId = $body.task_id
+                            $approved = $body.approved  # true or false
+                            
+                            # Import and call the MCP tool
+                            . "$botRoot\systems\mcp\tools\task-approve-split\script.ps1"
+                            $result = Invoke-TaskApproveSplit -Arguments @{
+                                task_id = $taskId
+                                approved = $approved
+                            }
+                            
+                            $content = $result | ConvertTo-Json -Depth 5 -Compress
+                            $action = if ($approved) { "Approved" } else { "Rejected" }
+                            Write-Status "$action split for task: $taskId" -Type Success
+                        } catch {
+                            $statusCode = 500
+                            $content = @{
+                                success = $false
+                                error = "Failed to process split: $($_.Exception.Message)"
+                            } | ConvertTo-Json -Compress
+                        }
                     } else {
                         $statusCode = 405
                         $content = "Method not allowed"

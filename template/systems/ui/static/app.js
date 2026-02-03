@@ -33,6 +33,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initProductNav();
     initModalClose();
     initPipelineInfiniteScroll();
+    initActions();
 
     // Initialize Aether (ambient feedback)
     Aether.init().then(result => {

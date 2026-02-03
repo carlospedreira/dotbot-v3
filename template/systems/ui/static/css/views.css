@@ -3,10 +3,49 @@
  */
 
 /* ========== PIPELINE VIEW ========== */
+.pipeline-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    height: 100%;
+}
+
+.pipeline-stage {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.pipeline-stage-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+}
+
+.pipeline-stage-title {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--color-primary-dim);
+}
+
+.pipeline-stage-title.analysis {
+    color: var(--color-secondary);
+}
+
+.pipeline-stage-title.execution {
+    color: var(--color-success);
+}
+
 .pipeline-container {
     display: flex;
     gap: 8px;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
     align-items: stretch;
 }
 

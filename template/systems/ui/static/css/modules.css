@@ -484,3 +484,431 @@
     letter-spacing: 0.05em;
     margin-top: 4px;
 }
+
+/* ========== ACTION REQUIRED FLOATING WIDGET ========== */
+.action-widget {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 18px;
+    background: var(--bg-panel);
+    border: 2px solid var(--color-warning);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 20px rgb(var(--color-warning-rgb) / 0.3);
+}
+
+.action-widget:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 24px rgb(var(--color-warning-rgb) / 0.4);
+}
+
+.action-widget.hidden {
+    display: none;
+}
+
+.action-widget-icon {
+    font-size: 18px;
+    animation: widgetPulse 2s ease-in-out infinite;
+}
+
+@keyframes widgetPulse {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+}
+
+.action-widget-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-warning);
+}
+
+.action-widget-count {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 6px;
+    background: var(--color-warning);
+    color: var(--bg-deep);
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 12px;
+}
+
+/* ========== SLIDE-OUT PANEL ========== */
+.slideout-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgb(var(--color-bg-deep-rgb) / 0.7);
+    z-index: 1001;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.slideout-overlay.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+.slideout-panel {
+    position: fixed;
+    top: 0;
+    right: -420px;
+    width: 400px;
+    height: 100%;
+    background: var(--bg-panel);
+    border-left: 1px solid var(--bezel-edge);
+    z-index: 1002;
+    display: flex;
+    flex-direction: column;
+    transition: right 0.3s ease;
+}
+
+.slideout-panel.visible {
+    right: 0;
+}
+
+.slideout-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    background: var(--bezel-dark);
+    border-bottom: 1px solid var(--bezel-edge);
+}
+
+.slideout-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--color-warning);
+}
+
+.slideout-close {
+    background: none;
+    border: none;
+    color: var(--label-color);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px 8px;
+    transition: color 0.15s ease;
+}
+
+.slideout-close:hover {
+    color: var(--color-primary);
+}
+
+.slideout-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+}
+
+/* Action items in slideout */
+.action-item {
+    background: var(--bg-screen);
+    border: 1px solid var(--primary-15);
+    border-radius: 6px;
+    margin-bottom: 12px;
+    overflow: hidden;
+}
+
+.action-item-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    background: var(--primary-05);
+    border-bottom: 1px solid var(--primary-10);
+}
+
+.action-item-type {
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.action-item-type.question {
+    background: var(--secondary-20);
+    color: var(--color-secondary);
+}
+
+.action-item-type.split {
+    background: var(--tertiary-20);
+    color: var(--color-tertiary);
+}
+
+.action-item-task {
+    flex: 1;
+    font-size: 11px;
+    color: var(--color-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.action-item-body {
+    padding: 14px;
+}
+
+.action-question-text {
+    font-size: 12px;
+    color: var(--color-primary);
+    margin-bottom: 8px;
+    line-height: 1.5;
+}
+
+.action-question-context {
+    font-size: 11px;
+    color: var(--label-color);
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    background: var(--bg-black-overlay-medium);
+    border-radius: 4px;
+    line-height: 1.5;
+}
+
+/* Answer options */
+.answer-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.answer-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--bg-black-overlay-medium);
+    border: 1px solid var(--primary-15);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.answer-option:hover {
+    background: var(--primary-08);
+    border-color: var(--primary-30);
+}
+
+.answer-option.selected {
+    background: var(--secondary-12);
+    border-color: var(--color-secondary);
+}
+
+.answer-option.recommended {
+    border-color: var(--color-success-dim);
+}
+
+.answer-option.recommended::after {
+    content: '★';
+    color: var(--color-success);
+    font-size: 10px;
+    margin-left: auto;
+}
+
+.answer-key {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    background: var(--primary-15);
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-primary);
+    flex-shrink: 0;
+}
+
+.answer-option.selected .answer-key {
+    background: var(--color-secondary);
+    color: var(--bg-deep);
+}
+
+.answer-content {
+    flex: 1;
+}
+
+.answer-label {
+    font-size: 11px;
+    color: var(--color-primary);
+    margin-bottom: 2px;
+}
+
+.answer-rationale {
+    font-size: 10px;
+    color: var(--label-color);
+    line-height: 1.4;
+}
+
+/* Multi-select indicator */
+.multi-select-hint {
+    font-size: 10px;
+    color: var(--color-secondary);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.multi-select-hint::before {
+    content: '◈';
+}
+
+/* Free text input */
+.custom-answer-section {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--primary-10);
+}
+
+.custom-answer-label {
+    font-size: 10px;
+    color: var(--label-color);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+}
+
+.custom-answer-input {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--bg-black-overlay-heavy);
+    border: 1px solid var(--primary-15);
+    border-radius: 4px;
+    color: var(--color-primary);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    resize: vertical;
+    min-height: 60px;
+}
+
+.custom-answer-input:focus {
+    outline: none;
+    border-color: var(--color-secondary);
+}
+
+/* Submit button */
+.action-submit {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+/* Split proposal styles */
+.split-reason {
+    font-size: 11px;
+    color: var(--label-color);
+    margin-bottom: 12px;
+    line-height: 1.5;
+}
+
+.split-tasks {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.split-task-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--bg-black-overlay-medium);
+    border-radius: 4px;
+    border-left: 3px solid var(--color-tertiary);
+}
+
+.split-task-name {
+    flex: 1;
+    font-size: 11px;
+    color: var(--color-primary);
+}
+
+.split-task-effort {
+    padding: 2px 6px;
+    background: var(--tertiary-20);
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--color-tertiary);
+}
+
+/* ========== LOOP MODE TOGGLE ========== */
+.mode-selector {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    background: var(--bg-black-overlay-medium);
+    border-radius: 6px;
+    margin-bottom: 12px;
+}
+
+.mode-option {
+    flex: 1;
+    padding: 8px 12px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--label-color);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.mode-option:hover {
+    color: var(--color-primary-dim);
+}
+
+.mode-option.active {
+    background: var(--primary-20);
+    color: var(--color-primary);
+}
+
+/* Loop status LEDs */
+.loop-status {
+    display: flex;
+    gap: 16px;
+    padding: 10px 12px;
+    background: var(--bg-black-overlay-medium);
+    border-radius: 4px;
+    margin-bottom: 12px;
+}
+
+.loop-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    color: var(--label-color);
+}
+
+.loop-indicator .led {
+    width: 8px;
+    height: 8px;
+}

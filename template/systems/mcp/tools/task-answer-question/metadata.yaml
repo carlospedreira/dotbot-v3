@@ -1,0 +1,14 @@
+name: task_answer_question
+description: Human answers a pending question on a task. Moves task back to analysing for continued analysis.
+inputSchema:
+  type: object
+  properties:
+    task_id:
+      type: string
+      description: "The unique identifier of the task"
+    answer:
+      type: string
+      description: "The answer - either an option key (A, B, C, D, E) or a custom freeform answer"
+  required:
+    - task_id
+    - answer

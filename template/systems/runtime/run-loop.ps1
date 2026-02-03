@@ -494,10 +494,14 @@ try {
         Write-Phosphor "  $($t.Bezel)Name:$($t.Reset) $($t.Cyan)$($taskResult.task.name)$($t.Reset)" -Color Label
         
         $task = $taskResult.task
+        $taskSource = if ($task.status -eq 'analysed') { 'analysed' } else { 'todo' }
+        $hasAnalysis = $taskSource -eq 'analysed'
         
         # Build task card lines
+        $sourceLabel = if ($hasAnalysis) { "$($t.Green)analysed (pre-flight ready)$($t.Reset)" } else { "$($t.Amber)todo (legacy mode)$($t.Reset)" }
         $taskLines = @(
             "$($t.Label)ID:$($t.Reset)       $($t.Purple)$($task.id)$($t.Reset)"
+            "$($t.Label)Source:$($t.Reset)   $sourceLabel"
             "$($t.Label)Category:$($t.Reset) $($t.Cyan)$($task.category)$($t.Reset)"
             "$($t.Label)Priority:$($t.Reset) $($t.Cyan)$($task.priority)$($t.Reset)"
             "$($t.Label)Effort:$($t.Reset)   $($t.Cyan)$($task.effort)$($t.Reset)"
@@ -546,7 +550,8 @@ try {
         # Update session with current task
         Invoke-SessionUpdate -Arguments @{ current_task_id = $task.id } | Out-Null
         $env:DOTBOT_CURRENT_TASK_ID = $task.id
-        Write-ActivityLog -Type "text" -Message "Started task: $($task.name)"
+        $modeLabel = if ($hasAnalysis) { "pre-flight" } else { "legacy" }
+        Write-ActivityLog -Type "text" -Message "Started task ($modeLabel): $($task.name)"
 
         # Build prompt from template
         $prompt = Build-TaskPrompt `

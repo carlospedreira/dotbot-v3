@@ -1,0 +1,74 @@
+name: task_mark_needs_input
+description: Pause analysis pending human input with a structured question (AskUserQuestions pattern). Ask one question at a time.
+inputSchema:
+  type: object
+  properties:
+    task_id:
+      type: string
+      description: "The unique identifier of the task"
+    question:
+      type: object
+      description: "Single structured question following AskUserQuestions pattern. Option A is always the recommended choice."
+      properties:
+        question:
+          type: string
+          description: "Clear, specific question text"
+        context:
+          type: string
+          description: "Background info to help human decide"
+        options:
+          type: array
+          description: "3-5 options, A is always the recommendation"
+          minItems: 3
+          maxItems: 5
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+                enum: ["A", "B", "C", "D", "E"]
+                description: "Option key"
+              label:
+                type: string
+                description: "Option text (A should include 'recommended' tag)"
+              rationale:
+                type: string
+                description: "Brief explanation of pros/cons"
+            required:
+              - key
+              - label
+        recommendation:
+          type: string
+          description: "The recommended option key (should be 'A')"
+          default: "A"
+      required:
+        - question
+        - options
+    split_proposal:
+      type: object
+      description: "If present, this is a proposal to split the task (instead of a question)"
+      properties:
+        reason:
+          type: string
+          description: "Why the task should be split"
+        sub_tasks:
+          type: array
+          description: "Proposed sub-tasks"
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              description:
+                type: string
+              effort:
+                type: string
+                enum: ["XS", "S", "M", "L", "XL"]
+            required:
+              - name
+              - effort
+      required:
+        - reason
+        - sub_tasks
+  required:
+    - task_id

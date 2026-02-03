@@ -12,7 +12,7 @@ function updateUI(state) {
     updateTaskCounts(state.tasks);
     updateProgressPercent(state.tasks);
     updateSessionInfo(state.session);
-    updateRunningStatus(state.session, state.control);
+    updateRunningStatus(state.session, state.control, state.analysis);
     updateCurrentTask(state.tasks.current);
     updateUpcomingTasks(state.tasks.upcoming);
     updateCompletedTasks(state.tasks.recent_completed);
@@ -40,13 +40,26 @@ function updateTimestamp() {
  * @param {Object} tasks - Tasks object from state
  */
 function updateTaskCounts(tasks) {
+    // Overview stats
     setElementText('todo-count', tasks.todo);
     setElementText('progress-count', tasks.in_progress);
     setElementText('done-count', tasks.done);
 
+    // Pipeline counts - Analysis stage
     setElementText('pipeline-todo-count', tasks.todo);
+    setElementText('pipeline-analysing-count', tasks.analysing || 0);
+    setElementText('pipeline-needs-input-count', tasks.needs_input || 0);
+    setElementText('pipeline-analysed-count', tasks.analysed || 0);
+    
+    // Pipeline counts - Execution stage
+    setElementText('pipeline-ready-count', tasks.analysed || 0);  // Ready = Analysed (shared)
     setElementText('pipeline-progress-count', tasks.in_progress);
     setElementText('pipeline-done-count', tasks.done);
+    
+    // Update action widget
+    if (typeof updateActionWidget === 'function') {
+        updateActionWidget(tasks.action_required || 0);
+    }
 }
 
 /**
@@ -54,7 +67,9 @@ function updateTaskCounts(tasks) {
  * @param {Object} tasks - Tasks object from state
  */
 function updateProgressPercent(tasks) {
-    const total = tasks.todo + tasks.in_progress + tasks.done;
+    // Include all statuses in total for accurate progress
+    const total = (tasks.todo || 0) + (tasks.analysing || 0) + (tasks.needs_input || 0) + 
+                  (tasks.analysed || 0) + (tasks.in_progress || 0) + (tasks.done || 0);
     const percent = total > 0 ? Math.round((tasks.done / total) * 100) : 0;
     setElementText('progress-percent', `${percent}%`);
 }
@@ -106,12 +121,33 @@ function updateSessionInfo(session) {
  * Update running status indicators
  * @param {Object} session - Session object from state
  * @param {Object} control - Control object from state
+ * @param {Object} analysis - Analysis loop state (optional)
  */
-function updateRunningStatus(session, control) {
+function updateRunningStatus(session, control, analysis) {
     const runningLed = document.getElementById('running-led');
     const runningStatus = document.getElementById('running-status');
     const agentLed = document.getElementById('agent-led');
     const agentState = document.getElementById('agent-state');
+    
+    // Update loop status LEDs
+    const analysisLed = document.getElementById('analysis-loop-led');
+    const executionLed = document.getElementById('execution-loop-led');
+    
+    if (analysisLed) {
+        if (analysis?.running) {
+            analysisLed.className = 'led pulse';
+        } else {
+            analysisLed.className = 'led off';
+        }
+    }
+    
+    if (executionLed) {
+        if (control?.running) {
+            executionLed.className = 'led pulse';
+        } else {
+            executionLed.className = 'led off';
+        }
+    }
 
     if (!session) {
         if (runningLed) runningLed.className = 'led off';

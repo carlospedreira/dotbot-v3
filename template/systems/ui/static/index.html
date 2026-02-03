@@ -78,6 +78,23 @@
                                 </div>
                                 <div class="agent-task" id="agent-current-task">No active task</div>
                             </div>
+                            <!-- Loop Mode Selector -->
+                            <div class="mode-selector" id="mode-selector">
+                                <button class="mode-option" data-mode="analysis">Analysis</button>
+                                <button class="mode-option active" data-mode="execution">Execution</button>
+                                <button class="mode-option" data-mode="both">Both</button>
+                            </div>
+                            <!-- Loop Status LEDs -->
+                            <div class="loop-status">
+                                <div class="loop-indicator">
+                                    <span class="led off" id="analysis-loop-led"></span>
+                                    <span>Analysis</span>
+                                </div>
+                                <div class="loop-indicator">
+                                    <span class="led off" id="execution-loop-led"></span>
+                                    <span>Execution</span>
+                                </div>
+                            </div>
                             <div class="control-buttons" id="controls">
                                 <button class="ctrl-btn primary" data-action="start">PLAY</button>
                                 <button class="ctrl-btn" data-action="pause">PAUSE</button>
@@ -192,6 +209,18 @@
                                 <div class="summary-item todo">
                                     <span class="summary-label">Todo</span>
                                     <span class="count-badge" data-status="todo" id="context-todo-count">-</span>
+                                </div>
+                                <div class="summary-item analysing">
+                                    <span class="summary-label">Analysing</span>
+                                    <span class="count-badge" id="context-analysing-count">-</span>
+                                </div>
+                                <div class="summary-item needs-input">
+                                    <span class="summary-label">Needs Input</span>
+                                    <span class="count-badge" id="context-needs-input-count">-</span>
+                                </div>
+                                <div class="summary-item analysed">
+                                    <span class="summary-label">Analysed</span>
+                                    <span class="count-badge" id="context-analysed-count">-</span>
                                 </div>
                                 <div class="summary-item in-progress">
                                     <span class="summary-label">In Progress</span>
@@ -352,41 +381,107 @@
 
                     <!-- Pipeline Tab -->
                     <div class="tab-pane" id="tab-pipeline">
-                        <div class="pipeline-container">
-                            <!-- Todo Column -->
-                            <div class="pipeline-column">
-                                <div class="column-header">
-                                    <span class="column-label">◇ Todo</span>
-                                    <span class="column-count" id="pipeline-todo-count">0</span>
+                        <div class="pipeline-wrapper">
+                            <!-- Analysis Pipeline Stage -->
+                            <div class="pipeline-stage">
+                                <div class="pipeline-stage-header">
+                                    <span class="pipeline-stage-title analysis">◈ Analysis Pipeline</span>
                                 </div>
-                                <div class="column-items" id="pipeline-todo">
-                                    <div class="loading-state">Loading...</div>
+                                <div class="pipeline-container">
+                                    <!-- Todo Column -->
+                                    <div class="pipeline-column">
+                                        <div class="column-header">
+                                            <span class="column-label">◇ Todo</span>
+                                            <span class="column-count" id="pipeline-todo-count">0</span>
+                                        </div>
+                                        <div class="column-items" id="pipeline-todo">
+                                            <div class="loading-state">Loading...</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="flow-arrow">→</div>
+
+                                    <!-- Analysing Column -->
+                                    <div class="pipeline-column">
+                                        <div class="column-header">
+                                            <span class="column-label">◈ Analysing</span>
+                                            <span class="column-count" id="pipeline-analysing-count">0</span>
+                                        </div>
+                                        <div class="column-items" id="pipeline-analysing">
+                                            <div class="empty-state">No tasks</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="flow-arrow">→</div>
+
+                                    <!-- Needs Input Column -->
+                                    <div class="pipeline-column highlight">
+                                        <div class="column-header">
+                                            <span class="column-label">⚡ Needs Input</span>
+                                            <span class="column-count" id="pipeline-needs-input-count">0</span>
+                                        </div>
+                                        <div class="column-items" id="pipeline-needs-input">
+                                            <div class="empty-state">No tasks</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="flow-arrow">→</div>
+
+                                    <!-- Analysed Column -->
+                                    <div class="pipeline-column">
+                                        <div class="column-header">
+                                            <span class="column-label">✓ Analysed</span>
+                                            <span class="column-count" id="pipeline-analysed-count">0</span>
+                                        </div>
+                                        <div class="column-items" id="pipeline-analysed">
+                                            <div class="empty-state">No tasks</div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div class="flow-arrow">→</div>
-
-                            <!-- In Progress Column -->
-                            <div class="pipeline-column highlight">
-                                <div class="column-header">
-                                    <span class="column-label">◈ In Progress</span>
-                                    <span class="column-count" id="pipeline-progress-count">0</span>
+                            <!-- Execution Pipeline Stage -->
+                            <div class="pipeline-stage">
+                                <div class="pipeline-stage-header">
+                                    <span class="pipeline-stage-title execution">◈ Execution Pipeline</span>
                                 </div>
-                                <div class="column-items" id="pipeline-progress">
-                                    <div class="empty-state">No active tasks</div>
-                                </div>
-                            </div>
+                                <div class="pipeline-container">
+                                    <!-- Analysed Column (shared input) -->
+                                    <div class="pipeline-column">
+                                        <div class="column-header">
+                                            <span class="column-label">◇ Ready</span>
+                                            <span class="column-count" id="pipeline-ready-count">0</span>
+                                        </div>
+                                        <div class="column-items" id="pipeline-ready">
+                                            <div class="empty-state">No tasks</div>
+                                        </div>
+                                    </div>
 
-                            <div class="flow-arrow">→</div>
+                                    <div class="flow-arrow">→</div>
 
-                            <!-- Done Column -->
-                            <div class="pipeline-column">
-                                <div class="column-header">
-                                    <span class="column-label">✓ Done</span>
-                                    <span class="column-count" id="pipeline-done-count">0</span>
-                                </div>
-                                <div class="column-items" id="pipeline-done">
-                                    <div class="loading-state">Loading...</div>
+                                    <!-- In Progress Column -->
+                                    <div class="pipeline-column highlight">
+                                        <div class="column-header">
+                                            <span class="column-label">◈ In Progress</span>
+                                            <span class="column-count" id="pipeline-progress-count">0</span>
+                                        </div>
+                                        <div class="column-items" id="pipeline-progress">
+                                            <div class="empty-state">No active tasks</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="flow-arrow">→</div>
+
+                                    <!-- Done Column -->
+                                    <div class="pipeline-column">
+                                        <div class="column-header">
+                                            <span class="column-label">✓ Done</span>
+                                            <span class="column-count" id="pipeline-done-count">0</span>
+                                        </div>
+                                        <div class="column-items" id="pipeline-done">
+                                            <div class="loading-state">Loading...</div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -609,6 +704,25 @@
         </div>
     </div>
 
+    <!-- Action Required Floating Widget -->
+    <div class="action-widget hidden" id="action-widget">
+        <span class="action-widget-icon">⚡</span>
+        <span class="action-widget-label">Action Required</span>
+        <span class="action-widget-count" id="action-widget-count">0</span>
+    </div>
+
+    <!-- Slide-out Panel for Actions -->
+    <div class="slideout-overlay" id="slideout-overlay"></div>
+    <div class="slideout-panel" id="slideout-panel">
+        <div class="slideout-header">
+            <span class="slideout-title">◈ Action Required</span>
+            <button class="slideout-close" id="slideout-close">×</button>
+        </div>
+        <div class="slideout-content" id="slideout-content">
+            <div class="empty-state">No pending actions</div>
+        </div>
+    </div>
+
     <!-- Plan Viewer Modal -->
     <div class="modal-overlay" id="plan-modal">
         <div class="modal modal-wide">
@@ -644,6 +758,7 @@
     <script src="modules/activity.js"></script>
     <script src="modules/polling.js"></script>
     <script src="modules/ui-updates.js"></script>
+    <script src="modules/actions.js"></script>
     <script src="modules/aether.js"></script>
 
     <!-- Main entry point (must be last) -->
