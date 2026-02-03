@@ -4,7 +4,7 @@
     Initialize .bot in the current project
 
 .DESCRIPTION
-    Copies the template .bot structure to the current project directory.
+    Copies the default .bot structure to the current project directory.
     Optionally installs a profile for tech-specific features.
 
 .PARAMETER Profile
@@ -18,11 +18,11 @@
 
 .EXAMPLE
     init-project.ps1
-    Installs base template only.
+    Installs base default only.
 
 .EXAMPLE
     init-project.ps1 -Profile dotnet
-    Installs base template + dotnet profile.
+    Installs base default + dotnet profile.
 #>
 
 [CmdletBinding()]
@@ -35,7 +35,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $DotbotBase = Join-Path $HOME "dotbot"
-$TemplateDir = Join-Path $DotbotBase "template"
+$DefaultDir = Join-Path $DotbotBase "profiles\default"
 $ProjectDir = Get-Location
 $BotDir = Join-Path $ProjectDir ".bot"
 
@@ -51,9 +51,9 @@ Write-Host ""
 Write-Host "═══════════════════════════════════════════════════════════" -ForegroundColor Blue
 Write-Host ""
 
-# Check if template exists
-if (-not (Test-Path $TemplateDir)) {
-    Write-Error "Template directory not found: $TemplateDir"
+# Check if default exists
+if (-not (Test-Path $DefaultDir)) {
+    Write-Error "Default directory not found: $DefaultDir"
     Write-Host "  Run 'dotbot update' to repair installation" -ForegroundColor Yellow
     exit 1
 }
@@ -69,7 +69,7 @@ if ((Test-Path $BotDir) -and -not $Force) {
 Write-Status "Initializing .bot in: $ProjectDir"
 
 if ($DryRun) {
-    Write-Host "  Would copy template from: $TemplateDir" -ForegroundColor Yellow
+    Write-Host "  Would copy default from: $DefaultDir" -ForegroundColor Yellow
     Write-Host "  Would copy to: $BotDir" -ForegroundColor Yellow
     Write-Host ""
     exit 0
@@ -81,9 +81,9 @@ if ((Test-Path $BotDir) -and $Force) {
     Remove-Item -Path $BotDir -Recurse -Force
 }
 
-# Copy template to .bot
-Write-Status "Copying template files"
-Copy-Item -Path $TemplateDir -Destination $BotDir -Recurse -Force
+# Copy default to .bot
+Write-Status "Copying default files"
+Copy-Item -Path $DefaultDir -Destination $BotDir -Recurse -Force
 
 # Create empty workspace directories
 $workspaceDirs = @(
@@ -131,7 +131,7 @@ if ($Profile -and $Profile.Count -gt 0) {
         
         Write-Status "Installing profile: $profileName"
         
-        # Copy profile files (overlay on top of template)
+        # Copy profile files (overlay on top of default)
         Get-ChildItem -Path $profileDir -Recurse -File | ForEach-Object {
             $relativePath = $_.FullName.Substring($profileDir.Length + 1)
             $destPath = Join-Path $BotDir $relativePath
