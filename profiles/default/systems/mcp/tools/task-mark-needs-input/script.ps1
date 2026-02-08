@@ -1,8 +1,11 @@
+# Import session tracking module
+Import-Module "$PSScriptRoot\..\..\modules\SessionTracking.psm1" -Force
+
 function Invoke-TaskMarkNeedsInput {
     param(
         [hashtable]$Arguments
     )
-    
+
     # Extract arguments
     $taskId = $Arguments['task_id']
     $question = $Arguments['question']
@@ -53,7 +56,13 @@ function Invoke-TaskMarkNeedsInput {
     # Update task properties
     $taskContent.status = 'needs-input'
     $taskContent.updated_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
-    
+
+    # Close current Claude session (marks session as ended but preserves session_id for resumption)
+    $claudeSessionId = $env:CLAUDE_SESSION_ID
+    if ($claudeSessionId) {
+        Close-SessionOnTask -TaskContent $taskContent -SessionId $claudeSessionId -Phase 'analysis'
+    }
+
     # Initialize questions_resolved array if it doesn't exist
     if (-not $taskContent.PSObject.Properties['questions_resolved']) {
         $taskContent | Add-Member -NotePropertyName 'questions_resolved' -NotePropertyValue @() -Force

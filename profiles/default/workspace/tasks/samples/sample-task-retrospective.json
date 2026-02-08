@@ -1,0 +1,92 @@
+{
+  "_comment": "SAMPLE TASK FILE FOR RETROSPECTIVE DOCUMENTATION",
+  "_instructions": "Copy this template, replace placeholder values, save to .bot/workspace/tasks/done/{task-name}-{task-id}.json",
+
+  "id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "_id_note": "Generate a UUID. The first 8 chars become the short task ID used in filenames.",
+
+  "name": "Short descriptive task name",
+  "_name_note": "Human-readable title, used in reports and logs.",
+
+  "description": "Detailed description of what was accomplished.\n\nInclude:\n- Problem being solved\n- Approach taken\n- Key decisions made",
+  "_description_note": "Can be multi-line. Provide enough context for someone unfamiliar with the work.",
+
+  "category": "feature",
+  "_category_note": "One of: feature, bugfix, refactor, infrastructure, documentation",
+
+  "status": "done",
+  "_status_note": "For retrospectives, always 'done'.",
+
+  "priority": 10,
+  "_priority_note": "1-100, lower = higher priority. Use 10 for typical work.",
+
+  "effort": "M",
+  "_effort_note": "T-shirt size: XS, S, M, L, XL",
+
+  "created_at": "2026-01-26T10:00:00Z",
+  "started_at": "2026-01-26T10:00:00Z",
+  "completed_at": "2026-01-26T12:00:00Z",
+  "_timestamps_note": "MUST use ISO 8601 UTC format: yyyy-MM-ddTHH:mm:ssZ (e.g., 2026-01-26T10:00:00Z). Do NOT use locale formats like dd/MM/yyyy or MM/dd/yyyy.",
+
+  "plan_path": ".bot/workspace/plans/{task-name}-{task-id}-plan.md",
+  "_plan_path_note": "REQUIRED: Link to the corresponding plan file. Use same task-name and task-id as this file.",
+
+  "steps": [
+    "Step 1: What was done first",
+    "Step 2: What was done next",
+    "Step 3: Final steps"
+  ],
+  "_steps_note": "High-level steps that were taken. Keep concise.",
+
+  "acceptance_criteria": [
+    "Criterion 1: What needed to be true for success",
+    "Criterion 2: Another success condition"
+  ],
+  "_acceptance_criteria_note": "How you knew the work was complete.",
+
+  "files_created": [
+    "path/to/new/file.cs"
+  ],
+  "_files_created_note": "List of files created during this work. Use relative paths from repo root.",
+
+  "files_modified": [
+    "path/to/modified/file.cs"
+  ],
+  "_files_modified_note": "List of files modified during this work.",
+
+  "files_deleted": [],
+  "_files_deleted_note": "List of files deleted during this work. Empty array if none.",
+
+  "commits": [
+    {
+      "commit_sha": "abc123...",
+      "commit_subject": "First line of commit message",
+      "commit_message": "Full commit message including body",
+      "commit_timestamp": "2026-01-26T11:00:00+00:00",
+      "files_created": [],
+      "files_modified": ["path/to/file.cs"],
+      "files_deleted": []
+    }
+  ],
+  "_commits_note": "OPTIONAL: Array of commits associated with this work. Include if available.",
+
+  "dependencies": [],
+  "_dependencies_note": "Task IDs this work depended on. Usually empty for retrospectives.",
+
+  "applicable_standards": [],
+  "_applicable_standards_note": "Paths to .bot/standards/ files that were followed.",
+
+  "applicable_agents": [],
+  "_applicable_agents_note": "Agent personas used (e.g., 'implementer', 'tester').",
+
+  "execution_activity_log": [],
+  "_execution_activity_log_note": "OPTIONAL: Detailed timeline of execution actions. Populated automatically by the executor.",
+
+  "analysis": {
+    "entities": { "primary": [], "related": [], "context_summary": "" },
+    "files": { "to_modify": [], "patterns_from": [], "tests_to_update": [] },
+    "implementation": { "approach": "", "key_patterns": "", "risks": [], "estimated_tokens": 0 },
+    "analysis_activity_log": []
+  },
+  "_analysis_note": "OPTIONAL: Pre-flight analysis data. Populated by the analyser agent."
+}

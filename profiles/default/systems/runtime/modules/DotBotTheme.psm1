@@ -1,10 +1,39 @@
 # DOTBOT Control Panel - PowerShell Theme
-# Oscilloscope aesthetic with Axiome amber accents
-# Reads colors from theme-config.json for consistency with UI
+# Oscilloscope aesthetic with configurable color themes
+# Reads selected theme from ui-settings.json, colors from theme-config.json
 
-# Helper function to load theme configuration
-function Get-ThemeFromConfig {
-    # Read from UI theme config (synced with web UI), fallback to defaults
+# Track last modification time to avoid unnecessary re-reads
+$script:LastThemeCheckTime = $null
+$script:LastThemeFileTime = $null
+$script:UiSettingsPath = $null
+
+# Helper function to get the selected theme name from ui-settings.json
+function Get-SelectedThemeName {
+    if (-not $script:UiSettingsPath) {
+        $script:UiSettingsPath = Join-Path $PSScriptRoot "..\..\..\.control\ui-settings.json"
+        # Normalize path (handle relative traversal)
+        $script:UiSettingsPath = [System.IO.Path]::GetFullPath($script:UiSettingsPath)
+    }
+
+    if (-not (Test-Path $script:UiSettingsPath)) {
+        return "amber"  # Default theme
+    }
+
+    try {
+        $settings = Get-Content $script:UiSettingsPath -Raw | ConvertFrom-Json
+        if ($settings.theme) {
+            return $settings.theme
+        }
+        return "amber"  # Default if theme not set
+    } catch {
+        return "amber"  # Default on error
+    }
+}
+
+# Helper function to load theme preset from theme-config.json
+function Get-ThemePreset {
+    param([string]$ThemeName)
+
     $uiThemePath = Join-Path $PSScriptRoot "..\..\ui\static\theme-config.json"
     $defaultThemePath = Join-Path $PSScriptRoot "..\..\..\defaults\theme.default.json"
 
@@ -13,30 +42,128 @@ function Get-ThemeFromConfig {
 
     try {
         $config = Get-Content $configPath -Raw | ConvertFrom-Json
-        return $config.mappings
+        $preset = $config.presets.$ThemeName
+        if (-not $preset) {
+            # Fall back to amber if requested theme not found
+            $preset = $config.presets.amber
+        }
+        return $preset
     } catch {
         return $null
     }
 }
 
-# Try to load from config, fall back to hardcoded values
-$configMappings = Get-ThemeFromConfig
+# Helper function to build theme from preset
+function Build-ThemeFromPreset {
+    param([object]$Preset)
 
-if ($configMappings) {
-    # Build theme from config file
+    return @{
+        # Primary semantic colors from preset
+        Primary     = $PSStyle.Foreground.FromRgb($Preset.primary[0], $Preset.primary[1], $Preset.primary[2])
+        PrimaryDim  = $PSStyle.Foreground.FromRgb($Preset.'primary-dim'[0], $Preset.'primary-dim'[1], $Preset.'primary-dim'[2])
+        Secondary   = $PSStyle.Foreground.FromRgb($Preset.secondary[0], $Preset.secondary[1], $Preset.secondary[2])
+        Tertiary    = $PSStyle.Foreground.FromRgb($Preset.tertiary[0], $Preset.tertiary[1], $Preset.tertiary[2])
+        Success     = $PSStyle.Foreground.FromRgb($Preset.success[0], $Preset.success[1], $Preset.success[2])
+        SuccessDim  = $PSStyle.Foreground.FromRgb($Preset.'success-dim'[0], $Preset.'success-dim'[1], $Preset.'success-dim'[2])
+        Error       = $PSStyle.Foreground.FromRgb($Preset.error[0], $Preset.error[1], $Preset.error[2])
+        Warning     = $PSStyle.Foreground.FromRgb($Preset.warning[0], $Preset.warning[1], $Preset.warning[2])
+        Info        = $PSStyle.Foreground.FromRgb($Preset.info[0], $Preset.info[1], $Preset.info[2])
+        Muted       = $PSStyle.Foreground.FromRgb($Preset.muted[0], $Preset.muted[1], $Preset.muted[2])
+        Bezel       = $PSStyle.Foreground.FromRgb($Preset.bezel[0], $Preset.bezel[1], $Preset.bezel[2])
+        Reset       = $PSStyle.Reset
+    }
+}
+
+# Helper function to build fallback theme (hardcoded amber)
+function Build-FallbackTheme {
+    return @{
+        # Primary phosphor colors (hardcoded fallback)
+        Amber       = $PSStyle.Foreground.FromRgb(232, 160, 48)   # #e8a030
+        AmberDim    = $PSStyle.Foreground.FromRgb(184, 120, 32)   # #b87820
+        Green       = $PSStyle.Foreground.FromRgb(0, 255, 136)    # #00ff88
+        GreenDim    = $PSStyle.Foreground.FromRgb(0, 170, 92)     # #00aa5c
+        Cyan        = $PSStyle.Foreground.FromRgb(95, 179, 179)   # #5fb3b3
+        Red         = $PSStyle.Foreground.FromRgb(209, 105, 105)  # #d16969
+        Blue        = $PSStyle.Foreground.FromRgb(68, 136, 255)   # #4488ff
+        Purple      = $PSStyle.Foreground.FromRgb(170, 136, 255)  # #aa88ff
+
+        # UI chrome colors
+        Label       = $PSStyle.Foreground.FromRgb(136, 136, 153)  # #888899
+        Bezel       = $PSStyle.Foreground.FromRgb(58, 59, 72)     # #3a3b48
+
+        Reset       = $PSStyle.Reset
+    }
+}
+
+# Helper function to add legacy aliases to theme
+function Add-LegacyAliases {
+    param([hashtable]$Theme, [bool]$FromPreset)
+
+    if ($FromPreset) {
+        # Legacy aliases for backward compatibility (preset has semantic names)
+        $Theme.Amber     = $Theme.Primary
+        $Theme.AmberDim  = $Theme.PrimaryDim
+        $Theme.Green     = $Theme.Success
+        $Theme.GreenDim  = $Theme.SuccessDim
+        $Theme.Cyan      = $Theme.Secondary
+        $Theme.Red       = $Theme.Error
+        $Theme.Blue      = $Theme.Info
+        $Theme.Purple    = $Theme.Tertiary
+        $Theme.Label     = $Theme.Muted
+    } else {
+        # Semantic aliases matching CSS usage (fallback has legacy names)
+        $Theme.Primary   = $Theme.Amber
+        $Theme.PrimaryDim = $Theme.AmberDim
+        $Theme.Secondary = $Theme.Cyan
+        $Theme.Tertiary  = $Theme.Purple
+        $Theme.Success   = $Theme.Green
+        $Theme.SuccessDim = $Theme.GreenDim
+        $Theme.Error     = $Theme.Red
+        $Theme.Warning   = $Theme.Amber
+        $Theme.Info      = $Theme.Cyan
+        $Theme.Muted     = $Theme.Label
+    }
+}
+
+# Core function to load/reload the theme
+function Initialize-Theme {
+    $selectedTheme = Get-SelectedThemeName
+    $themePreset = Get-ThemePreset -ThemeName $selectedTheme
+
+    if ($themePreset) {
+        $script:Theme = Build-ThemeFromPreset -Preset $themePreset
+        Add-LegacyAliases -Theme $script:Theme -FromPreset $true
+    } else {
+        $script:Theme = Build-FallbackTheme
+        Add-LegacyAliases -Theme $script:Theme -FromPreset $false
+    }
+
+    # Update tracking timestamps
+    if ($script:UiSettingsPath -and (Test-Path $script:UiSettingsPath)) {
+        $script:LastThemeFileTime = (Get-Item $script:UiSettingsPath).LastWriteTimeUtc
+    }
+    $script:LastThemeCheckTime = [DateTime]::UtcNow
+}
+
+# Get selected theme and load its colors
+$selectedTheme = Get-SelectedThemeName
+$themePreset = Get-ThemePreset -ThemeName $selectedTheme
+
+if ($themePreset) {
+    # Build theme from preset (array format: [R, G, B])
     $script:Theme = @{
-        # Primary semantic colors from config
-        Primary     = $PSStyle.Foreground.FromRgb($configMappings.primary.r, $configMappings.primary.g, $configMappings.primary.b)
-        PrimaryDim  = $PSStyle.Foreground.FromRgb($configMappings.'primary-dim'.r, $configMappings.'primary-dim'.g, $configMappings.'primary-dim'.b)
-        Secondary   = $PSStyle.Foreground.FromRgb($configMappings.secondary.r, $configMappings.secondary.g, $configMappings.secondary.b)
-        Tertiary    = $PSStyle.Foreground.FromRgb($configMappings.tertiary.r, $configMappings.tertiary.g, $configMappings.tertiary.b)
-        Success     = $PSStyle.Foreground.FromRgb($configMappings.success.r, $configMappings.success.g, $configMappings.success.b)
-        SuccessDim  = $PSStyle.Foreground.FromRgb($configMappings.'success-dim'.r, $configMappings.'success-dim'.g, $configMappings.'success-dim'.b)
-        Error       = $PSStyle.Foreground.FromRgb($configMappings.error.r, $configMappings.error.g, $configMappings.error.b)
-        Warning     = $PSStyle.Foreground.FromRgb($configMappings.warning.r, $configMappings.warning.g, $configMappings.warning.b)
-        Info        = $PSStyle.Foreground.FromRgb($configMappings.info.r, $configMappings.info.g, $configMappings.info.b)
-        Muted       = $PSStyle.Foreground.FromRgb($configMappings.muted.r, $configMappings.muted.g, $configMappings.muted.b)
-        Bezel       = $PSStyle.Foreground.FromRgb($configMappings.bezel.r, $configMappings.bezel.g, $configMappings.bezel.b)
+        # Primary semantic colors from preset
+        Primary     = $PSStyle.Foreground.FromRgb($themePreset.primary[0], $themePreset.primary[1], $themePreset.primary[2])
+        PrimaryDim  = $PSStyle.Foreground.FromRgb($themePreset.'primary-dim'[0], $themePreset.'primary-dim'[1], $themePreset.'primary-dim'[2])
+        Secondary   = $PSStyle.Foreground.FromRgb($themePreset.secondary[0], $themePreset.secondary[1], $themePreset.secondary[2])
+        Tertiary    = $PSStyle.Foreground.FromRgb($themePreset.tertiary[0], $themePreset.tertiary[1], $themePreset.tertiary[2])
+        Success     = $PSStyle.Foreground.FromRgb($themePreset.success[0], $themePreset.success[1], $themePreset.success[2])
+        SuccessDim  = $PSStyle.Foreground.FromRgb($themePreset.'success-dim'[0], $themePreset.'success-dim'[1], $themePreset.'success-dim'[2])
+        Error       = $PSStyle.Foreground.FromRgb($themePreset.error[0], $themePreset.error[1], $themePreset.error[2])
+        Warning     = $PSStyle.Foreground.FromRgb($themePreset.warning[0], $themePreset.warning[1], $themePreset.warning[2])
+        Info        = $PSStyle.Foreground.FromRgb($themePreset.info[0], $themePreset.info[1], $themePreset.info[2])
+        Muted       = $PSStyle.Foreground.FromRgb($themePreset.muted[0], $themePreset.muted[1], $themePreset.muted[2])
+        Bezel       = $PSStyle.Foreground.FromRgb($themePreset.bezel[0], $themePreset.bezel[1], $themePreset.bezel[2])
 
         Reset       = $PSStyle.Reset
     }
@@ -52,7 +179,7 @@ if ($configMappings) {
     $script:Theme.Purple    = $script:Theme.Tertiary
     $script:Theme.Label     = $script:Theme.Muted
 } else {
-    # Fallback to hardcoded values if config not found
+    # Fallback to hardcoded amber values if config not found
     $script:Theme = @{
         # Primary phosphor colors (hardcoded fallback)
         Amber       = $PSStyle.Foreground.FromRgb(232, 160, 48)   # #e8a030
@@ -90,6 +217,59 @@ function Get-DotBotTheme {
     Returns the DOTBOT theme hashtable for direct use
     #>
     return $script:Theme
+}
+
+function Update-DotBotTheme {
+    <#
+    .SYNOPSIS
+    Update the theme if ui-settings.json has changed since last read.
+    Call this at natural breakpoints (between tasks, on pause/resume).
+
+    .DESCRIPTION
+    Checks if the ui-settings.json file has been modified since the last theme load.
+    If so, reloads the theme. This allows theme changes in the browser UI to be
+    reflected in console output without restarting scripts.
+
+    .PARAMETER Force
+    Force a theme reload regardless of file modification time.
+
+    .OUTPUTS
+    Returns $true if theme was updated, $false if no update was needed.
+
+    .EXAMPLE
+    Update-DotBotTheme
+
+    .EXAMPLE
+    Update-DotBotTheme -Force
+    #>
+    param(
+        [switch]$Force
+    )
+
+    # Ensure settings path is initialized
+    if (-not $script:UiSettingsPath) {
+        $script:UiSettingsPath = Join-Path $PSScriptRoot "..\..\..\.control\ui-settings.json"
+        $script:UiSettingsPath = [System.IO.Path]::GetFullPath($script:UiSettingsPath)
+    }
+
+    # If file doesn't exist, nothing to refresh
+    if (-not (Test-Path $script:UiSettingsPath)) {
+        return $false
+    }
+
+    # Check if refresh is needed
+    $currentFileTime = (Get-Item $script:UiSettingsPath).LastWriteTimeUtc
+
+    if (-not $Force) {
+        # Skip if file hasn't changed since last read
+        if ($script:LastThemeFileTime -and $currentFileTime -le $script:LastThemeFileTime) {
+            return $false
+        }
+    }
+
+    # Reload theme
+    Initialize-Theme
+    return $true
 }
 
 function Write-Phosphor {
@@ -680,6 +860,7 @@ function Write-Panel {
 # Export functions
 Export-ModuleMember -Function @(
     'Get-DotBotTheme'
+    'Update-DotBotTheme'
     'Write-Phosphor'
     'Write-Status'
     'Write-Label'

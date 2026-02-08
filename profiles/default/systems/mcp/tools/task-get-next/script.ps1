@@ -41,8 +41,8 @@ function Invoke-TaskGetNext {
         }
     }
     
-    # Fall back to todo tasks if no analysed tasks
-    if (-not $nextTask) {
+    # Only fall back to todo tasks when not preferring analysed
+    if (-not $nextTask -and -not $preferAnalysed) {
         $nextTask = Get-NextTask
         $taskStatus = 'todo'
     }
@@ -88,6 +88,7 @@ function Invoke-TaskGetNext {
             applicable_agents = $nextTask.applicable_agents
             applicable_standards = $nextTask.applicable_standards
             file_path = $nextTask.file_path
+            needs_interview = $nextTask.needs_interview
         }
     } else {
         $taskObj = @{

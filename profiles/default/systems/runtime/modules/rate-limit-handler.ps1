@@ -103,19 +103,27 @@ function Wait-ForRateLimitReset {
     <#
     .SYNOPSIS
     Waits until the rate limit resets with countdown display
-    
+
     .PARAMETER RateLimitInfo
     The rate limit info from Get-RateLimitResetTime
-    
+
     .PARAMETER ControlDir
     Directory to check for control signals
+
+    .PARAMETER LoopType
+    Optional loop type ('analysis' or 'execution') for loop-specific stop signals.
+    If specified, checks for stop-{LoopType}.signal instead of generic stop.signal.
     #>
     param(
         [Parameter(Mandatory = $true)]
         [hashtable]$RateLimitInfo,
-        
+
         [Parameter(Mandatory = $false)]
-        [string]$ControlDir
+        [string]$ControlDir,
+
+        [Parameter(Mandatory = $false)]
+        [ValidateSet('analysis', 'execution')]
+        [string]$LoopType
     )
     
     # Import theme if not already available
@@ -169,8 +177,9 @@ function Wait-ForRateLimitReset {
         
         Write-Host "`r$($t.Label)Time remaining:$($t.Reset) $($t.Cyan)$($remainingHours.ToString('00')):$($remainingMin.ToString('00')):$($remainingSec.ToString('00'))$($t.Reset)   " -NoNewline
         
-        # Check for stop signal every second
-        if ($ControlDir -and (Test-Path (Join-Path $ControlDir "stop.signal"))) {
+        # Check for stop signal every second (use loop-specific if LoopType provided)
+        $stopSignalFile = if ($LoopType) { "stop-$LoopType.signal" } else { "stop.signal" }
+        if ($ControlDir -and (Test-Path (Join-Path $ControlDir $stopSignalFile))) {
             Write-Host ""
             Write-Status "Stop signal received during rate limit wait" -Type Error
             return "stop"

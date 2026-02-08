@@ -14,6 +14,12 @@ let lastState = null;
 let pollTimer = null;
 let sessionStartTime = null;
 let runtimeTimer = null;
+
+// Timer pause/resume state
+let sessionTimerElapsed = 0;       // Accumulated elapsed ms (frozen when paused)
+let sessionTimerLastResumed = null; // Date when timer last started/resumed running
+let sessionTimerStatus = null;      // Previous session status for detecting transitions
+let sessionTimerSessionId = null;   // Track session ID to detect new sessions
 let projectName = 'unknown';
 let projectRoot = 'unknown';
 let executiveSummary = null;

@@ -9,7 +9,7 @@
     }
 
     .stats-row {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(3, 1fr);
     }
 
     .two-column {
@@ -18,6 +18,10 @@
 }
 
 @media (max-width: 900px) {
+    .stats-row {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
     .main-layout {
         grid-template-columns: 1fr;
     }

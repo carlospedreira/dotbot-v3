@@ -76,8 +76,27 @@ $modelMap = @{
 $claudeModelName = $modelMap[$Model]
 $env:CLAUDE_MODEL = $claudeModelName
 
+# Set phase for activity logging - all activity in this loop is 'execution' phase
+$env:DOTBOT_CURRENT_PHASE = 'execution'
+
 # Control directory for signal files (.bot/.control - run-loop is at .bot/systems/runtime)
 $controlDir = Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) ".control"
+
+# Load settings for execution model
+$settingsPath = Join-Path $PSScriptRoot "..\..\defaults\settings.default.json"
+$settings = @{ execution = @{ model = 'Opus' } }
+if (Test-Path $settingsPath) {
+    try {
+        $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
+    } catch {
+        Write-Warning "Failed to load settings: $_"
+    }
+}
+
+# Determine model (parameter overrides settings)
+if (-not $PSBoundParameters.ContainsKey('Model')) {
+    $Model = if ($settings.execution -and $settings.execution.model) { $settings.execution.model } else { 'Opus' }
+}
 
 # Import ClaudeCLI module
 Import-Module "$PSScriptRoot\ClaudeCLI\ClaudeCLI.psm1" -Force
@@ -92,6 +111,7 @@ $t = Get-DotBotTheme
 
 # Import TaskIndexCache (no caching - always reads fresh)
 Import-Module "$PSScriptRoot\..\mcp\modules\TaskIndexCache.psm1" -Force
+Import-Module "$PSScriptRoot\..\mcp\modules\SessionTracking.psm1" -Force
 . "$PSScriptRoot\modules\cleanup.ps1"
 . "$PSScriptRoot\modules\task-reset.ps1"
 . "$PSScriptRoot\modules\prompt-builder.ps1"
@@ -109,107 +129,6 @@ Import-Module "$PSScriptRoot\..\mcp\modules\TaskIndexCache.psm1" -Force
 . "$PSScriptRoot\..\mcp\tools\task-get-next\script.ps1"
 . "$PSScriptRoot\..\mcp\tools\task-mark-in-progress\script.ps1"
 . "$PSScriptRoot\..\mcp\tools\task-mark-skipped\script.ps1"
-
-# Helper function to sanitize paths in activity log messages
-function Convert-ToRelativePath {
-    param(
-        [string]$Message,
-        [string]$ProjectRoot
-    )
-    
-    if (-not $Message) { return $Message }
-    
-    $result = $Message
-    
-    if ($ProjectRoot) {
-        # Standard Windows path
-        $escapedRoot = [regex]::Escape($ProjectRoot)
-        $result = $result -replace $escapedRoot, '.'
-        
-        # Forward slash variant
-        $normalizedRoot = $ProjectRoot -replace '\\', '/'
-        $escapedNormalizedRoot = [regex]::Escape($normalizedRoot)
-        $result = $result -replace $escapedNormalizedRoot, '.'
-        
-        # Double-escaped backslashes (JSON strings)
-        $doubleEscapedRoot = $ProjectRoot -replace '\\', '\\\\'
-        $escapedDoubleEscapedRoot = [regex]::Escape($doubleEscapedRoot)
-        $result = $result -replace $escapedDoubleEscapedRoot, '.'
-        
-        # Git Bash MSYS path: /c/Users/... -> .
-        $msysRoot = $ProjectRoot -replace '^([A-Za-z]):\\', '/$1/' -replace '\\', '/'
-        $msysRoot = $msysRoot.ToLower().Substring(0,3) + $msysRoot.Substring(3)
-        $escapedMsysRoot = [regex]::Escape($msysRoot)
-        $result = $result -replace $escapedMsysRoot, '.'
-    }
-    
-    # Replace user home paths with ~ (cross-platform)
-    $userHome = [Environment]::GetFolderPath('UserProfile')
-    if ($userHome) {
-        $escapedHome = [regex]::Escape($userHome)
-        $result = $result -replace $escapedHome, '~'
-        
-        $normalizedHome = $userHome -replace '\\', '/'
-        $escapedNormalizedHome = [regex]::Escape($normalizedHome)
-        $result = $result -replace $escapedNormalizedHome, '~'
-        
-        $doubleEscapedHome = $userHome -replace '\\', '\\\\'
-        $escapedDoubleEscapedHome = [regex]::Escape($doubleEscapedHome)
-        $result = $result -replace $escapedDoubleEscapedHome, '~'
-    }
-    
-    # Clean up redundant "cd "." &&" patterns
-    $result = $result -replace 'cd "?\."? && ', ''
-    $result = $result -replace 'cd "?\."?/', ''
-    
-    return $result
-}
-
-# Helper function to extract activity logs and attach to completed tasks
-function Add-ActivityLogToCompletedTask {
-    param(
-        [string]$TaskId,
-        [string]$ControlDir,
-        [string]$TasksDir,
-        [string]$ProjectRoot
-    )
-
-    $activityFile = Join-Path $ControlDir "activity.jsonl"
-    $doneDir = Join-Path $TasksDir "done"
-
-    if (-not (Test-Path $activityFile)) { return }
-
-    # Extract entries for this task
-    $taskActivities = @()
-    Get-Content $activityFile | ForEach-Object {
-        try {
-            $entry = $_ | ConvertFrom-Json
-            if ($entry.task_id -eq $TaskId) {
-                # Sanitize paths in message to be relative to project root
-                $sanitizedMessage = Convert-ToRelativePath -Message $entry.message -ProjectRoot $ProjectRoot
-                $sanitizedEntry = $entry | Select-Object -Property type, timestamp
-                $sanitizedEntry | Add-Member -NotePropertyName 'message' -NotePropertyValue $sanitizedMessage -Force
-                $taskActivities += $sanitizedEntry
-            }
-        } catch { }
-    }
-
-    if ($taskActivities.Count -eq 0) { return }
-
-    # Find the task file in done folder
-    $doneFiles = Get-ChildItem -Path $doneDir -Filter "*.json" -File -ErrorAction SilentlyContinue
-    foreach ($file in $doneFiles) {
-        try {
-            $taskContent = Get-Content -Path $file.FullName -Raw | ConvertFrom-Json
-            if ($taskContent.id -eq $TaskId) {
-                # Add activity_log field
-                $taskContent | Add-Member -NotePropertyName "activity_log" -NotePropertyValue $taskActivities -Force
-                $taskContent | ConvertTo-Json -Depth 20 | Set-Content -Path $file.FullName -Encoding UTF8
-                return
-            }
-        } catch { }
-    }
-}
 
 # Banner and configuration display
 Write-Card -Title "GO MODE AUTONOMOUS LOOP" -Width 45 -BorderStyle Rounded -BorderColor Label -TitleColor Label -Lines @(
@@ -250,6 +169,12 @@ if ($cleanupCount -gt 0) {
     Write-Status "Removed $cleanupCount temp directories" -Type Success
 } else {
     Write-Status "No temp directories found" -Type Complete
+}
+
+# Clean up old Claude sessions at startup
+$oldSessionsRemoved = Clear-OldClaudeSessions -ProjectRoot $projectRoot -MaxAgeDays 7
+if ($oldSessionsRemoved -gt 0) {
+    Write-Status "Cleaned up $oldSessionsRemoved old Claude sessions" -Type Success
 }
 
 # Reset any in-progress tasks to todo
@@ -376,21 +301,21 @@ try {
             break
         }
         
-        # Check for control signals
-        $signal = Test-ControlSignals -ControlDir $controlDir
+        # Check for control signals (use execution-specific stop signal)
+        $signal = Test-ControlSignals -ControlDir $controlDir -LoopType 'execution'
         if ($signal -eq 'stop') {
             Write-Host ""
             Write-Status "Stop signal received - halting autonomous loop" -Type Error
             # Clear the signal
-            Remove-Item (Join-Path $controlDir "stop.signal") -Force -ErrorAction SilentlyContinue
+            Remove-Item (Join-Path $controlDir "stop-execution.signal") -Force -ErrorAction SilentlyContinue
             break
         }
-        
+
         if ($signal -eq 'pause') {
             Write-Host ""
             Write-Status "Pause signal received - waiting for resume..." -Type Warn
             $pauseSignalPath = Join-Path $controlDir "pause.signal"
-            
+
             # Log paused activity
             Write-ActivityLog -Type "text" -Message "Autonomous coding agent paused..."
 
@@ -399,26 +324,30 @@ try {
                 Start-Sleep -Seconds 1
 
                 # Refresh signal state from watcher cache
-                $currentSignal = Test-ControlSignals -ControlDir $controlDir
+                $currentSignal = Test-ControlSignals -ControlDir $controlDir -LoopType 'execution'
 
                 # Check for stop signal while paused
                 if ($currentSignal -eq 'stop') {
                     Write-Host ""
                     Write-Status "Stop signal received while paused" -Type Error
-                    Remove-Item (Join-Path $controlDir "stop.signal") -Force -ErrorAction SilentlyContinue
+                    Remove-Item (Join-Path $controlDir "stop-execution.signal") -Force -ErrorAction SilentlyContinue
                     Remove-Item $pauseSignalPath -Force -ErrorAction SilentlyContinue
                     break
                 }
 
                 # Check if pause signal was removed (resume)
                 if ($currentSignal -ne 'pause') {
+                    # Update theme on resume (user may have changed it while paused)
+                    if (Update-DotBotTheme) {
+                        $t = Get-DotBotTheme
+                    }
                     Write-Status "Resuming autonomous loop" -Type Success
                     break
                 }
             }
 
             # If we got a stop signal, exit the main loop
-            if ((Test-ControlSignals -ControlDir $controlDir) -eq 'stop') {
+            if ((Test-ControlSignals -ControlDir $controlDir -LoopType 'execution') -eq 'stop') {
                 break
             }
         }
@@ -458,17 +387,17 @@ try {
             # Wait and check for new tasks or control signals
             while ($true) {
                 Start-Sleep -Seconds 5
-                
-                # Check for control signals
-                $signal = Test-ControlSignals -ControlDir $controlDir
+
+                # Check for control signals (use execution-specific stop signal)
+                $signal = Test-ControlSignals -ControlDir $controlDir -LoopType 'execution'
                 if ($signal -eq 'stop') {
                     Write-Host ""
                     Write-Status "Stop signal received while waiting" -Type Error
-                    Remove-Item (Join-Path $controlDir "stop.signal") -Force -ErrorAction SilentlyContinue
+                    Remove-Item (Join-Path $controlDir "stop-execution.signal") -Force -ErrorAction SilentlyContinue
                     $script:shouldStop = $true
                     break
                 }
-                
+
                 # Re-check for tasks
                 Reset-TaskIndex
                 $taskResult = Invoke-TaskGetNext -Arguments @{}
@@ -553,6 +482,23 @@ try {
         $modeLabel = if ($hasAnalysis) { "pre-flight" } else { "legacy" }
         Write-ActivityLog -Type "text" -Message "Started task ($modeLabel): $($task.name)"
 
+        # Generate Claude session ID for execution (new session per task)
+        $claudeSessionId = [System.Guid]::NewGuid().ToString()
+        $env:CLAUDE_SESSION_ID = $claudeSessionId
+
+        # Update running signal with Claude session ID
+        $signalPath = Join-Path $controlDir "running.signal"
+        if (Test-Path $signalPath) {
+            try {
+                $signal = Get-Content $signalPath -Raw | ConvertFrom-Json
+                $signal | Add-Member -NotePropertyName 'claude_session_id' -NotePropertyValue $claudeSessionId -Force
+                $signal | Add-Member -NotePropertyName 'current_task_id' -NotePropertyValue $task.id -Force
+                $signal | ConvertTo-Json | Set-Content $signalPath
+            } catch {
+                Write-Warning "Failed to update signal file: $_"
+            }
+        }
+
         # Build prompt from template
         $prompt = Build-TaskPrompt `
             -PromptTemplate $promptTemplate `
@@ -597,10 +543,12 @@ Work on this task autonomously. When complete, ensure you call task_mark_done vi
                 $streamArgs = @{
                     Prompt = $fullPrompt
                     Model = $claudeModelName
+                    SessionId = $claudeSessionId
+                    PersistSession = $false  # Execution doesn't need session persistence
                 }
                 if ($ShowDebug) { $streamArgs['ShowDebugJson'] = $true }
                 if ($ShowVerbose) { $streamArgs['ShowVerbose'] = $true }
-                
+
                 Invoke-ClaudeStream @streamArgs
                 $exitCode = 0
             } catch {
@@ -626,9 +574,9 @@ Work on this task autonomously. When complete, ensure you call task_mark_done vi
                 $rateLimitInfo = Get-RateLimitResetTime -Message $rateLimitMsg
                 
                 if ($rateLimitInfo) {
-                    # Wait for rate limit to reset
-                    $waitResult = Wait-ForRateLimitReset -RateLimitInfo $rateLimitInfo -ControlDir $controlDir
-                    
+                    # Wait for rate limit to reset (use execution-specific stop signal)
+                    $waitResult = Wait-ForRateLimitReset -RateLimitInfo $rateLimitInfo -ControlDir $controlDir -LoopType 'execution'
+
                     if ($waitResult -eq "stop") {
                         # Stop signal received during wait
                         $script:shouldStop = $true
@@ -724,9 +672,9 @@ Work on this task autonomously. When complete, ensure you call task_mark_done vi
             $tasksProcessed++
             $sessionState.tasks_completed += @($task.id)
             $sessionState.notes += "Task $($task.id) ($($task.name)): COMPLETED"
-
-            # Extract and attach activity log to completed task (with sanitized paths)
-            Add-ActivityLogToCompletedTask -TaskId $task.id -ControlDir $controlDir -TasksDir (Join-Path $PSScriptRoot "..\..\workspace\tasks") -ProjectRoot $projectRoot
+            # Activity log is now captured in task-mark-done MCP tool
+            # Clean up Claude session data (task complete, no need to preserve)
+            Remove-ClaudeSession -SessionId $claudeSessionId -ProjectRoot $projectRoot | Out-Null
         } else {
             # Task failed - update counters
             $state = Invoke-SessionGetState -Arguments @{}
@@ -751,6 +699,7 @@ Work on this task autonomously. When complete, ensure you call task_mark_done vi
 
         # Clear task context for next iteration
         $env:DOTBOT_CURRENT_TASK_ID = $null
+        $env:CLAUDE_SESSION_ID = $null
 
         # Display task result summary
         Write-Host ""
@@ -770,17 +719,17 @@ Work on this task autonomously. When complete, ensure you call task_mark_done vi
             Write-Phosphor "Waiting ${AutoContinueDelay}s before next task..." -Color Bezel
             for ($i = 0; $i -lt $AutoContinueDelay; $i++) {
                 Start-Sleep -Seconds 1
-                
-                # Check for control signals during delay
-                $signal = Test-ControlSignals -ControlDir $controlDir
+
+                # Check for control signals during delay (use execution-specific stop signal)
+                $signal = Test-ControlSignals -ControlDir $controlDir -LoopType 'execution'
                 if ($signal -eq 'stop') {
                     Write-Host ""
                     Write-Status "Stop signal received during delay" -Type Error
-                    Remove-Item (Join-Path $controlDir "stop.signal") -Force -ErrorAction SilentlyContinue
+                    Remove-Item (Join-Path $controlDir "stop-execution.signal") -Force -ErrorAction SilentlyContinue
                     $script:shouldStop = $true
                     break
                 }
-                
+
                 if ($signal -eq 'pause') {
                     Write-Host ""
                     Write-Status "Pause signal received during delay" -Type Warn
@@ -792,18 +741,22 @@ Work on this task autonomously. When complete, ensure you call task_mark_done vi
                     # Wait for resume using cached signal state
                     while ($true) {
                         Start-Sleep -Seconds 1
-                        $currentSignal = Test-ControlSignals -ControlDir $controlDir
+                        $currentSignal = Test-ControlSignals -ControlDir $controlDir -LoopType 'execution'
 
                         if ($currentSignal -eq 'stop') {
                             Write-Host ""
                             Write-Status "Stop signal received while paused" -Type Error
-                            Remove-Item (Join-Path $controlDir "stop.signal") -Force -ErrorAction SilentlyContinue
+                            Remove-Item (Join-Path $controlDir "stop-execution.signal") -Force -ErrorAction SilentlyContinue
                             Remove-Item $pauseSignalPath -Force -ErrorAction SilentlyContinue
                             $script:shouldStop = $true
                             break
                         }
 
                         if ($currentSignal -ne 'pause') {
+                            # Update theme on resume (user may have changed it while paused)
+                            if (Update-DotBotTheme) {
+                                $t = Get-DotBotTheme
+                            }
                             Write-Status "Continuing after delay" -Type Success
                             break
                         }
@@ -814,13 +767,18 @@ Work on this task autonomously. When complete, ensure you call task_mark_done vi
                     }
                 }
             }
-            
+
             # Check if we need to stop
             if ($script:shouldStop) {
                 break
             }
         }
-        
+
+        # Update theme between tasks (user may have changed it)
+        if (Update-DotBotTheme) {
+            $t = Get-DotBotTheme
+        }
+
         # Separator for next loop
         Write-Separator -Width 60
     }

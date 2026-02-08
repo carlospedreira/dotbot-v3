@@ -19,7 +19,9 @@ git --no-pager status --short
 git --no-pager diff [files]
 ```
 
-Status markers: `M` modified, `??` untracked, `D` deleted
+Status markers: `M` modified, `??` untracked, `D` deleted, `A` added
+
+**Use `git add -A`** to stage all changes including deletions.
 
 ### 2. Group by Topic
 
@@ -52,6 +54,18 @@ git push
 ```
 
 If rejected: `git pull --rebase && git push`
+
+### 5. Verify
+
+```bash
+git status --short
+```
+
+Must be empty. If files remain, repeat from step 1.
+
+---
+
+> **⚠️** Task completion moves files between directories. Use `git add -A` (not `git add .`) to capture deletions.
 
 ---
 

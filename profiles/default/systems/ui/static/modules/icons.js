@@ -77,4 +77,16 @@ function replaceIconPlaceholders() {
     if (panicIcon) {
         panicIcon.innerHTML = getIcon('restart', 18);
     }
+
+    // Replace whisper button icon
+    const whisperIcon = document.querySelector('.whisper-icon');
+    if (whisperIcon) {
+        whisperIcon.innerHTML = getIcon('chatBubble', 14);
+    }
+
+    // Replace whisper modal header icon
+    const whisperModalIcon = document.querySelector('.whisper-modal .modal-icon');
+    if (whisperModalIcon) {
+        whisperModalIcon.innerHTML = getIcon('chatBubble', 18);
+    }
 }

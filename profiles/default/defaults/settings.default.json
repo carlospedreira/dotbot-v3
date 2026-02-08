@@ -6,6 +6,10 @@
     "auto_approve_splits": false,
     "split_threshold_effort": "XL",
     "question_timeout_hours": null,
-    "mode": "batch"
+    "mode": "on-demand",
+    "model": "Sonnet"
+  },
+  "execution": {
+    "model": "Opus"
   }
 }

@@ -1,3 +1,45 @@
+# Import session tracking module
+Import-Module "$PSScriptRoot\..\..\modules\SessionTracking.psm1" -Force
+
+# Helper function to extract execution-phase activity logs
+function Get-ExecutionActivityLog {
+    param(
+        [string]$TaskId,
+        [string]$ProjectRoot
+    )
+
+    # Control directory: .bot/.control (script is at .bot/systems/mcp/tools/task-mark-done)
+    $controlDir = Join-Path (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))) ".control"
+    $activityFile = Join-Path $controlDir "activity.jsonl"
+
+    if (-not (Test-Path $activityFile)) { return @() }
+
+    # Extract entries for this task with phase='execution' (or null for backward compat)
+    $taskActivities = @()
+    Get-Content $activityFile | ForEach-Object {
+        try {
+            $entry = $_ | ConvertFrom-Json
+            # Match task_id AND (phase is 'execution' OR phase is null/missing for backward compat)
+            if ($entry.task_id -eq $TaskId -and (-not $entry.phase -or $entry.phase -eq 'execution')) {
+                # Sanitize paths in message to be relative to project root
+                $sanitizedMessage = $entry.message
+                if ($ProjectRoot -and $sanitizedMessage) {
+                    $escapedRoot = [regex]::Escape($ProjectRoot)
+                    $sanitizedMessage = $sanitizedMessage -replace $escapedRoot, '.'
+                    $normalizedRoot = $ProjectRoot -replace '\\', '/'
+                    $escapedNormalizedRoot = [regex]::Escape($normalizedRoot)
+                    $sanitizedMessage = $sanitizedMessage -replace $escapedNormalizedRoot, '.'
+                }
+                $sanitizedEntry = $entry | Select-Object -Property type, timestamp
+                $sanitizedEntry | Add-Member -NotePropertyName 'message' -NotePropertyValue $sanitizedMessage -Force
+                $taskActivities += $sanitizedEntry
+            }
+        } catch { }
+    }
+
+    return $taskActivities
+}
+
 function Invoke-VerificationScripts {
     param(
         [string]$TaskId,
@@ -233,6 +275,12 @@ function Invoke-TaskMarkDone {
         $taskContent.completed_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
     }
 
+    # Close current Claude session (execution complete)
+    $claudeSessionId = $env:CLAUDE_SESSION_ID
+    if ($claudeSessionId) {
+        Close-SessionOnTask -TaskContent $taskContent -SessionId $claudeSessionId -Phase 'execution'
+    }
+
     # Add commit information if found
     if ($commitInfo -and $commitInfo.most_recent) {
         $mostRecent = $commitInfo.most_recent
@@ -242,6 +290,12 @@ function Invoke-TaskMarkDone {
         $taskContent | Add-Member -NotePropertyName 'files_deleted' -NotePropertyValue $mostRecent.files_deleted -Force
         $taskContent | Add-Member -NotePropertyName 'files_modified' -NotePropertyValue $mostRecent.files_modified -Force
         $taskContent | Add-Member -NotePropertyName 'commits' -NotePropertyValue $commitInfo.commits -Force
+    }
+
+    # Capture execution-phase activity log
+    $executionActivities = Get-ExecutionActivityLog -TaskId $taskId -ProjectRoot $projectRoot
+    if ($executionActivities.Count -gt 0) {
+        $taskContent | Add-Member -NotePropertyName 'execution_activity_log' -NotePropertyValue $executionActivities -Force
     }
     
     # Ensure done directory exists

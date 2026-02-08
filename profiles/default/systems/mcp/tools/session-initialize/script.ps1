@@ -21,9 +21,26 @@ function Invoke-SessionInitialize {
             $lockContent = Get-Content -Path $lockFile -Raw | ConvertFrom-Json
             $lockTime = [DateTime]::Parse($lockContent.locked_at)
             $hoursSinceLock = ([DateTime]::UtcNow - $lockTime).TotalHours
-            
-            # If lock is older than 1 hour, consider it stale
-            if ($hoursSinceLock -lt 1) {
+
+            $isStale = $false
+
+            # Check if owning process is dead (orphaned lock)
+            if ($lockContent.process_id) {
+                $lockProcess = Get-Process -Id $lockContent.process_id -ErrorAction SilentlyContinue
+                if (-not $lockProcess) {
+                    $isStale = $true
+                }
+            }
+
+            # Check if lock is older than 1 hour
+            if ($hoursSinceLock -ge 1) {
+                $isStale = $true
+            }
+
+            if ($isStale) {
+                # Remove stale/orphaned lock
+                Remove-Item -Path $lockFile -Force
+            } else {
                 return @{
                     success = $false
                     error = "Session is already locked. Another session may be running."
@@ -31,9 +48,6 @@ function Invoke-SessionInitialize {
                     locked_at = $lockContent.locked_at
                 }
             }
-            
-            # Remove stale lock
-            Remove-Item -Path $lockFile -Force
         } catch {
             # If we can't read the lock, remove it
             Remove-Item -Path $lockFile -Force -ErrorAction SilentlyContinue

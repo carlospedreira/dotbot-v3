@@ -41,17 +41,30 @@ function Reset-InProgressTasks {
             $taskId = $taskContent.id
             $taskName = $taskContent.name
             
-            # Move to todo directory
-            $todoDir = Join-Path $TasksBaseDir "todo"
-            $todoPath = Join-Path $todoDir $taskFile.Name
-            
+            # If task has analysis data, return to analysed; otherwise to todo
+            $hasAnalysis = $taskContent.analysis -and $taskContent.analysis.PSObject.Properties.Count -gt 0
+            if ($hasAnalysis) {
+                $targetDir = Join-Path $TasksBaseDir "analysed"
+                $targetStatus = "analysed"
+            } else {
+                $targetDir = Join-Path $TasksBaseDir "todo"
+                $targetStatus = "todo"
+            }
+
+            # Ensure target directory exists
+            if (-not (Test-Path $targetDir)) {
+                New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+            }
+
+            $targetPath = Join-Path $targetDir $taskFile.Name
+
             # Update status
-            $taskContent.status = "todo"
+            $taskContent.status = $targetStatus
             $taskContent.started_at = $null
             $taskContent.updated_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-            
-            # Write to todo directory
-            $taskContent | ConvertTo-Json -Depth 10 | Set-Content -Path $todoPath -Force
+
+            # Write to target directory
+            $taskContent | ConvertTo-Json -Depth 10 | Set-Content -Path $targetPath -Force
             
             # Remove from in-progress
             Remove-Item -Path $taskFile.FullName -Force

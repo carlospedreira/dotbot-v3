@@ -2,24 +2,38 @@
   "scripts": [
     {
       "name": "00-privacy-scan.ps1",
-      "description": "Scan for secrets and local paths",
+      "description": "Scan for secrets and sensitive data",
       "required": true,
       "core": true,
       "timeout_seconds": 30
     },
     {
       "name": "01-git-clean.ps1",
-      "description": "Check for uncommitted changes",
+      "description": "Verify git working tree is clean",
       "required": true,
       "core": true,
-      "timeout_seconds": 10
+      "timeout_seconds": 15
     },
     {
       "name": "02-git-pushed.ps1",
-      "description": "Check for unpushed commits",
+      "description": "Verify all commits are pushed to remote",
       "required": true,
       "core": true,
-      "timeout_seconds": 10
+      "timeout_seconds": 30
+    },
+    {
+      "name": "03-dotnet-build.ps1",
+      "description": "Verify dotnet build succeeds",
+      "required": true,
+      "core": false,
+      "timeout_seconds": 60
+    },
+    {
+      "name": "04-dotnet-format.ps1",
+      "description": "Verify code formatting",
+      "required": true,
+      "core": false,
+      "timeout_seconds": 60
     }
   ]
 }

@@ -1,222 +1,117 @@
 ---
 name: Retrospective Task Documentation
-description: Template for creating retrospective documentation of completed work
 version: 1.0
 ---
 
 # Retrospective Task Documentation
 
-You are documenting a completed coding session or work effort. Your goal is to create proper task and plan files that match the structure and quality of live-session documentation.
+Document completed work with proper task/plan files matching live-session quality.
 
-## Purpose
+## When to Use
+- Work completed outside tracked sessions
+- Backfilling historical documentation
 
-Use this workflow when:
-- Documenting work that was completed outside of tracked sessions
-- Creating historical records of past implementations
-- Backfilling documentation for work that wasn't tracked in real-time
+## Prerequisites
 
-## Required Information
+Gather before starting:
+1. **Work**: Problem solved, approach, key decisions
+2. **Files**: Created, modified, deleted
+3. **Timeline**: Start/end times, effort estimate
+4. **Validation**: Success criteria met
+5. **Context** (optional): Commits, related issues
 
-Before starting, gather:
-
-1. **Work Description**
-   - What problem was solved?
-   - What was the approach taken?
-   - What were the key decisions made?
-
-2. **Files Changed**
-   - Files created
-   - Files modified
-   - Files deleted
-
-3. **Timeline**
-   - When work started (approximate)
-   - When work completed
-   - Duration/effort estimate
-
-4. **Validation**
-   - How was success measured?
-   - What criteria determined completion?
-
-5. **Context** (optional)
-   - Relevant commits
-   - Related issues/tasks
-   - Design decisions
-
----
-
-## Implementation Protocol
+## Implementation
 
 ### Step 1: Generate Task ID
 
-1. Generate a UUID for the task
-2. Extract the first 8 characters (before first hyphen)
-3. This becomes your **short task ID** used in filenames
-
-**Example**:
+Generate UUID, extract first 8 chars as short ID:
 ```
-UUID: db728bce-f775-43b8-9d21-42016f7efe80
-Short ID: db728bce
+UUID: db728bce-f775-43b8-9d21-42016f7efe80 → Short ID: db728bce
 ```
 
-### Step 2: Determine File Names
+### Step 2: File Names
 
-Create a slugified version of the task name:
+Format: `{task-slug}-{short-id}`
 
-**Format**: `{task-name-slug}-{short-task-id}`
+Paths:
+- Task: `.bot/workspace/tasks/done/{task-slug}-{short-id}.json`
+- Plan: `.bot/workspace/plans/{task-slug}-{short-id}-plan.md`
 
-**Example**:
-```
-Task name: "Fix auth error handling and add auth checks to commands"
-Slug: fix-auth-error-handling-and-add-auth-checks-to-commands
-Short ID: db728bce
-Result: fix-auth-error-handling-and-add-auth-checks-to-commands-db728bce
-```
+### Step 3: Read Templates
 
-**File paths**:
-- Task file: `.bot/workspace/tasks/done/{result}.json`
-- Plan file: `.bot/workspace/plans/{result}-plan.md`
-
-### Step 3: Read Sample Templates
-
-Load the sample files to understand structure:
-
-1. Read `.bot/workspace/tasks/samples/sample-task-retrospective.json`
-2. Read `.bot/workspace/tasks/samples/sample-plan-retrospective.md`
-
-These templates include inline comments explaining each field.
+Load samples for structure:
+- `.bot/workspace/tasks/samples/sample-task-retrospective.json`
+- `.bot/workspace/tasks/samples/sample-plan-retrospective.md`
 
 ### Step 4: Create Task JSON
 
-Using the sample as a guide, create the task JSON file:
-
 **Required fields**:
 - `id`: Full UUID
-- `name`: Human-readable task name
-- `description`: Detailed description with problem, approach, decisions
-- `category`: One of: feature, bugfix, refactor, infrastructure, documentation
-- `status`: Always "done" for retrospectives
-- `priority`: Default to 10
-- `effort`: T-shirt size (XS, S, M, L, XL)
-- `created_at`, `started_at`, `completed_at`: ISO 8601 UTC timestamps (format: `yyyy-MM-ddTHH:mm:ssZ`)
-- `plan_path`: `.bot/workspace/plans/{task-name-slug}-{short-id}-plan.md`
-- `steps`: Array of high-level steps taken
-- `acceptance_criteria`: Array of success criteria
-- `files_created`, `files_modified`, `files_deleted`: Arrays of file paths
+- `name`, `description`: Task details with problem/approach/decisions
+- `category`: feature|bugfix|refactor|infrastructure|documentation
+- `status`: "done"
+- `priority`: Default 10
+- `effort`: XS|S|M|L|XL
+- `created_at`, `started_at`, `completed_at`: ISO 8601 UTC
+- `plan_path`: Path to plan markdown
+- `steps`: High-level steps taken
+- `acceptance_criteria`: Success criteria
+- `files_created`, `files_modified`, `files_deleted`: File path arrays
 
-**Optional fields** (include if available):
-- `commits`: Array of commit objects with details
-- `activity_log`: Timeline of actions (can omit for retrospectives)
-- `dependencies`: Task IDs this work depended on
-- `applicable_standards`: Paths to standards followed
-- `applicable_agents`: Agent personas used
+**Optional**: `commits`, `execution_activity_log`, `analysis`, `dependencies`, `applicable_standards`, `applicable_agents`
 
-**Important notes**:
-- Remove all `_comment`, `_note`, `_instructions` fields from the final JSON
-- Use relative paths from repo root for file paths
-- Ensure `plan_path` matches the plan file you'll create in Step 5
-
-**Save to**: `.bot/workspace/tasks/done/{task-name-slug}-{short-id}.json`
+**Notes**: Remove `_comment`/`_note` fields; use relative paths from repo root.
 
 ### Step 5: Create Plan Markdown
 
-Using the sample as a guide, create the plan markdown file:
+**Required sections**: Problem Statement, Current State, Proposed Solution, Implementation Steps, Success Criteria
 
-**Required sections**:
-1. **Problem Statement**: What was the issue?
-2. **Current State**: What existed before the work?
-3. **Proposed Solution**: The approach taken
-4. **Implementation Steps**: Phases and steps executed
-5. **Success Criteria**: How success was measured
-
-**Optional sections** (include if relevant):
-- **Files Modified/Created**: Key files and their purpose
-- **Testing/Verification**: How work was validated
-- **Notes/Learnings**: Insights and future considerations
-
-**Important notes**:
-- Remove template instructions and example text
-- Keep section headers but fill with actual content
-- Be concise but complete - focus on key information
-- Use markdown formatting for readability
-
-**Save to**: `.bot/workspace/plans/{task-name-slug}-{short-id}-plan.md`
-
----
+**Optional**: Files Modified/Created, Testing/Verification, Notes/Learnings
 
 ## Validation Checklist
 
-Before finalizing, verify:
-
-- [ ] Task JSON is valid JSON (no syntax errors)
-- [ ] Task JSON has `plan_path` field pointing to correct plan file
-- [ ] Task JSON uses correct file paths (relative from repo root)
-- [ ] Task JSON has all required fields filled
-- [ ] Task JSON has no `_comment`/`_note` fields remaining
-- [ ] Plan markdown has all required sections
-- [ ] Plan markdown has no template instructions remaining
-- [ ] File names match pattern: `{task-name-slug}-{short-id}[.json|-plan.md]`
-- [ ] Both files use same task name slug and short ID
-- [ ] Files are saved to correct locations:
-  - Task: `.bot/workspace/tasks/done/`
-  - Plan: `.bot/workspace/plans/`
-
----
-
-## Example Output
-
-**Task name**: "Fix auth error handling"
-**UUID**: `a1b2c3d4-1234-5678-9abc-def012345678`
-**Short ID**: `a1b2c3d4`
-**Slug**: `fix-auth-error-handling`
-
-**Files created**:
-- `.bot/workspace/tasks/done/fix-auth-error-handling-a1b2c3d4.json`
-- `.bot/workspace/plans/fix-auth-error-handling-a1b2c3d4-plan.md`
-
-**Task JSON `plan_path` value**:
-```json
-"plan_path": ".bot/workspace/plans/fix-auth-error-handling-a1b2c3d4-plan.md"
-```
-
----
-
-## Quality Standards
-
-Your documentation should:
-- Match the structure and detail of live-session tasks
-- Provide enough context for someone unfamiliar with the work to understand it
-- Include concrete specifics (file names, design decisions, outcomes)
-- Be accurate and factual (no speculation about work that wasn't done)
-- Use proper JSON syntax and markdown formatting
-
-Remember: This documentation becomes part of the project's permanent record. Take time to make it accurate and complete.
-
----
+- [ ] Valid JSON with all required fields
+- [ ] `plan_path` points to correct plan file
+- [ ] Relative paths from repo root
+- [ ] No `_comment`/`_note` fields
+- [ ] Plan has all required sections
+- [ ] Filenames match: `{task-slug}-{short-id}[.json|-plan.md]`
+- [ ] **Dates accurate**: Verify `created_at`, `started_at`, `completed_at` reflect actual times
 
 ## Data Format Requirements
 
-### Date/Time Format
+### Timestamps
 
-**All timestamps MUST use ISO 8601 UTC format**: `yyyy-MM-ddTHH:mm:ssZ`
+**CRITICAL**: Before saving, verify all dates are accurate and use ISO 8601 UTC: `yyyy-MM-ddTHH:mm:ssZ`
 
-**Correct examples**:
-- `2026-01-24T07:54:09Z`
-- `2026-01-26T13:00:00Z`
+✓ `2026-01-24T07:54:09Z`
+✗ `24/01/2026 07:54:09` | `01/24/2026` | `2026-01-24 07:54:09`
 
-**Incorrect examples** (do NOT use):
-- `24/01/2026 07:54:09` (UK locale)
-- `01/24/2026 07:54:09` (US locale)
-- `2026-01-24 07:54:09` (missing T and Z)
+Applies to: `created_at`, `started_at`, `completed_at`, `updated_at`, activity log timestamps.
 
-This applies to all date fields: `created_at`, `started_at`, `completed_at`, `updated_at`, and any timestamps in `activity_log`.
+### Privacy
 
-### Privacy Requirements
+Before commit:
+1. No local paths (`C:\Users\`, `/home/`, `/Users/`) — use relative paths
+2. No secrets (API keys, tokens, passwords)
+3. Run `.bot/hooks/verify/00-privacy-scan.ps1`
 
-**MUST** before committing any task or plan files:
+## Quality Standards
 
-1. **No local paths** - Never include full paths like `C:\Users\...`, `/home/...`, or `/Users/...`. Use relative paths from repo root or `~` for home directory.
-2. **No secrets** - Never include API keys, tokens, passwords, or connection strings.
-3. **Run privacy scan** - Execute `.bot/hooks/verify/00-privacy-scan.ps1` before commit.
+- Provide context for unfamiliar readers
+- Include specifics: file names, decisions, outcomes
+- Accurate and factual only
+- Valid JSON/markdown formatting
 
-The privacy scan runs automatically in verification but you should self-check activity logs and file references.
+## Commit & Push Requirements
+
+**CRITICAL**: Never push directly to master bypassing CI checks.
+
+1. Create a feature branch: `git checkout -b docs/retrospective-{task-slug}`
+2. Commit changes to the branch
+3. Push branch: `git push -u origin docs/retrospective-{task-slug}`
+4. Create PR: `gh pr create --title "docs: retrospective for {task-name}" --body "..."`
+5. Wait for CI (`build-and-test`) to pass
+6. Merge PR (or ask user to merge)
+
+**Never** use `--force` or bypass branch protection rules.

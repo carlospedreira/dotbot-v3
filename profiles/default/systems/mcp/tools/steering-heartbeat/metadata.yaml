@@ -1,0 +1,22 @@
+name: steering_heartbeat
+description: Update signal file with heartbeat/status, check for whispers. Call between major steps during autonomous execution.
+inputSchema:
+  type: object
+  properties:
+    session_id:
+      type: string
+      description: Current session ID (from prompt context)
+    instance_type:
+      type: string
+      enum: [analysis, execution]
+      description: Which loop this instance is running
+    status:
+      type: string
+      description: Current activity (e.g., "Analysing task d5093...")
+    next_action:
+      type: string
+      description: What's planned next (e.g., "Check dependencies")
+  required:
+    - session_id
+    - instance_type
+    - status

@@ -80,6 +80,7 @@ function Update-TaskIndex {
                     last_write = $file.LastWriteTimeUtc
                     started_at = $content.started_at
                     completed_at = $content.completed_at
+                    needs_interview = $content.needs_interview
                 }
 
                 switch ($status) {

@@ -14,6 +14,7 @@ function Invoke-TaskCreate {
     $steps = $Arguments['steps']
     $applicableStandards = $Arguments['applicable_standards']
     $applicableAgents = $Arguments['applicable_agents']
+    $needsInterview = $Arguments['needs_interview'] -eq $true
     
     # Validate required fields
     if (-not $name) {
@@ -45,6 +46,7 @@ function Invoke-TaskCreate {
     if (-not $steps) { $steps = @() }
     if (-not $applicableStandards) { $applicableStandards = @() }
     if (-not $applicableAgents) { $applicableAgents = @() }
+    # needsInterview is already a boolean, no default needed
     
     # Validate dependencies exist
     if ($dependencies -and $dependencies.Count -gt 0) {
@@ -110,6 +112,7 @@ function Invoke-TaskCreate {
         steps = $steps
         applicable_standards = $applicableStandards
         applicable_agents = $applicableAgents
+        needs_interview = $needsInterview
         created_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
         updated_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
         completed_at = $null

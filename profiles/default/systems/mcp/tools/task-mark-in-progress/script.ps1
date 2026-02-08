@@ -1,11 +1,14 @@
+# Import session tracking module
+Import-Module "$PSScriptRoot\..\..\modules\SessionTracking.psm1" -Force
+
 function Invoke-TaskMarkInProgress {
     param(
         [hashtable]$Arguments
     )
-    
+
     # Extract arguments
     $taskId = $Arguments['task_id']
-    
+
     # Validate required fields
     if (-not $taskId) {
         throw "Task ID is required"
@@ -14,11 +17,33 @@ function Invoke-TaskMarkInProgress {
     # Define tasks directories
     $tasksBaseDir = Join-Path $PSScriptRoot "..\..\..\..\workspace\tasks"
     $todosDir = Join-Path $tasksBaseDir "todo"
+    $analysedDir = Join-Path $tasksBaseDir "analysed"
     $inProgressDir = Join-Path $tasksBaseDir "in-progress"
     
-    # Find the task in todo directory
+    # Find the task in todo or analysed directory (analysed takes priority as it has pre-flight context)
     $taskFile = $null
-    if (Test-Path $todosDir) {
+    $sourceDir = $null
+    
+    # Check analysed first (pre-flight ready tasks)
+    if (Test-Path $analysedDir) {
+        $files = Get-ChildItem -Path $analysedDir -Filter "*.json" -File
+        foreach ($file in $files) {
+            try {
+                $content = Get-Content -Path $file.FullName -Raw | ConvertFrom-Json
+                if ($content.id -eq $taskId) {
+                    $taskFile = $file
+                    $taskContent = $content
+                    $sourceDir = "analysed"
+                    break
+                }
+            } catch {
+                # Continue searching
+            }
+        }
+    }
+    
+    # Then check todo (legacy tasks without pre-flight analysis)
+    if (-not $taskFile -and (Test-Path $todosDir)) {
         $files = Get-ChildItem -Path $todosDir -Filter "*.json" -File
         foreach ($file in $files) {
             try {
@@ -26,6 +51,7 @@ function Invoke-TaskMarkInProgress {
                 if ($content.id -eq $taskId) {
                     $taskFile = $file
                     $taskContent = $content
+                    $sourceDir = "todo"
                     break
                 }
             } catch {
@@ -73,7 +99,7 @@ function Invoke-TaskMarkInProgress {
             }
         }
 
-        throw "Task with ID '$taskId' not found in todo list"
+        throw "Task with ID '$taskId' not found in todo or analysed folders"
     }
     
     # Update task properties
@@ -81,6 +107,12 @@ function Invoke-TaskMarkInProgress {
     $taskContent.updated_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
     if (-not $taskContent.started_at) {
         $taskContent | Add-Member -NotePropertyName 'started_at' -NotePropertyValue (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'") -Force
+    }
+
+    # Track Claude session for execution phase
+    $claudeSessionId = $env:CLAUDE_SESSION_ID
+    if ($claudeSessionId) {
+        Add-SessionToTask -TaskContent $taskContent -SessionId $claudeSessionId -Phase 'execution'
     }
     
     # Ensure in-progress directory exists
@@ -120,8 +152,9 @@ function Invoke-TaskMarkInProgress {
         message = "Task '$($taskContent.name)' marked as in-progress"
         task_id = $taskId
         task_name = $taskContent.name
-        old_status = "todo"
+        old_status = $sourceDir
         new_status = "in-progress"
         file_path = $newFilePath
+        has_analysis = ($sourceDir -eq "analysed")
     }
 }

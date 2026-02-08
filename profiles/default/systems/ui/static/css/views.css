@@ -38,7 +38,7 @@
 }
 
 .pipeline-stage-title.execution {
-    color: var(--color-success);
+    color: var(--color-secondary);
 }
 
 .pipeline-container {
@@ -1341,4 +1341,121 @@
     font-size: 10px;
     color: var(--label-color);
     line-height: 1.4;
+}
+
+/* Settings number input */
+.settings-number-input {
+    -webkit-appearance: none;
+    -moz-appearance: textfield;
+    appearance: none;
+    width: 100px;
+    padding: 8px 12px;
+    background: var(--bg-screen);
+    border: 1px solid var(--bezel-edge);
+    border-radius: 6px;
+    color: var(--color-primary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    text-align: center;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.settings-number-input::-webkit-inner-spin-button,
+.settings-number-input::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.settings-number-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 8px var(--primary-30);
+}
+
+.settings-number-input::placeholder {
+    color: var(--label-color);
+    font-size: 10px;
+}
+
+/* Verification script rows */
+.verify-script-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    background: var(--bg-screen);
+    border-radius: 8px;
+    border: 1px solid var(--bezel-edge);
+    margin-bottom: 8px;
+}
+
+.verify-script-row.verify-core {
+    border-left: 3px solid var(--color-secondary);
+}
+
+.verify-script-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+}
+
+.verify-script-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.verify-script-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-primary);
+    font-family: var(--font-mono);
+}
+
+.verify-core-badge {
+    font-size: 8px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--secondary-20);
+    color: var(--color-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
+.verify-script-desc {
+    font-size: 11px;
+    color: var(--label-color);
+}
+
+.verify-script-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.verify-timeout {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--label-color);
+    padding: 2px 8px;
+    background: var(--primary-08);
+    border-radius: 10px;
+}
+
+/* Disabled toggle */
+.toggle-switch.toggle-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.toggle-switch.toggle-disabled .toggle-slider {
+    cursor: not-allowed;
+}
+
+.toggle-switch.toggle-disabled input {
+    pointer-events: none;
 }

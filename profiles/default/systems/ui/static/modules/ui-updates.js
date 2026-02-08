@@ -12,17 +12,27 @@ function updateUI(state) {
     updateTaskCounts(state.tasks);
     updateProgressPercent(state.tasks);
     updateSessionInfo(state.session);
-    updateRunningStatus(state.session, state.control, state.analysis);
+    updateRunningStatus(state.session, state.control, state.analysis, state.loops);
     updateCurrentTask(state.tasks.current);
     updateUpcomingTasks(state.tasks.upcoming);
     updateCompletedTasks(state.tasks.recent_completed);
     updatePipelineView(state.tasks);
     updateControlSignalStatus(state.control);
-    updateControlButtonStates(state.session, state.control);
+    updateControlButtonStates(state.session, state.control, state.loops);
+
+    // Update steering panel with instance info
+    if (state.instances) {
+        updateSteeringPanel(state.instances);
+    }
 
     // Update task summary in pipeline context panel
     if (state.tasks) {
         updateTaskSummary(state.tasks);
+    }
+
+    // Check for notable state changes and show notifications
+    if (typeof checkNotifications === 'function') {
+        checkNotifications(state);
     }
 }
 
@@ -44,6 +54,8 @@ function updateTaskCounts(tasks) {
     setElementText('todo-count', tasks.todo);
     setElementText('progress-count', tasks.in_progress);
     setElementText('done-count', tasks.done);
+    setElementText('analysing-count', tasks.analysing || 0);
+    setElementText('needs-input-count', tasks.needs_input || 0);
 
     // Pipeline counts - Analysis stage
     setElementText('pipeline-todo-count', tasks.todo);
@@ -89,6 +101,11 @@ function updateSessionInfo(session) {
         setElementText('session-failures', '--');
         setElementText('handoff-text', 'No handoff notes available');
         sessionStartTime = null;
+        // Reset timer state
+        sessionTimerElapsed = 0;
+        sessionTimerLastResumed = null;
+        sessionTimerStatus = null;
+        sessionTimerSessionId = null;
         return;
     }
 
@@ -107,6 +124,9 @@ function updateSessionInfo(session) {
         sessionStartTime = null;
     }
 
+    // Handle timer state transitions based on session status changes
+    updateTimerState(session);
+
     setElementText('session-tasks-completed', session.tasks_completed || 0);
     setElementText('session-tasks-skipped', session.tasks_skipped || 0);
     setElementText('session-failures', session.consecutive_failures || 0);
@@ -118,31 +138,82 @@ function updateSessionInfo(session) {
 }
 
 /**
+ * Manage timer state transitions based on session status changes.
+ * Tracks accumulated elapsed time so pause/resume works correctly.
+ * @param {Object} session - Session object from state
+ */
+function updateTimerState(session) {
+    const newStatus = session.status || 'unknown';
+    const newSessionId = session.session_id || null;
+
+    // Detect new session (or first load) - initialize timer
+    if (newSessionId && newSessionId !== sessionTimerSessionId) {
+        sessionTimerSessionId = newSessionId;
+        // On first load, seed elapsed from server's runtime_minutes if available
+        // This gives a reasonable starting point for sessions already in progress
+        if (session.runtime_minutes > 0) {
+            sessionTimerElapsed = session.runtime_minutes * 60000;
+        } else {
+            sessionTimerElapsed = 0;
+        }
+        sessionTimerLastResumed = (newStatus === 'running') ? new Date() : null;
+        sessionTimerStatus = newStatus;
+        return;
+    }
+
+    // No status change - nothing to do
+    if (newStatus === sessionTimerStatus) return;
+
+    const prevStatus = sessionTimerStatus;
+    sessionTimerStatus = newStatus;
+
+    // Transition: anything -> running (start or resume)
+    if (newStatus === 'running') {
+        sessionTimerLastResumed = new Date();
+        return;
+    }
+
+    // Transition: running -> paused/stopped/stopping (freeze elapsed time)
+    if (prevStatus === 'running' && newStatus !== 'running') {
+        if (sessionTimerLastResumed) {
+            sessionTimerElapsed += (new Date() - sessionTimerLastResumed);
+        }
+        sessionTimerLastResumed = null;
+        return;
+    }
+}
+
+/**
  * Update running status indicators
  * @param {Object} session - Session object from state
  * @param {Object} control - Control object from state
  * @param {Object} analysis - Analysis loop state (optional)
+ * @param {Object} loops - Combined loop state (optional)
  */
-function updateRunningStatus(session, control, analysis) {
+function updateRunningStatus(session, control, analysis, loops) {
     const runningLed = document.getElementById('running-led');
     const runningStatus = document.getElementById('running-status');
     const agentLed = document.getElementById('agent-led');
     const agentState = document.getElementById('agent-state');
-    
+
     // Update loop status LEDs
     const analysisLed = document.getElementById('analysis-loop-led');
     const executionLed = document.getElementById('execution-loop-led');
-    
+
+    // Use loops.analysis_alive if available (PID-validated), fall back to signal file check
+    const analysisActive = loops?.analysis_alive ?? analysis?.running;
+    const executionActive = loops?.execution_alive ?? control?.running;
+
     if (analysisLed) {
-        if (analysis?.running) {
+        if (analysisActive) {
             analysisLed.className = 'led pulse';
         } else {
             analysisLed.className = 'led off';
         }
     }
-    
+
     if (executionLed) {
-        if (control?.running) {
+        if (executionActive) {
             executionLed.className = 'led pulse';
         } else {
             executionLed.className = 'led off';
@@ -300,7 +371,18 @@ function updateCompletedTasks(tasks) {
 function updatePipelineView(tasks) {
     const upcoming = Array.isArray(tasks.upcoming) ? tasks.upcoming : [];
     const completed = Array.isArray(tasks.recent_completed) ? tasks.recent_completed : [];
+    const analysing = Array.isArray(tasks.analysing_list) ? tasks.analysing_list : [];
+    const needsInput = Array.isArray(tasks.needs_input_list) ? tasks.needs_input_list : [];
+    const analysed = Array.isArray(tasks.analysed_list) ? tasks.analysed_list : [];
+    
+    // Analysis pipeline columns
     updatePipelineColumn('pipeline-todo', upcoming, 'todo');
+    updatePipelineColumn('pipeline-analysing', analysing, 'analysing');
+    updatePipelineColumn('pipeline-needs-input', needsInput, 'needs-input');
+    updatePipelineColumn('pipeline-analysed', analysed, 'analysed');
+    
+    // Execution pipeline columns
+    updatePipelineColumn('pipeline-ready', analysed, 'ready');  // Ready = Analysed tasks
     updatePipelineColumn('pipeline-progress', tasks.current ? [tasks.current] : [], 'active');
     updatePipelineColumn('pipeline-done', completed, 'done');
 }
@@ -361,7 +443,10 @@ function updatePipelineColumn(containerId, tasks, type) {
  * Initialize pipeline infinite scroll
  */
 function initPipelineInfiniteScroll() {
-    const columnIds = ['pipeline-todo', 'pipeline-progress', 'pipeline-done'];
+    const columnIds = [
+        'pipeline-todo', 'pipeline-analysing', 'pipeline-needs-input', 'pipeline-analysed',
+        'pipeline-ready', 'pipeline-progress', 'pipeline-done'
+    ];
 
     columnIds.forEach(containerId => {
         const container = document.getElementById(containerId);
@@ -428,8 +513,9 @@ function updateControlSignalStatus(control) {
  * Update control button enabled/disabled states
  * @param {Object} session - Session object from state
  * @param {Object} control - Control object from state
+ * @param {Object} loops - Combined loop state (optional)
  */
-function updateControlButtonStates(session, control) {
+function updateControlButtonStates(session, control, loops) {
     const startBtn = document.querySelector('.ctrl-btn[data-action="start"]');
     const pauseBtn = document.querySelector('.ctrl-btn[data-action="pause"]');
     const resumeBtn = document.querySelector('.ctrl-btn[data-action="resume"]');
@@ -441,6 +527,10 @@ function updateControlButtonStates(session, control) {
     const isRunning = sessionStatus === 'running';
     const isStopping = sessionStatus === 'stopping';
 
+    // Use PID-validated loop state if available, otherwise fall back to session status
+    const anyLoopAlive = loops?.any_alive ?? (isRunning || isPaused);
+    const anyLoopRunning = loops?.any_running ?? isRunning;
+
     // Check for pending control signals
     const hasPendingStop = control?.stop || false;
     const hasPendingPause = control?.pause || false;
@@ -448,14 +538,14 @@ function updateControlButtonStates(session, control) {
     const hasPendingSignal = hasPendingStop || hasPendingPause || hasPendingResume;
 
     // Enable/disable logic:
-    // START: enabled only if stopped and no pending signals
+    // START: enabled only if no loops running and no pending signals
     if (startBtn) {
-        startBtn.disabled = !(!isRunning && !isPaused && !hasPendingSignal);
+        startBtn.disabled = !(!anyLoopRunning && !isPaused && !hasPendingSignal);
     }
 
-    // PAUSE: enabled only if running and no pending signals
+    // PAUSE: enabled only if running (either session status or any loop alive) and no pending signals
     if (pauseBtn) {
-        pauseBtn.disabled = !(isRunning && !hasPendingSignal);
+        pauseBtn.disabled = !(anyLoopAlive && !hasPendingSignal);
     }
 
     // RESUME: enabled only if paused or has pending pause/stop signal
@@ -463,9 +553,9 @@ function updateControlButtonStates(session, control) {
         resumeBtn.disabled = !(isPaused || hasPendingPause || hasPendingStop);
     }
 
-    // STOP: enabled if running/paused or has any pending signal
+    // STOP: enabled if any loop is alive or has pending signal (but not already pending stop)
     if (stopBtn) {
-        stopBtn.disabled = !((isRunning || isPaused) && !hasPendingStop);
+        stopBtn.disabled = !(anyLoopAlive && !hasPendingStop);
     }
 }
 
@@ -508,16 +598,21 @@ function startRuntimeTimer() {
 }
 
 /**
- * Update runtime display
+ * Update runtime display.
+ * Uses accumulated elapsed time model to correctly handle pause/resume.
  */
 function updateRuntime() {
     if (!sessionStartTime) return;
 
-    const now = new Date();
-    const diff = now - sessionStartTime;
-    const hours = Math.floor(diff / 3600000);
-    const mins = Math.floor((diff % 3600000) / 60000);
-    const secs = Math.floor((diff % 60000) / 1000);
+    // Calculate total elapsed: accumulated + current running segment
+    let totalElapsed = sessionTimerElapsed;
+    if (sessionTimerLastResumed) {
+        totalElapsed += (new Date() - sessionTimerLastResumed);
+    }
+
+    const hours = Math.floor(totalElapsed / 3600000);
+    const mins = Math.floor((totalElapsed % 3600000) / 60000);
+    const secs = Math.floor((totalElapsed % 60000) / 1000);
 
     const runtime = hours > 0
         ? `${hours}h ${mins}m ${secs}s`
@@ -585,4 +680,39 @@ function updateExecutiveSummary() {
     } else {
         container.style.display = 'none';
     }
+}
+
+/**
+ * Update steering panel with instance information
+ * @param {Object} instances - Instances object from state
+ */
+function updateSteeringPanel(instances) {
+    ['analysis', 'execution'].forEach(type => {
+        const btn = document.getElementById(`btn-${type}`);
+        const led = document.getElementById(`led-${type}`);
+        const pid = document.getElementById(`pid-${type}`);
+        const inst = instances?.[type];
+
+        const isAlive = inst?.alive === true;
+
+        if (btn) btn.disabled = !isAlive;
+        if (led) led.className = 'instance-led ' + (isAlive ? 'alive' : 'dead');
+        if (pid) pid.textContent = inst?.pid ? `#${inst.pid}` : '';
+    });
+
+    // Update status text for selected instance
+    if (typeof updateSteeringStatus === 'function') {
+        updateSteeringStatus(instances);
+    }
+
+    // Enable/disable whisper input based on selection and instance status
+    const canSend = typeof getSelectedInstance === 'function' &&
+                    getSelectedInstance() &&
+                    instances?.[getSelectedInstance()]?.alive;
+    const input = document.getElementById('whisper-input');
+    const priority = document.getElementById('whisper-priority');
+    const sendBtn = document.getElementById('whisper-send');
+    if (input) input.disabled = !canSend;
+    if (priority) priority.disabled = !canSend;
+    if (sendBtn) sendBtn.disabled = !canSend;
 }

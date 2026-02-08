@@ -31,24 +31,29 @@ function Get-PreviewText {
 function Write-ActivityLog {
     [CmdletBinding()]
     param(
-        [string]$Type, 
-        [string]$Message
+        [string]$Type,
+        [string]$Message,
+        [string]$Phase  # Optional: 'analysis' or 'execution'. Falls back to $env:DOTBOT_CURRENT_PHASE
     )
-    
+
     # Ensure .control directory exists (.bot/.control - ClaudeCLI is at .bot/systems/runtime/ClaudeCLI)
     $controlDir = Join-Path (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))) ".control"
     if (-not (Test-Path $controlDir)) {
         New-Item -Path $controlDir -ItemType Directory -Force | Out-Null
     }
-    
+
+    # Determine phase: parameter > environment variable > null (for backward compatibility)
+    $effectivePhase = if ($Phase) { $Phase } elseif ($env:DOTBOT_CURRENT_PHASE) { $env:DOTBOT_CURRENT_PHASE } else { $null }
+
     $logPath = Join-Path $controlDir "activity.jsonl"
     $event = @{
         timestamp = (Get-Date).ToUniversalTime().ToString("o")
         type = $Type
         message = $Message
         task_id = $env:DOTBOT_CURRENT_TASK_ID  # Always include, null when no task
+        phase = $effectivePhase  # Include phase for filtering (null for backward compat)
     } | ConvertTo-Json -Compress
-    
+
     Add-Content -Path $logPath -Value $event -Encoding utf8NoBOM
 }
 
@@ -374,11 +379,13 @@ function Invoke-ClaudeStream {
         [int]$PreviewChars = 140,
 
         [string]$PluginDir = "__no_plugins__",
-        
+
         [string]$SessionId,
-        
+
+        [switch]$PersistSession,
+
         [switch]$ShowDebugJson,
-        
+
         [switch]$ShowVerbose
     )
 
@@ -404,16 +411,24 @@ function Invoke-ClaudeStream {
         "--model", $Model
         "--dangerously-skip-permissions"
         "--plugin-dir", $PluginDir
-        "--no-session-persistence"
+    )
+
+    # Only add --no-session-persistence when NOT persisting sessions
+    if (-not $PersistSession) {
+        $cliArgs += "--no-session-persistence"
+    }
+
+    $cliArgs += @(
         "--output-format", "stream-json"
         "--print"
         "--verbose"
         "--"
         $Prompt
     )
-    
+
+    # Session ID must be at the start of CLI args for proper parsing
     if ($SessionId) {
-        $cliArgs += "--session-id", $SessionId
+        $cliArgs = @("--session-id", $SessionId) + $cliArgs
     }
 
     # Ensure UTF-8 encoding for capturing claude.exe output (handles Unicode like middle dot ·)

@@ -1,6 +1,6 @@
 /**
  * DOTBOT Control Panel - Actions Module
- * Handles action-required items: questions and split approvals
+ * Handles action-required items: questions, split approvals, and task creation
  */
 
 // State for action items
@@ -18,7 +18,7 @@ function initActions() {
     // Slideout close handlers
     const overlay = document.getElementById('slideout-overlay');
     const closeBtn = document.getElementById('slideout-close');
-    
+
     overlay?.addEventListener('click', closeSlideout);
     closeBtn?.addEventListener('click', closeSlideout);
 
@@ -26,8 +26,163 @@ function initActions() {
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             closeSlideout();
+            closeTaskCreateModal();
         }
     });
+
+    // Initialize task creation modal
+    initTaskCreateModal();
+
+    // Initialize git commit button
+    initGitCommitButton();
+}
+
+/**
+ * Initialize task creation modal handlers
+ */
+function initTaskCreateModal() {
+    const modal = document.getElementById('task-create-modal');
+    const closeBtn = document.getElementById('task-create-modal-close');
+    const cancelBtn = document.getElementById('task-create-cancel');
+    const submitBtn = document.getElementById('task-create-submit');
+    const textarea = document.getElementById('task-create-prompt');
+
+    // Add task button handlers (both overview and pipeline)
+    document.getElementById('add-task-btn-upcoming')?.addEventListener('click', openTaskCreateModal);
+    document.getElementById('add-task-btn-pipeline')?.addEventListener('click', openTaskCreateModal);
+
+    // Close handlers
+    closeBtn?.addEventListener('click', closeTaskCreateModal);
+    cancelBtn?.addEventListener('click', closeTaskCreateModal);
+    modal?.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeTaskCreateModal();
+        }
+    });
+
+    // Submit handler
+    submitBtn?.addEventListener('click', submitTaskCreate);
+
+    // Ctrl+Enter to submit
+    textarea?.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+            e.preventDefault();
+            submitTaskCreate();
+        }
+    });
+}
+
+/**
+ * Open task creation modal
+ */
+function openTaskCreateModal() {
+    const modal = document.getElementById('task-create-modal');
+    const textarea = document.getElementById('task-create-prompt');
+
+    if (modal) {
+        modal.classList.add('visible');
+        // Focus the textarea after a brief delay for the modal animation
+        setTimeout(() => textarea?.focus(), 100);
+    }
+}
+
+/**
+ * Close task creation modal
+ */
+function closeTaskCreateModal() {
+    const modal = document.getElementById('task-create-modal');
+    const textarea = document.getElementById('task-create-prompt');
+    const submitBtn = document.getElementById('task-create-submit');
+    const interviewCheckbox = document.getElementById('task-create-interview');
+
+    if (modal) {
+        modal.classList.remove('visible');
+        // Clear the form
+        if (textarea) textarea.value = '';
+        if (interviewCheckbox) interviewCheckbox.checked = false;
+        // Reset button state
+        if (submitBtn) {
+            submitBtn.classList.remove('loading');
+            submitBtn.disabled = false;
+        }
+    }
+}
+
+/**
+ * Submit task creation request
+ */
+async function submitTaskCreate() {
+    const textarea = document.getElementById('task-create-prompt');
+    const submitBtn = document.getElementById('task-create-submit');
+    const interviewCheckbox = document.getElementById('task-create-interview');
+
+    const prompt = textarea?.value?.trim();
+    const needsInterview = interviewCheckbox?.checked || false;
+
+    if (!prompt) {
+        showToast('Please describe the task you want to create', 'warning');
+        return;
+    }
+
+    // Set loading state
+    if (submitBtn) {
+        submitBtn.classList.add('loading');
+        submitBtn.disabled = true;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/api/task/create`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt, needs_interview: needsInterview })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            closeTaskCreateModal();
+            // Show success feedback
+            showSignalFeedback('Task creation started. Claude is processing your request...', 'success');
+            // Trigger state refresh after a delay to pick up the new task
+            setTimeout(() => {
+                if (typeof pollState === 'function') {
+                    pollState();
+                }
+            }, 2000);
+        } else {
+            showToast('Failed to create task: ' + (result.error || 'Unknown error'), 'error');
+            // Reset button state on error
+            if (submitBtn) {
+                submitBtn.classList.remove('loading');
+                submitBtn.disabled = false;
+            }
+        }
+    } catch (error) {
+        console.error('Error creating task:', error);
+        showToast('Error creating task: ' + error.message, 'error');
+        // Reset button state on error
+        if (submitBtn) {
+            submitBtn.classList.remove('loading');
+            submitBtn.disabled = false;
+        }
+    }
+}
+
+/**
+ * Show signal feedback message
+ * @param {string} message - Message to display
+ * @param {string} type - Feedback type (success, error, info)
+ */
+function showSignalFeedback(message, type) {
+    const feedback = document.getElementById('signal-status');
+    if (feedback) {
+        feedback.textContent = message;
+        feedback.className = `signal-feedback visible ${type || ''}`;
+        // Hide after 5 seconds
+        setTimeout(() => {
+            feedback.classList.remove('visible');
+        }, 5000);
+    }
 }
 
 /**
@@ -256,7 +411,7 @@ function attachActionHandlers(container) {
             const customText = actionItem.querySelector('.custom-answer-input')?.value?.trim() || '';
             
             if (selected.length === 0 && !customText) {
-                alert('Please select an option or provide a custom answer');
+                showToast('Please select an option or provide a custom answer', 'warning');
                 return;
             }
             
@@ -295,13 +450,13 @@ function attachActionHandlers(container) {
                         pollState();
                     }
                 } else {
-                    alert('Failed to submit answer: ' + (result.error || 'Unknown error'));
+                    showToast('Failed to submit answer: ' + (result.error || 'Unknown error'), 'error');
                     btn.disabled = false;
                     btn.textContent = 'Submit Answer';
                 }
             } catch (error) {
                 console.error('Error submitting answer:', error);
-                alert('Error submitting answer');
+                showToast('Error submitting answer', 'error');
                 btn.disabled = false;
                 btn.textContent = 'Submit Answer';
             }
@@ -324,6 +479,88 @@ function attachActionHandlers(container) {
  * @param {HTMLElement} btn - Button element
  * @param {boolean} approved - Whether approved or rejected
  */
+/**
+ * Initialize git commit button handler
+ */
+function initGitCommitButton() {
+    const btn = document.getElementById('git-commit-btn');
+    btn?.addEventListener('click', submitGitCommit);
+}
+
+/**
+ * Update git commit button visibility based on git status
+ * Called from notifications.js updateGitPanel when git status changes.
+ * Also resets loading state when repo becomes clean (operation completed).
+ * @param {boolean} isClean - Whether the repo is clean
+ */
+function updateGitCommitButton(isClean) {
+    const actionDiv = document.getElementById('git-commit-action');
+    const btn = document.getElementById('git-commit-btn');
+    if (!actionDiv) return;
+
+    if (isClean) {
+        actionDiv.style.display = 'none';
+        // Reset button state when repo is clean (commit completed successfully)
+        if (btn) {
+            btn.disabled = false;
+            btn.classList.remove('loading');
+        }
+    } else {
+        actionDiv.style.display = 'block';
+    }
+}
+
+/**
+ * Submit git commit-and-push request via Claude
+ * Button remains disabled until git status polling detects repo is clean again.
+ */
+async function submitGitCommit() {
+    const btn = document.getElementById('git-commit-btn');
+    if (!btn || btn.disabled) return;
+
+    // Set loading state - button stays disabled until git status shows clean
+    btn.disabled = true;
+    btn.classList.add('loading');
+
+    try {
+        const response = await fetch(`${API_BASE}/api/git/commit-and-push`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showSignalFeedback('Commit started. Claude is organizing and pushing changes...', 'success');
+            // Poll git status more frequently for a while to pick up changes
+            // Button will be re-enabled by updateGitCommitButton when repo becomes clean
+            setTimeout(() => {
+                if (typeof pollGitStatus === 'function') pollGitStatus();
+            }, 5000);
+            setTimeout(() => {
+                if (typeof pollGitStatus === 'function') pollGitStatus();
+            }, 15000);
+            setTimeout(() => {
+                if (typeof pollGitStatus === 'function') pollGitStatus();
+            }, 30000);
+        } else {
+            showToast('Failed to start commit: ' + (result.error || 'Unknown error'), 'error');
+            // Re-enable button on API error - operation didn't start
+            btn.disabled = false;
+            btn.classList.remove('loading');
+        }
+    } catch (error) {
+        console.error('Error starting commit:', error);
+        showToast('Error starting commit: ' + error.message, 'error');
+        // Re-enable button on network/fetch error - operation didn't start
+        btn.disabled = false;
+        btn.classList.remove('loading');
+    }
+    // Note: No finally block that auto-re-enables. Button stays disabled until:
+    // 1. Git status polling detects repo is clean (updateGitCommitButton resets state)
+    // 2. An error occurred (handled in catch blocks above)
+}
+
 async function handleSplitAction(btn, approved) {
     const actionItem = btn.closest('.action-item');
     const taskId = actionItem?.dataset.taskId;
@@ -362,13 +599,13 @@ async function handleSplitAction(btn, approved) {
                 pollState();
             }
         } else {
-            alert('Failed to process split: ' + (result.error || 'Unknown error'));
+            showToast('Failed to process split: ' + (result.error || 'Unknown error'), 'error');
             btn.disabled = false;
             btn.textContent = approved ? 'Approve Split' : 'Reject';
         }
     } catch (error) {
         console.error('Error processing split:', error);
-        alert('Error processing split');
+        showToast('Error processing split', 'error');
         btn.disabled = false;
         btn.textContent = approved ? 'Approve Split' : 'Reject';
     }

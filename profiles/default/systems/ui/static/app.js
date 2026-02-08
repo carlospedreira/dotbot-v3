@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initSidebarCollapse();
     await initSidebar();
     initControlButtons();
+    initSteeringPanel();
     initSettingsToggles();
     initTaskClicks();
     initSidebarItemClicks();
@@ -34,6 +35,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initModalClose();
     initPipelineInfiniteScroll();
     initActions();
+    initNotifications();
 
     // Initialize Aether (ambient feedback)
     Aether.init().then(result => {
@@ -52,4 +54,5 @@ window.addEventListener('beforeunload', () => {
     if (pollTimer) clearInterval(pollTimer);
     if (runtimeTimer) clearInterval(runtimeTimer);
     if (activityTimer) clearInterval(activityTimer);
+    if (gitPollTimer) clearInterval(gitPollTimer);
 });

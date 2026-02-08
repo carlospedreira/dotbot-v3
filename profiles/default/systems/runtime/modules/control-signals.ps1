@@ -61,7 +61,10 @@ function Initialize-ControlSignalWatcher {
 
         $updateState = {
             $dir = $Event.SourceEventArgs.FullPath | Split-Path -Parent
-            $script:SignalState.StopPending = Test-Path (Join-Path $dir "stop.signal")
+            # Check for any stop signal (generic or loop-specific)
+            $script:SignalState.StopPending = (Test-Path (Join-Path $dir "stop.signal")) -or
+                                               (Test-Path (Join-Path $dir "stop-analysis.signal")) -or
+                                               (Test-Path (Join-Path $dir "stop-execution.signal"))
             $script:SignalState.PausePending = Test-Path (Join-Path $dir "pause.signal")
             $script:SignalState.ResumePending = Test-Path (Join-Path $dir "resume.signal")
             $script:SignalState.LastCheck = [DateTime]::UtcNow
@@ -74,8 +77,10 @@ function Initialize-ControlSignalWatcher {
         $script:SignalState.ControlDir = $ControlDir
         $script:SignalState.Initialized = $true
 
-        # Initialize current state
-        $script:SignalState.StopPending = Test-Path (Join-Path $ControlDir "stop.signal")
+        # Initialize current state - check for any stop signal (generic or loop-specific)
+        $script:SignalState.StopPending = (Test-Path (Join-Path $ControlDir "stop.signal")) -or
+                                           (Test-Path (Join-Path $ControlDir "stop-analysis.signal")) -or
+                                           (Test-Path (Join-Path $ControlDir "stop-execution.signal"))
         $script:SignalState.PausePending = Test-Path (Join-Path $ControlDir "pause.signal")
         $script:SignalState.ResumePending = Test-Path (Join-Path $ControlDir "resume.signal")
         $script:SignalState.LastCheck = [DateTime]::UtcNow
@@ -94,17 +99,35 @@ function Test-ControlSignals {
     .PARAMETER ControlDir
     Path to the control directory containing signal files
 
+    .PARAMETER LoopType
+    Optional loop type ('analysis' or 'execution') to check loop-specific stop signals.
+    If specified, checks for stop-{LoopType}.signal instead of stop.signal.
+    For backward compatibility, also checks generic stop.signal if no LoopType specified.
+
     .OUTPUTS
     String indicating signal type ('stop', 'pause', or $null)
     #>
     param(
         [Parameter(Mandatory = $true)]
-        [string]$ControlDir
+        [string]$ControlDir,
+
+        [Parameter(Mandatory = $false)]
+        [ValidateSet('analysis', 'execution')]
+        [string]$LoopType
     )
 
     # Always check disk directly - FileSystemWatcher events don't reliably
     # update script-scoped variables across runspaces
-    if (Test-Path (Join-Path $ControlDir "stop.signal")) { return 'stop' }
+
+    # Check for stop signal - use loop-specific if LoopType provided
+    if ($LoopType) {
+        # Check loop-specific stop signal
+        if (Test-Path (Join-Path $ControlDir "stop-$LoopType.signal")) { return 'stop' }
+    } else {
+        # Backward compatibility: check generic stop.signal
+        if (Test-Path (Join-Path $ControlDir "stop.signal")) { return 'stop' }
+    }
+
     if (Test-Path (Join-Path $ControlDir "pause.signal")) { return 'pause' }
 
     return $null
@@ -162,7 +185,10 @@ function Refresh-SignalState {
         [string]$ControlDir
     )
 
-    $script:SignalState.StopPending = Test-Path (Join-Path $ControlDir "stop.signal")
+    # Check for any stop signal (generic or loop-specific)
+    $script:SignalState.StopPending = (Test-Path (Join-Path $ControlDir "stop.signal")) -or
+                                       (Test-Path (Join-Path $ControlDir "stop-analysis.signal")) -or
+                                       (Test-Path (Join-Path $ControlDir "stop-execution.signal"))
     $script:SignalState.PausePending = Test-Path (Join-Path $ControlDir "pause.signal")
     $script:SignalState.ResumePending = Test-Path (Join-Path $ControlDir "resume.signal")
     $script:SignalState.LastCheck = [DateTime]::UtcNow

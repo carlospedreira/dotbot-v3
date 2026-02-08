@@ -19,6 +19,7 @@ You are an autonomous AI coding agent performing **pre-flight analysis** of a ta
 **Category:** {{TASK_CATEGORY}}
 **Priority:** {{TASK_PRIORITY}}
 **Effort:** {{TASK_EFFORT}}
+**Needs Interview:** {{NEEDS_INTERVIEW}}
 
 ### Description
 {{TASK_DESCRIPTION}}
@@ -55,6 +56,46 @@ mcp__dotbot__task_mark_analysing({ task_id: "{{TASK_ID}}" })
 ```
 
 This signals the task is being analysed and prevents others from picking it up.
+
+### Phase 1.5: User Interview (If Requested)
+
+**Needs Interview: {{NEEDS_INTERVIEW}}**
+
+If `needs_interview` is `true`:
+
+1. **Review the task description** and identify areas needing clarification:
+   - Ambiguous requirements
+   - Missing context or constraints
+   - Unclear acceptance criteria
+   - Scope questions
+
+2. **Ask clarifying questions** using `task_mark_needs_input`:
+   - Ask ONE focused question at a time
+   - Provide 3-5 options where applicable (Option A = recommendation)
+   - Wait for answer before asking next question
+
+3. **Proceed to Phase 2** only when requirements are sufficiently clear
+
+**Example interview question:**
+```
+mcp__dotbot__task_mark_needs_input({
+  task_id: "{{TASK_ID}}",
+  question: {
+    question: "What is the primary goal of this feature?",
+    context: "The task description mentions several possibilities. Clarifying the main intent will help scope the implementation.",
+    multi_select: false,
+    options: [
+      { key: "A", label: "Option A (recommended)", rationale: "Most common interpretation based on task wording" },
+      { key: "B", label: "Alternative approach", rationale: "If you meant something different" },
+      { key: "C", label: "Both options", rationale: "Implement both capabilities" },
+      { key: "D", label: "Something else", rationale: "Provide clarification" }
+    ],
+    recommendation: "A"
+  }
+})
+```
+
+If `needs_interview` is `false`: Skip directly to Phase 2.
 
 ### Phase 2: Entity Detection
 
@@ -189,28 +230,78 @@ Extract ONLY the product context needed for this task.
 
 ### Phase 7: Implementation Guidance
 
-Synthesize your findings into implementation guidance.
+Synthesize findings into **concrete, actionable guidance** that makes execution mechanical. The executor should NOT need to make design decisions or re-read pattern files.
 
 1. **Determine approach:**
-   Based on patterns found, describe how to implement.
+   Describe the implementation approach with specific structural details.
 
-2. **Identify key patterns:**
-   What specific patterns from `patterns_from` files should be followed?
+2. **Specify concrete details (by task type):**
 
-3. **Note risks:**
+   **For UI/Frontend tasks:**
+   - HTML/component structure with class names
+   - CSS properties for new styles (use existing variables)
+   - Function signatures with parameters
+   - Field-to-display mappings: which data goes where, in what format
+
+   **For Backend/API tasks:**
+   - Property/method signatures with types
+   - Configuration patterns to follow
+   - Endpoint structure and response shapes
+
+   **For Data/Entity tasks:**
+   - Schema changes with field types
+   - Migration approach
+   - Relationship configurations
+
+3. **Identify insertion points:**
+   Where in each file should changes go? Reference line numbers or landmarks.
+
+4. **Extract key patterns:**
+   Copy the specific pattern snippets from `patterns_from` files - don't just reference them.
+
+5. **Note risks:**
    What could go wrong? What needs careful attention?
 
-4. **Estimate tokens:**
+6. **Estimate tokens:**
    Rough estimate of tokens needed for implementation.
 
-**Example output:**
+**Example output (Backend task):**
 ```json
 {
   "implementation": {
-    "approach": "Add RecurrenceRule property to CalendarEvent. Create EF migration. Follow Task entity pattern for configuration.",
-    "key_patterns": "Use the existing entity configuration pattern in TaskConfiguration.cs. Follow fluent API style for relationships.",
-    "risks": ["Migration may require data backfill if existing events", "Recurrence logic is complex - consider library"],
+    "approach": "Add RecurrenceRule property to CalendarEvent. Create EF migration. Follow Task entity pattern.",
+    "key_patterns": "From TaskConfiguration.cs: `builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);`",
+    "insertion_points": {
+      "CalendarEvent.cs": "After line 24 (existing properties)",
+      "CalendarEventConfiguration.cs": "New file, follow TaskConfiguration.cs structure"
+    },
+    "risks": ["Migration may require data backfill", "Recurrence logic is complex"],
     "estimated_tokens": 15000
+  }
+}
+```
+
+**Example output (UI task):**
+```json
+{
+  "implementation": {
+    "approach": "Two-column modal: sidebar navigation + main content panel",
+    "structure": {
+      "layout": ".modal-sidebar-layout { display: grid; grid-template-columns: 180px 1fr; }",
+      "sections": ["overview", "details", "activity"],
+      "field_mapping": {
+        "overview": ["id", "name", "status (badge)", "priority", "created_at (compact date)"],
+        "details": ["description", "acceptance_criteria (list)"],
+        "activity": ["activity_log (timeline format)"]
+      }
+    },
+    "key_patterns": "From modal.css line 45: `.modal-wide { max-width: 900px; }`",
+    "insertion_points": {
+      "modal.css": "After .modal-wide (line 52)",
+      "tasks.js": "Replace showTaskModal() lines 52-320"
+    },
+    "risks": ["Needs responsive breakpoint below 768px"],
+    "estimated_tokens": 20000
   }
 }
 ```
@@ -354,6 +445,14 @@ mcp__dotbot__task_mark_analysed({
 **Don't:** Spend 30 minutes on a 15-minute task
 **Do:** Match analysis depth to task complexity
 
+### ❌ Abstract Implementation Guidance
+**Don't:** "Refactor the modal to use a sidebar layout"
+**Do:** Specify structure, class names, field mappings, insertion points
+
+### ❌ Referencing Without Extracting
+**Don't:** "Follow the pattern in TaskConfiguration.cs"
+**Do:** Copy the relevant 2-3 line snippet the executor should mimic
+
 ---
 
 ## Success Criteria
@@ -366,10 +465,16 @@ Analysis is complete when:
 - [ ] Dependencies validated (no blockers)
 - [ ] Standards mapped to task
 - [ ] Product context extracted (minimal, relevant)
-- [ ] Implementation guidance provided
+- [ ] Implementation guidance is **concrete and actionable:**
+  - [ ] Insertion points identified (line numbers or landmarks)
+  - [ ] Key pattern snippets extracted (not just referenced)
+  - [ ] Field/data mappings complete (if displaying data)
+  - [ ] Structure defined (HTML/CSS for UI, signatures for code)
 - [ ] Questions asked if truly needed (then wait)
 - [ ] Split proposed if task too large (then wait)
 - [ ] Task marked as analysed with full context
+
+**Litmus test:** Could execution proceed without re-reading pattern files or making design decisions?
 
 ---
 
