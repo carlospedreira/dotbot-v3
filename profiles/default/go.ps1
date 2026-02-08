@@ -21,20 +21,27 @@ $BotDir = $PSScriptRoot
 $UIDir = Join-Path $BotDir "systems\ui"
 $ServerScript = Join-Path $UIDir "server.ps1"
 
-Write-Host "🚀 Starting .bot UI..." -ForegroundColor Cyan
+Write-Host "  Starting .bot UI..." -ForegroundColor Cyan
 Write-Host ""
 
 # Check if server script exists
 if (-not (Test-Path $ServerScript)) {
-    Write-Host "❌ Error: UI server script not found at:" -ForegroundColor Red
+    Write-Host "  Error: UI server script not found at:" -ForegroundColor Red
     Write-Host "   $ServerScript" -ForegroundColor Red
     Write-Host ""
     Write-Host "Please ensure the .bot/systems/ui/ directory exists and contains server.ps1" -ForegroundColor Yellow
     exit 1
 }
 
+# Import platform functions
+$DotbotBase = Join-Path $HOME "dotbot"
+$PlatformModule = Join-Path $DotbotBase "scripts\Platform-Functions.psm1"
+if (Test-Path $PlatformModule) {
+    Import-Module $PlatformModule -Force
+}
+
 # Start the UI server
-Write-Host "🌐 Starting UI server..." -ForegroundColor Yellow
+Write-Host "  Starting UI server..." -ForegroundColor Yellow
 Write-Host "   Location: $UIDir" -ForegroundColor DarkGray
 Write-Host ""
 
@@ -43,8 +50,12 @@ Start-Process pwsh -ArgumentList "-NoExit", "-File", "`"$ServerScript`""
 
 # Open browser after a short delay
 Start-Sleep -Seconds 2
-Start-Process "http://localhost:8686"
+if (Get-Command Open-Url -ErrorAction SilentlyContinue) {
+    Open-Url "http://localhost:8686"
+} else {
+    Start-Process "http://localhost:8686"
+}
 
-Write-Host "🌍 Browser opened at http://localhost:8686" -ForegroundColor Green
+Write-Host "  Browser opened at http://localhost:8686" -ForegroundColor Green
 Write-Host "   Server is running in a separate window." -ForegroundColor DarkGray
 Write-Host ""

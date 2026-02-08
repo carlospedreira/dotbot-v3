@@ -91,28 +91,50 @@ function Add-ToUnixPath {
     }
     $profileFiles += Join-Path $HOME ".profile"
     
-    $exportLine = "export PATH=`"$Directory`":`$PATH`""
+    $exportLine = "export PATH=`"$Directory`:`$PATH`""
     
+    $addedToAny = $false
     foreach ($profileFile in $profileFiles) {
         if (Test-Path $profileFile) {
             $content = Get-Content $profileFile -Raw -ErrorAction SilentlyContinue
             
             if ($content -and $content.Contains($Directory)) {
                 Write-Host "  ✓ Already in $profileFile" -ForegroundColor Green
+                $addedToAny = $true
                 continue
             }
             
             if ($DryRun) {
                 Write-Host "  Would add to $profileFile" -ForegroundColor Yellow
+                $addedToAny = $true
                 continue
             }
             
             Add-Content -Path $profileFile -Value "`n# dotbot`n$exportLine"
             Write-Host "  ✓ Added to $profileFile" -ForegroundColor Green
+            $addedToAny = $true
         }
     }
     
-    Write-Host "    Run 'source ~/.bashrc' or restart your terminal" -ForegroundColor Yellow
+    # If no profile files existed, create ~/.profile
+    if (-not $addedToAny) {
+        $fallbackProfile = Join-Path $HOME ".profile"
+        if ($DryRun) {
+            Write-Host "  Would create $fallbackProfile" -ForegroundColor Yellow
+        } else {
+            Set-Content -Path $fallbackProfile -Value "# dotbot`n$exportLine"
+            Write-Host "  ✓ Created $fallbackProfile" -ForegroundColor Green
+        }
+    }
+    
+    # Show shell-appropriate reload hint
+    if ($env:SHELL -like "*zsh*") {
+        Write-Host "    Run 'source ~/.zshrc' or restart your terminal" -ForegroundColor Yellow
+    } elseif ($env:SHELL -like "*bash*") {
+        Write-Host "    Run 'source ~/.bashrc' or restart your terminal" -ForegroundColor Yellow
+    } else {
+        Write-Host "    Run 'source ~/.profile' or restart your terminal" -ForegroundColor Yellow
+    }
 }
 
 function Set-ExecutablePermission {
@@ -141,14 +163,31 @@ function Write-Success {
     Write-Host "  ✓ $Message" -ForegroundColor Green
 }
 
-function Write-Warning {
+function Write-DotbotWarning {
     param([string]$Message)
     Write-Host "  ⚠ $Message" -ForegroundColor Yellow
 }
 
-function Write-Error {
+function Write-DotbotError {
     param([string]$Message)
     Write-Host "  ✗ $Message" -ForegroundColor Red
+}
+
+function Open-Url {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Url
+    )
+    
+    Initialize-PlatformVariables
+    
+    if ($script:IsWindows) {
+        Start-Process $Url
+    } elseif ($script:IsMacOS) {
+        & open $Url
+    } else {
+        & xdg-open $Url 2>$null
+    }
 }
 
 Export-ModuleMember -Function @(
@@ -156,8 +195,9 @@ Export-ModuleMember -Function @(
     'Get-PlatformName',
     'Add-ToPath',
     'Set-ExecutablePermission',
+    'Open-Url',
     'Write-Status',
     'Write-Success',
-    'Write-Warning',
-    'Write-Error'
+    'Write-DotbotWarning',
+    'Write-DotbotError'
 )

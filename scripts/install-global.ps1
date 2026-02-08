@@ -48,6 +48,7 @@ if ($resolvedBase -and ($resolvedSource -eq $resolvedBase)) {
             $dest = Join-Path $BaseDir $item.Name
             
             if ($item.PSIsContainer) {
+                if (Test-Path $dest) { Remove-Item -Path $dest -Recurse -Force }
                 Copy-Item -Path $item.FullName -Destination $dest -Recurse -Force
             } else {
                 Copy-Item -Path $item.FullName -Destination $dest -Force

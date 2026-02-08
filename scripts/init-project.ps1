@@ -53,14 +53,14 @@ Write-Host ""
 
 # Check if default exists
 if (-not (Test-Path $DefaultDir)) {
-    Write-Error "Default directory not found: $DefaultDir"
+    Write-DotbotError "Default directory not found: $DefaultDir"
     Write-Host "  Run 'dotbot update' to repair installation" -ForegroundColor Yellow
     exit 1
 }
 
 # Check if .bot already exists
 if ((Test-Path $BotDir) -and -not $Force) {
-    Write-Warning ".bot directory already exists"
+    Write-DotbotWarning ".bot directory already exists"
     Write-Host "  Use -Force to overwrite" -ForegroundColor Yellow
     Write-Host ""
     exit 1
@@ -123,7 +123,7 @@ if ($Profile -and $Profile.Count -gt 0) {
         $profileDir = Join-Path $ProfilesDir $profileName
         
         if (-not (Test-Path $profileDir)) {
-            Write-Warning "Profile not found: $profileName"
+            Write-DotbotWarning "Profile not found: $profileName"
             Write-Host "  Available profiles:" -ForegroundColor Yellow
             Get-ChildItem -Path $ProfilesDir -Directory | ForEach-Object { Write-Host "    - $($_.Name)" }
             continue
