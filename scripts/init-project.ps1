@@ -6,12 +6,15 @@
 .DESCRIPTION
     Copies the default .bot structure to the current project directory.
     Optionally installs a profile for tech-specific features.
+    Checks for required dependencies (warn-only).
+    Creates .mcp.json with dotbot, Context7, and Playwright MCP servers.
+    Installs gitleaks pre-commit hook if gitleaks is available.
 
 .PARAMETER Profile
     Profile to install (e.g., 'dotnet'). Can be specified multiple times.
 
 .PARAMETER Force
-    Overwrite existing .bot directory.
+    Overwrite existing .bot system files (preserves workspace data).
 
 .PARAMETER DryRun
     Preview changes without applying.
@@ -51,6 +54,61 @@ Write-Host ""
 Write-Host "═══════════════════════════════════════════════════════════" -ForegroundColor Blue
 Write-Host ""
 
+# ---------------------------------------------------------------------------
+# Dependency check (warn-only, never blocks)
+# ---------------------------------------------------------------------------
+Write-Host "  DEPENDENCY CHECK" -ForegroundColor Blue
+Write-Host "  ────────────────────────────────────────────" -ForegroundColor DarkGray
+Write-Host ""
+
+$depWarnings = 0
+
+if ($PSVersionTable.PSVersion.Major -ge 7) {
+    Write-Success "PowerShell 7+ ($($PSVersionTable.PSVersion))"
+} else {
+    Write-DotbotWarning "PowerShell 7+ is required (current: $($PSVersionTable.PSVersion))"
+    Write-Host "    Download from: https://aka.ms/powershell" -ForegroundColor Cyan
+    $depWarnings++
+}
+
+if (Get-Command git -ErrorAction SilentlyContinue) {
+    Write-Success "Git"
+} else {
+    Write-DotbotWarning "Git is not installed"
+    Write-Host "    Download from: https://git-scm.com/downloads" -ForegroundColor Cyan
+    $depWarnings++
+}
+
+if (Get-Command claude -ErrorAction SilentlyContinue) {
+    Write-Success "Claude CLI"
+} else {
+    Write-DotbotWarning "Claude CLI is not installed (required for autonomous mode)"
+    Write-Host "    Install: npm install -g @anthropic-ai/claude-code" -ForegroundColor Cyan
+    $depWarnings++
+}
+
+if (Get-Command npx -ErrorAction SilentlyContinue) {
+    Write-Success "Node.js / npx (for Context7 and Playwright MCP)"
+} else {
+    Write-DotbotWarning "Node.js / npx is not installed (needed for MCP servers)"
+    Write-Host "    Download from: https://nodejs.org" -ForegroundColor Cyan
+    $depWarnings++
+}
+
+if (Get-Command gitleaks -ErrorAction SilentlyContinue) {
+    Write-Success "gitleaks"
+} else {
+    Write-DotbotWarning "gitleaks is not installed (secret scanning)"
+    Write-Host "    Install: winget install Gitleaks.Gitleaks" -ForegroundColor Cyan
+    $depWarnings++
+}
+
+if ($depWarnings -gt 0) {
+    Write-Host ""
+    Write-DotbotWarning "$depWarnings missing dependency/dependencies -- continuing anyway"
+}
+Write-Host ""
+
 # Check if default exists
 if (-not (Test-Path $DefaultDir)) {
     Write-DotbotError "Default directory not found: $DefaultDir"
@@ -75,15 +133,36 @@ if ($DryRun) {
     exit 0
 }
 
-# Remove existing .bot if Force
+# ---------------------------------------------------------------------------
+# Handle existing .bot with -Force (preserve workspace data)
+# ---------------------------------------------------------------------------
 if ((Test-Path $BotDir) -and $Force) {
-    Write-Status "Removing existing .bot directory"
-    Remove-Item -Path $BotDir -Recurse -Force
+    Write-Status "Updating .bot system files (preserving workspace data)"
+    # Remove only system/config directories and root files -- never workspace/
+    $systemDirs = @("systems", "prompts", "hooks", "defaults", ".control")
+    foreach ($dir in $systemDirs) {
+        $dirPath = Join-Path $BotDir $dir
+        if (Test-Path $dirPath) {
+            Remove-Item -Path $dirPath -Recurse -Force
+        }
+    }
+    $rootFiles = @("go.ps1", "init.ps1", "README.md", ".gitignore")
+    foreach ($file in $rootFiles) {
+        $filePath = Join-Path $BotDir $file
+        if (Test-Path $filePath) {
+            Remove-Item -Path $filePath -Force
+        }
+    }
 }
 
 # Copy default to .bot
 Write-Status "Copying default files"
-Copy-Item -Path $DefaultDir -Destination $BotDir -Recurse -Force
+if (Test-Path $BotDir) {
+    # .bot exists (Force path) -- copy contents on top, preserving workspace
+    Copy-Item -Path (Join-Path $DefaultDir "*") -Destination $BotDir -Recurse -Force
+} else {
+    Copy-Item -Path $DefaultDir -Destination $BotDir -Recurse -Force
+}
 
 # Create empty workspace directories
 $workspaceDirs = @(
@@ -176,7 +255,75 @@ if (Test-Path $initScript) {
     & $initScript
 }
 
+# ---------------------------------------------------------------------------
+# Create .mcp.json with MCP server configuration
+# ---------------------------------------------------------------------------
+$mcpJsonPath = Join-Path $ProjectDir ".mcp.json"
+if (Test-Path $mcpJsonPath) {
+    Write-DotbotWarning ".mcp.json already exists -- skipping"
+} else {
+    Write-Status "Creating .mcp.json (dotbot + Context7 + Playwright)"
+    $mcpConfig = @{
+        mcpServers = [ordered]@{
+            dotbot = [ordered]@{
+                type    = "stdio"
+                command = "pwsh"
+                args    = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".bot\systems\mcp\dotbot-mcp.ps1")
+                env     = @{}
+            }
+            context7 = [ordered]@{
+                type    = "stdio"
+                command = "npx"
+                args    = @("-y", "@upstash/context7-mcp@latest")
+                env     = @{}
+            }
+            playwright = [ordered]@{
+                type    = "stdio"
+                command = "npx"
+                args    = @("-y", "@anthropic-ai/mcp-playwright@latest")
+                env     = @{}
+            }
+        }
+    }
+    $mcpConfig | ConvertTo-Json -Depth 5 | Set-Content -Path $mcpJsonPath -Encoding UTF8
+    Write-Success "Created .mcp.json"
+}
+
+# ---------------------------------------------------------------------------
+# Install gitleaks pre-commit hook
+# ---------------------------------------------------------------------------
+$gitDir = Join-Path $ProjectDir ".git"
+$hooksDir = Join-Path $gitDir "hooks"
+$preCommitPath = Join-Path $hooksDir "pre-commit"
+
+if (-not (Test-Path $gitDir)) {
+    Write-DotbotWarning "No .git directory found -- skipping gitleaks hook"
+} elseif (-not (Get-Command gitleaks -ErrorAction SilentlyContinue)) {
+    Write-DotbotWarning "gitleaks not installed -- skipping pre-commit hook"
+} elseif (Test-Path $preCommitPath) {
+    Write-DotbotWarning "pre-commit hook already exists -- skipping"
+} else {
+    Write-Status "Installing gitleaks pre-commit hook"
+    if (-not (Test-Path $hooksDir)) {
+        New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null
+    }
+    $hookContent = @'
+#!/bin/sh
+# dotbot: gitleaks pre-commit hook
+# Scans staged changes for secrets before allowing commit.
+gitleaks git --pre-commit --staged
+'@
+    Set-Content -Path $preCommitPath -Value $hookContent -Encoding UTF8 -NoNewline
+    # Make executable on non-Windows platforms
+    if (-not $IsWindows) {
+        & chmod +x $preCommitPath 2>$null
+    }
+    Write-Success "Installed gitleaks pre-commit hook"
+}
+
+# ---------------------------------------------------------------------------
 # Show completion message
+# ---------------------------------------------------------------------------
 Write-Host ""
 Write-Host "═══════════════════════════════════════════════════════════" -ForegroundColor Blue
 Write-Host ""
@@ -204,6 +351,11 @@ if ($Profile -and $Profile.Count -gt 0) {
         Write-Host "    $p" -ForegroundColor Cyan
     }
 }
+Write-Host ""
+Write-Host "  GET STARTED" -ForegroundColor Blue
+Write-Host "  ────────────────────────────────────────────" -ForegroundColor DarkGray
+Write-Host ""
+Write-Host "    .bot\go.ps1" -ForegroundColor White
 Write-Host ""
 Write-Host "  NEXT STEPS" -ForegroundColor Blue
 Write-Host "  ────────────────────────────────────────────" -ForegroundColor DarkGray
