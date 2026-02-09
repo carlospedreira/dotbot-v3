@@ -15,8 +15,19 @@
 [CmdletBinding()]
 param(
     [Parameter(ValueFromRemainingArguments = $true)]
-    [string[]]$Arguments
+    [string[]]$RawArguments
 )
+
+# Normalize --param to -Param for PowerShell compatibility
+$Arguments = if ($RawArguments) {
+    $RawArguments | ForEach-Object {
+        if ($_ -match '^--(.+)$') {
+            "-$($Matches[1])"
+        } else {
+            $_
+        }
+    }
+} else { @() }
 
 $ErrorActionPreference = "Stop"
 

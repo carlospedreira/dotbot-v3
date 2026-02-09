@@ -77,7 +77,16 @@ $ScriptsDir = Join-Path $DotbotBase "scripts"
 Import-Module (Join-Path $ScriptsDir "Platform-Functions.psm1") -Force
 
 $Command = $args[0]
-$Arguments = if ($args.Count -gt 1) { $args[1..($args.Count-1)] } else { @() }
+$Arguments = if ($args.Count -gt 1) {
+    # Normalize --param to -Param for PowerShell compatibility
+    $args[1..($args.Count-1)] | ForEach-Object {
+        if ($_ -match '^--(.+)$') {
+            "-$($Matches[1])"
+        } else {
+            $_
+        }
+    }
+} else { @() }
 
 function Show-Help {
     Write-Host ""
