@@ -263,6 +263,18 @@ if (Test-Path $mcpJsonPath) {
     Write-DotbotWarning ".mcp.json already exists -- skipping"
 } else {
     Write-Status "Creating .mcp.json (dotbot + Context7 + Playwright)"
+
+    # On Windows, npx must be invoked via 'cmd /c' for stdio MCP servers
+    if ($IsWindows) {
+        $npxCommand = "cmd"
+        $npxContext7Args = @("/c", "npx", "-y", "@upstash/context7-mcp@latest")
+        $npxPlaywrightArgs = @("/c", "npx", "-y", "@playwright/mcp@latest")
+    } else {
+        $npxCommand = "npx"
+        $npxContext7Args = @("-y", "@upstash/context7-mcp@latest")
+        $npxPlaywrightArgs = @("-y", "@playwright/mcp@latest")
+    }
+
     $mcpConfig = @{
         mcpServers = [ordered]@{
             dotbot = [ordered]@{
@@ -273,14 +285,14 @@ if (Test-Path $mcpJsonPath) {
             }
             context7 = [ordered]@{
                 type    = "stdio"
-                command = "npx"
-                args    = @("-y", "@upstash/context7-mcp@latest")
+                command = $npxCommand
+                args    = $npxContext7Args
                 env     = @{}
             }
             playwright = [ordered]@{
                 type    = "stdio"
-                command = "npx"
-                args    = @("-y", "@anthropic-ai/mcp-playwright@latest")
+                command = $npxCommand
+                args    = $npxPlaywrightArgs
                 env     = @{}
             }
         }
