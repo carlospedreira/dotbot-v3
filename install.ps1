@@ -18,16 +18,28 @@ param(
     [string[]]$RawArguments
 )
 
-# Normalize --param to -Param for PowerShell compatibility
-$Arguments = if ($RawArguments) {
-    $RawArguments | ForEach-Object {
-        if ($_ -match '^--(.+)$') {
-            "-$($Matches[1])"
+# Convert CLI args to a hashtable for proper named-parameter splatting.
+# Array splatting only does positional binding; hashtable splatting is
+# required for named parameters like -Profile.
+$SplatArgs = @{}
+if ($RawArguments) {
+    $i = 0
+    while ($i -lt $RawArguments.Count) {
+        $token = $RawArguments[$i]
+        if ($token -match '^--?(.+)$') {
+            $name = $Matches[1]
+            if (($i + 1) -lt $RawArguments.Count -and $RawArguments[$i + 1] -notmatch '^--?') {
+                $SplatArgs[$name] = $RawArguments[$i + 1]
+                $i += 2
+            } else {
+                $SplatArgs[$name] = $true
+                $i++
+            }
         } else {
-            $_
+            $i++
         }
     }
-} else { @() }
+}
 
 $ErrorActionPreference = "Stop"
 
@@ -75,8 +87,8 @@ if ($isInDotbotRepo -and -not $isDotbotInstalled) {
     Write-Host ""
     
     $installScript = Join-Path $ScriptDir "scripts\install-global.ps1"
-    if ($Arguments) {
-        & $installScript @Arguments
+    if ($SplatArgs.Count -gt 0) {
+        & $installScript @SplatArgs
     } else {
         & $installScript
     }
@@ -89,8 +101,8 @@ if ($isInDotbotRepo -and -not $isDotbotInstalled) {
     Write-Host ""
     
     $installScript = Join-Path $ScriptDir "scripts\install-global.ps1"
-    if ($Arguments) {
-        & $installScript @Arguments
+    if ($SplatArgs.Count -gt 0) {
+        & $installScript @SplatArgs
     } else {
         & $installScript
     }
@@ -103,8 +115,8 @@ if ($isInDotbotRepo -and -not $isDotbotInstalled) {
     Write-Host ""
     
     # Call dotbot init
-    if ($Arguments) {
-        & dotbot init @Arguments
+    if ($SplatArgs.Count -gt 0) {
+        & dotbot init @SplatArgs
     } else {
         & dotbot init
     }

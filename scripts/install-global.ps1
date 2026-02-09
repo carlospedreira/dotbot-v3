@@ -77,16 +77,29 @@ $ScriptsDir = Join-Path $DotbotBase "scripts"
 Import-Module (Join-Path $ScriptsDir "Platform-Functions.psm1") -Force
 
 $Command = $args[0]
-$Arguments = if ($args.Count -gt 1) {
-    # Normalize --param to -Param for PowerShell compatibility
-    $args[1..($args.Count-1)] | ForEach-Object {
-        if ($_ -match '^--(.+)$') {
-            "-$($Matches[1])"
+
+# Convert CLI args to a hashtable for proper named-parameter splatting.
+# Array splatting only does positional binding; hashtable splatting is
+# required for named parameters like -Profile.
+$SplatArgs = @{}
+if ($args.Count -gt 1) {
+    $raw = $args[1..($args.Count-1)]
+    $i = 0
+    while ($i -lt $raw.Count) {
+        if ($raw[$i] -match '^--?(.+)$') {
+            $name = $Matches[1]
+            if (($i + 1) -lt $raw.Count -and $raw[$i + 1] -notmatch '^--?') {
+                $SplatArgs[$name] = $raw[$i + 1]
+                $i += 2
+            } else {
+                $SplatArgs[$name] = $true
+                $i++
+            }
         } else {
-            $_
+            $i++
         }
     }
-} else { @() }
+}
 
 function Show-Help {
     Write-Host ""
@@ -114,8 +127,8 @@ function Show-Help {
 function Invoke-Init {
     $initScript = Join-Path $ScriptsDir "init-project.ps1"
     if (Test-Path $initScript) {
-        if ($Arguments.Count -gt 0) {
-            & $initScript @Arguments
+        if ($SplatArgs.Count -gt 0) {
+            & $initScript @SplatArgs
         } else {
             & $initScript
         }
