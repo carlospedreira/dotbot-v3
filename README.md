@@ -11,6 +11,8 @@ Most AI coding tools give you a result but no record of how you got there -- no 
 dotbot is different. It wraps AI-assisted coding in a managed, transparent workflow where every step is tracked:
 
 - **Plan first, then execute** -- Product specs become task roadmaps. Each task gets pre-flight analysis before implementation begins. Decisions, trade-offs, and rationale are documented as the work happens.
+- **Two-phase execution** -- Tasks go through analysis first, then implementation. The analysis phase resolves ambiguity, identifies files and patterns, and builds a context package. The implementation phase consumes that package and writes code.
+- **Per-task git worktree isolation** -- Each task runs in its own git worktree on an isolated branch. Work is squash-merged back to main on completion, keeping history clean and preventing cross-task interference.
 - **Full session audit trail** -- Every AI session, question, answer, and code change is recorded in version-controlled JSON files. Your team can review exactly what happened, when, and why.
 - **Operator steering** -- Guide the AI mid-session through a heartbeat/whisper system. Send corrections or pivot instructions without interrupting its flow.
 - **Zero-dependency tooling** -- The built-in MCP server and web UI are pure PowerShell. No npm, pip, or Docker required -- install and go.
@@ -112,13 +114,13 @@ pwsh install.ps1
 ├── systems/          # Core systems
 │   ├── mcp/          # MCP server (task/session tools)
 │   ├── ui/           # Web UI server
-│   └── runtime/      # Autonomous loop
+│   └── runtime/      # Autonomous loop + worktree manager
 ├── prompts/          # AI prompts
 │   ├── agents/       # Specialized AI personas
 │   ├── skills/       # Reusable capabilities
-│   └── workflows/    # Step-by-step processes
-├── state/            # Runtime state
-│   ├── tasks/        # Task queue (todo/in-progress/done)
+│   └── workflows/    # Step-by-step processes (analysis + execution)
+├── workspace/        # Runtime state
+│   ├── tasks/        # Task queue (todo → analysing → in-progress → done)
 │   ├── sessions/     # Session tracking
 │   └── product/      # Product documentation
 ├── hooks/            # Project-specific scripts

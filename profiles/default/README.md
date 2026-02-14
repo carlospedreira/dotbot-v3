@@ -1,326 +1,209 @@
-# 🤖 dotbot - Autonomous Development System
+# dotbot v3 - Autonomous Development Framework
 
-## Overview
+A project-agnostic framework for autonomous software development using Claude Code. Provides task management, two-phase execution (analysis + implementation), per-task git worktree isolation, a web dashboard, and a PowerShell MCP server.
 
-Project-agnostic autonomous development using Claude Code's agents/skills model with TDD-focused workflow.
+## Installation
 
-## 📋 Complete Workflow Sequence
-
-### Phase 1: Planning
-```
-1. dotbot-1-plan-product
-   └── Creates: mission.md, tech-stack.md
-   
-2. dotbot-2-plan-roadmap
-   └── Creates: tasks as JSON files in .bot/workspace/tasks/todo/
+```bash
+cd ~
+git clone https://github.com/andresharpe/dotbot-v3 dotbot-install
+cd dotbot-install
+pwsh install.ps1
 ```
 
-### Phase 2: Specification (Optional)
-```
-3. dotbot-3-shape-spec
-   └── Creates: initial spec structure
-   
-4. dotbot-4-write-spec
-   └── Creates: complete spec.md
-   
-5. dotbot-5-create-tasks
-   └── Creates: tasks.md with task groups
-```
+The installer copies the `.bot/` framework into your project and configures Claude Code integration (agents, skills, and MCP server).
 
-### Phase 3: Implementation (Choose Your Path)
+### Post-Install Verification
 
-#### 🤖 Path A: Autonomous Feature-Driven
-```
-7. dotbot-7-implement-feature
-   └── Autonomous agent implements features from queue
-   └── Uses: MCP tools, session management
-   └── Philosophy: Build what's missing, never skip
+After installation, confirm the setup:
+
+```bash
+# Agents and skills should be in .claude/
+ls .claude/agents/    # implementer, planner, reviewer, tester
+ls .claude/skills/    # create-migration, entity-design, etc.
+
+# MCP config should reference dotbot
+cat .mcp.json         # dotbot, context7, playwright servers
+
+# Launch the dashboard
+pwsh .bot/go.ps1      # Opens http://localhost:8686
 ```
 
-#### 👤 Path B: Traditional Task-Driven
-```
-6. dotbot-6-implement-tasks
-   └── Implement specific task groups
-   
-6. dotbot-6-orchestrate-tasks
-   └── Orchestrate multiple task groups
-```
-
-### Phase 4: Optimization
-```
-8. dotbot-8-improve-rules
-   └── Refine standards and patterns
-```
-
-## 🔄 Feature-to-Code Mapping
-
-### How Features Become Code
-
-```javascript
-// Task (JSON in .bot/workspace/tasks/todo/)
-{
-  "id": "uuid-here",
-  "name": "User Authentication",
-  "category": "core",
-  "priority": 1,
-  "effort": "L",
-  "acceptance_criteria": [
-    "Users can register with email",
-    "Passwords are securely hashed",
-    "Sessions expire after 24 hours"
-  ],
-  "steps": [
-    "Create user database schema",
-    "Implement registration endpoint",
-    "Add password hashing",
-    "Create login endpoint",
-    "Implement session management"
-  ]
-}
-```
-
-⬇️ **Transforms Into** ⬇️
-
-```
-Autonomous Implementation:
-1. Database migration for users table
-2. User model with validation
-3. Registration API endpoint
-4. BCrypt password hashing
-5. JWT session tokens
-6. Login API endpoint
-7. Session middleware
-8. Frontend registration form
-9. Frontend login form
-10. Tests for all components
-```
-
-## 🤖 Autonomous Agent Lifecycle
-
-### Session Flow
-```mermaid
-graph TD
-    A[start-session] --> B[Initialize Context]
-    B --> C[task_get_stats]
-    C --> D[task_get_next]
-    D --> E[task_mark_in_progress]
-    E --> F[Implement Task]
-    F --> G[verify-task]
-    G --> H[detect-mock-data]
-    H --> I{Tests Pass?}
-    I -->|Yes| J[task_mark_done]
-    I -->|No| F
-    J --> K{More Tasks?}
-    K -->|Yes| D
-    K -->|No| L[end-session]
-```
-
-### Key Commands
-
-#### Session Management
-- `start-session` - Initialize autonomous session
-- `end-session` - Clean session termination
-
-#### Task Management (MCP Tools)
-- `task_get_stats` - Overall progress statistics
-- `task_get_next` - Get highest priority task
-- `task_mark_in_progress` - Mark task as in-progress
-- `task_mark_done` - Mark task as complete
-- `task_mark_todo` - Mark task as todo (reset/revert)
-- `task_list` - List and filter tasks
-- `task_create_bulk` - Batch create tasks
-
-#### Verification
-- `verify-task` - Comprehensive testing
-- `detect-mock-data` - Scan for forbidden patterns
-
-## 📁 Directory Structure
+## Architecture
 
 ```
 .bot/
-├── tasks/             # Task queue (MCP managed)
-│   ├── todo/          # Pending tasks (JSON files)
-│   ├── in-progress/   # Currently being worked on
-│   └── done/          # Completed tasks
-├── sessions/          # Session tracking
-│   ├── progress.txt   # Continuous progress log
-│   ├── session-*.json # Individual session records
-│   └── history/       # Archived sessions
-├── commands/          # All command definitions
-├── workflows/         # Detailed workflows
-├── agents/           # Agent definitions
-├── mcp/              # MCP tool implementations
-│   └── tools/        # Individual tool directories
-└── specs/            # Specifications and tasks
-
-.warp/
-└── workflows/        # Warp AI shortcuts
+├── go.ps1                        # Launch web dashboard
+├── init.ps1                      # Copy agents/skills to .claude/
+├── defaults/                     # Default settings and theme
+├── prompts/
+│   ├── workflows/                # Execution templates (analysis, implementation)
+│   ├── agents/                   # Agent personas (implementer, planner, reviewer, tester)
+│   ├── skills/                   # Technical guidance (7 skills)
+│   └── standards/                # Coding standards (project-specific)
+├── systems/
+│   ├── mcp/                      # MCP server + 30 tools (PowerShell, stdio transport)
+│   ├── runtime/                  # Process launcher, modules, worktree manager
+│   ├── ui/                       # Web dashboard (PowerShell server + vanilla JS)
+│   └── tasks/                    # Task management utilities
+├── hooks/
+│   ├── dev/                      # Dev environment scripts
+│   ├── scripts/                  # Automation (commit, invoke-claude, steering)
+│   └── verify/                   # Pre-commit checks (privacy, git clean, build, format)
+└── workspace/
+    ├── product/                  # Product docs (mission.md, entity-model.md, tech-stack.md)
+    └── tasks/                    # Task queue (todo/, analysed/, in-progress/, done/)
 ```
 
-## 🎯 Core Principles
+## How It Works
 
-### For Autonomous Agents
+### Two-Phase Task Execution
 
-1. **Test-Driven Development** - Tasks are test cases that drive implementation
-2. **Build What's Missing** - Never skip because functionality doesn't exist
-3. **Real Data Only** - No mock data in production features
-4. **Clean State** - Always leave codebase working
-5. **Progress Over Perfection** - Complete one task well per session
-6. **Verification Required** - Browser automation testing before marking complete
+Every task goes through two phases, each run by a separate Claude instance:
 
-### Build vs Skip Decision Tree
+**Phase 1 - Analysis** (`98-analyse-task.md`):
+- Identifies affected entities and files
+- Maps applicable coding standards
+- Validates dependencies
+- Produces concrete implementation guidance (insertion points, pattern snippets, field mappings)
+- Asks clarifying questions or proposes task splits if needed
+
+**Phase 2 - Execution** (`99-autonomous-task.md`):
+- Receives pre-packaged analysis context (no re-exploration needed)
+- Implements changes following the analysis guidance
+- Runs verification scripts (privacy scan, git clean, build, format)
+- Commits with task ID references
+
+### Per-Task Git Worktrees
+
+Each task runs in an isolated git worktree:
 
 ```
-Is functionality missing?
-├── YES → BUILD IT
-│   ├── Page doesn't exist → Create the page
-│   ├── API missing → Implement the API
-│   ├── Database table missing → Create migration
-│   └── Component missing → Build component
-└── NO → Is it external?
-    ├── YES (API keys, external service) → Skip
-    └── NO → Build it
+Analysis picks up task
+  → Creates branch: task/{short-id}-{slug}
+  → Creates worktree: ../worktrees/{repo}/task-{short-id}-{slug}/
+  → Sets up junctions for shared .bot/ directories
+  → Copies essential gitignored files (e.g., .env)
+
+Execution picks up analysed task
+  → Looks up existing worktree
+  → Claude implements and commits to task branch
+
+On completion
+  → Rebases task branch onto main
+  → Squash-merges to main
+  → Cleans up worktree and branch
 ```
 
-## 💡 Implementation Examples
+This provides full isolation between tasks — a failed task never leaves dirty state in the main working tree.
 
-### Example 1: Core Task
+### Task Lifecycle
+
+```
+todo → analysing → analysed → in-progress → done
+         │                                     │
+         ├→ needs-input (question/split)        └→ squash-merged to main
+         └→ skipped (non-recoverable)
+```
+
+### Process Launcher
+
+`launch-process.ps1` is the unified entry point for all Claude invocations. It supports multiple process types:
+
+| Type | Purpose |
+|------|---------|
+| `analysis` | Pre-flight task analysis |
+| `execution` | Task implementation |
+| `kickstart` | Product planning and task creation |
+| `planning` | Roadmap generation |
+| `commit` | Git operations |
+| `task-creation` | Bulk task creation |
+
+Each process gets a registry entry for tracking and is managed through the web dashboard.
+
+### MCP Server
+
+The PowerShell MCP server (`dotbot-mcp.ps1`) exposes 30+ tools to Claude via stdio transport:
+
+- **Task tools**: create, list, get-next, mark-in-progress, mark-done, mark-skipped, etc.
+- **Session tools**: initialize, update, get-state, get-stats
+- **Plan tools**: create, get, update
+- **Dev tools**: start, stop, deploy, logs, release
+- **Steering**: heartbeat with whisper channel for operator interrupts
+
+Tools are auto-discovered from `.bot/systems/mcp/tools/{tool-name}/` — each tool is a folder with `metadata.yaml` (schema) and `script.ps1` (implementation).
+
+## Usage
+
+### Launch the Dashboard
+
 ```bash
-# Task: "User Authentication"
-# Category: core
-
-# Agent will:
-1. Create user table migration
-2. Build user model
-3. Implement registration endpoint
-4. Add password hashing
-5. Create login endpoint
-6. Build session management
-7. Create frontend forms
-8. Write comprehensive tests
-9. Verify with browser automation
+pwsh .bot/go.ps1
 ```
 
-### Example 2: UI Task
-```bash
-# Task: "User Dashboard"
-# Category: feature
+Opens the web UI at `http://localhost:8686` where you can:
+- View and manage tasks
+- Start analysis and execution processes
+- Monitor running processes
+- Kick off product planning
 
-# Agent will:
-1. Create dashboard route
-2. Build dashboard component
-3. Fetch user data API
-4. Create sub-components
-5. Add styling
-6. Implement interactivity
-7. Write integration tests
-8. Verify all functionality
+### Product Planning
+
+From the dashboard, use the kickstart workflow to:
+1. Define product mission and tech stack
+2. Generate task groups from the roadmap
+3. Expand groups into individual tasks with acceptance criteria
+
+### Autonomous Execution
+
+Start analysis and execution processes from the dashboard. They run in a loop:
+
+1. **Analysis process** picks up `todo` tasks, analyses them, marks them `analysed`
+2. **Execution process** picks up `analysed` tasks, implements them, marks them `done`
+3. Completed tasks are squash-merged to main automatically
+
+### Manual Task Management
+
+Use MCP tools directly in Claude Code:
+
+```
+task_create       → Create a new task
+task_list         → List tasks by status/category/priority
+task_get_next     → Get highest priority ready task
+task_get_stats    → View completion statistics
 ```
 
-## 🔧 Quick Start for Testing
+## Agents
 
-### For Autonomous Development:
-```bash
-# 1. Create tasks (if not already done)
-warp ai
-> Run dotbot-2-plan-roadmap
+Four TDD-focused agent personas in `.claude/agents/`:
 
-# 2. Start autonomous implementation
-warp ai
-> Run dotbot-7-implement-feature
+| Agent | Role |
+|-------|------|
+| **implementer** | Writes production code to make tests pass |
+| **planner** | Creates roadmaps and breaks down work |
+| **reviewer** | Reviews code quality and patterns |
+| **tester** | Writes failing tests first (TDD) |
 
-# The agent will:
-# - Start session
-# - Get next task
-# - Implement it completely
-# - Verify it works
-# - Mark it done
-# - End session
-```
+## Verification Hooks
 
-### For Traditional Development:
-```bash
-# 1. Create spec and tasks
-warp ai
-> Run dotbot-3-shape-spec
-> Run dotbot-4-write-spec
-> Run dotbot-5-create-tasks
+Pre-commit and post-task verification scripts in `.bot/hooks/verify/`:
 
-# 2. Implement tasks
-warp ai
-> Run dotbot-6-implement-tasks
-```
+| Script | Purpose |
+|--------|---------|
+| `00-privacy-scan.ps1` | Detect absolute paths and secrets |
+| `01-git-clean.ps1` | Ensure no uncommitted changes |
+| `02-git-pushed.ps1` | Check for unpushed commits (skipped for task branches) |
 
-## 📊 Progress Tracking
+Additional project-specific hooks (dotnet build, dotnet format) can be added.
 
-### Check Overall Progress
-```
-Use task_get_stats tool
-```
+## Configuration
 
-Returns:
-- Total tasks
-- Completed count
-- In-progress count
-- Percentage complete
-- Effort remaining
-
-### View Task Queue
-```
-Use task_list tool with status='todo'
-```
-
-### Review Session History
-```
-Check .bot/workspace/sessions/progress.txt
-Check .bot/workspace/sessions/latest-handoff.md
-```
-
-## 🔄 Integration Points
-
-### Tasks ↔ Subtasks
-- Tasks can have embedded `steps` (subtasks)
-- Subtasks can be generated from `acceptance_criteria`
-- Complex tasks can spawn mini-specs with subtasks
-
-### Sessions ↔ Git
-- Each session creates commits
-- Session files track commit hashes
-- Progress preserved in version control
-
-### MCP Tools ↔ Files
-- Tasks stored as JSON files
-- Tools manipulate files directly
-- Version control friendly
-
-## ⚡ Key Advantages
-
-### Autonomous Path
-- ✅ Continuous development across sessions
-- ✅ Self-directed implementation
-- ✅ Build-what's-missing philosophy
-- ✅ Automatic progress tracking
-- ✅ Session handoff for fresh contexts
-
-### Traditional Path
-- ✅ Human oversight and control
-- ✅ Detailed task orchestration
-- ✅ Standards enforcement
-- ✅ Group-based implementation
+- **`.mcp.json`** — MCP server configuration (dotbot, context7, playwright)
+- **`.bot/defaults/settings.default.json`** — Default framework settings
+- **`.bot/defaults/theme.default.json`** — Dashboard theme
+- **`.bot/.control/`** — Runtime state (process registry, worktree map, settings) — gitignored
 
 ## TODO
 
 - [ ] Create `.bot/setup.ps1` bootstrap script to install tooling dependencies (gitleaks, etc.) and configure git hooks
 - [ ] Move pre-commit hook template to `.bot/hooks/git/pre-commit` so it can be installed by setup script
-
-## Ready to Test
-
-The system is now complete with:
-- Task-based planning (plan-roadmap)
-- Autonomous implementation (implement-feature)
-- Session management (start/end-session)
-- Verification framework (verify-task, detect-mock-data)
-- Progress tracking (MCP tools)
-- Traditional task path (still available)
-
-Start a new Warp window and run `dotbot-7-implement-feature` to see autonomous development in action!

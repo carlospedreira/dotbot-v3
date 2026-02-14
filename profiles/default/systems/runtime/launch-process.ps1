@@ -99,6 +99,7 @@ if ($Type -in @('analysis', 'execution')) {
     Import-Module "$PSScriptRoot\..\mcp\modules\SessionTracking.psm1" -Force
     . "$PSScriptRoot\modules\cleanup.ps1"
     . "$PSScriptRoot\modules\get-failure-reason.ps1"
+    Import-Module "$PSScriptRoot\modules\WorktreeManager.psm1" -Force
     . "$PSScriptRoot\modules\test-task-completion.ps1"
     . "$PSScriptRoot\modules\create-problem-log.ps1"
 
@@ -285,6 +286,9 @@ if ($Type -in @('analysis', 'execution')) {
         Reset-SkippedTasks -TasksBaseDir $tasksBaseDir | Out-Null
     }
 
+    # Clean up orphan worktrees from previous runs
+    Remove-OrphanWorktrees -ProjectRoot $projectRoot -BotRoot $botRoot
+
     # Initialize task index for analysis
     if ($Type -eq 'analysis') {
         Initialize-TaskIndex -TasksBaseDir $tasksBaseDir
@@ -379,6 +383,37 @@ if ($Type -in @('analysis', 'execution')) {
             Write-Status "Task: $($task.name)" -Type Success
             Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Started task: $($task.name)"
 
+            # --- Worktree setup ---
+            $worktreePath = $null
+            $branchName = $null
+            if ($Type -eq 'analysis') {
+                $wtResult = New-TaskWorktree -TaskId $task.id -TaskName $task.name -ProjectRoot $projectRoot -BotRoot $botRoot
+                if ($wtResult.success) {
+                    $worktreePath = $wtResult.worktree_path
+                    $branchName = $wtResult.branch_name
+                    Write-Status "Worktree: $worktreePath" -Type Info
+                } else {
+                    Write-Status "Worktree failed: $($wtResult.message)" -Type Warn
+                }
+            } else {
+                # Execution: look up existing worktree or create fallback
+                $wtInfo = Get-TaskWorktreeInfo -TaskId $task.id -BotRoot $botRoot
+                if ($wtInfo -and (Test-Path $wtInfo.worktree_path)) {
+                    $worktreePath = $wtInfo.worktree_path
+                    $branchName = $wtInfo.branch_name
+                    Write-Status "Using worktree: $worktreePath" -Type Info
+                } else {
+                    $wtResult = New-TaskWorktree -TaskId $task.id -TaskName $task.name -ProjectRoot $projectRoot -BotRoot $botRoot
+                    if ($wtResult.success) {
+                        $worktreePath = $wtResult.worktree_path
+                        $branchName = $wtResult.branch_name
+                        Write-Status "Worktree (fallback): $worktreePath" -Type Info
+                    } else {
+                        Write-Status "Worktree failed: $($wtResult.message)" -Type Warn
+                    }
+                }
+            }
+
             # Mark task status
             if ($Type -eq 'execution') {
                 Invoke-TaskMarkInProgress -Arguments @{ task_id = $task.id } | Out-Null
@@ -400,6 +435,9 @@ if ($Type -in @('analysis', 'execution')) {
                     -ProductMission $productMission `
                     -EntityModel $entityModel `
                     -StandardsList $standardsList
+
+                $branchForPrompt = if ($branchName) { $branchName } else { "main" }
+                $prompt = $prompt -replace '\{\{BRANCH_NAME\}\}', $branchForPrompt
 
                 $fullPrompt = @"
 $prompt
@@ -434,6 +472,9 @@ Work on this task autonomously. When complete, ensure you call task_mark_done vi
                 $steps = if ($task.steps) { ($task.steps | ForEach-Object { "- $_" }) -join "`n" } else { "No specific steps defined." }
                 $prompt = $prompt -replace '\{\{TASK_STEPS\}\}', $steps
 
+                $branchForPrompt = if ($branchName) { $branchName } else { "main" }
+                $prompt = $prompt -replace '\{\{BRANCH_NAME\}\}', $branchForPrompt
+
                 $fullPrompt = @"
 $prompt
 
@@ -459,6 +500,8 @@ Do NOT implement the task. Your job is research and preparation only.
             $attemptNumber = 0
             $taskSuccess = $false
 
+            if ($worktreePath) { Push-Location $worktreePath }
+            try {
             while ($attemptNumber -le $maxRetriesPerTask) {
                 $attemptNumber++
 
@@ -575,12 +618,69 @@ Do NOT implement the task. Your job is research and preparation only.
                     break
                 }
             }
+            } finally {
+                if ($worktreePath) { Pop-Location }
+            }
 
             # Update process data
             $env:DOTBOT_CURRENT_TASK_ID = $null
             $env:CLAUDE_SESSION_ID = $null
 
             if ($taskSuccess) {
+                # Post-completion: squash-merge task branch to main (execution only)
+                if ($Type -eq 'execution' -and $worktreePath) {
+                    Write-Status "Merging task branch to main..." -Type Process
+                    $mergeResult = Complete-TaskWorktree -TaskId $task.id -ProjectRoot $projectRoot -BotRoot $botRoot
+                    if ($mergeResult.success) {
+                        Write-Status "Merged: $($mergeResult.message)" -Type Complete
+                        Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Squash-merged to main: $($task.name)"
+                    } else {
+                        Write-Status "Merge failed: $($mergeResult.message)" -Type Error
+                        Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Merge failed for $($task.name): $($mergeResult.message)"
+
+                        # Escalate: move task from done/ to needs-input/ with conflict info
+                        $doneDir = Join-Path $tasksBaseDir "done"
+                        $needsInputDir = Join-Path $tasksBaseDir "needs-input"
+                        $taskFile = Get-ChildItem -Path $doneDir -Filter "*.json" -File -ErrorAction SilentlyContinue | Where-Object {
+                            try {
+                                $c = Get-Content $_.FullName -Raw | ConvertFrom-Json
+                                $c.id -eq $task.id
+                            } catch { $false }
+                        } | Select-Object -First 1
+
+                        if ($taskFile) {
+                            $taskContent = Get-Content $taskFile.FullName -Raw | ConvertFrom-Json
+                            $taskContent.status = 'needs-input'
+                            $taskContent.updated_at = (Get-Date).ToUniversalTime().ToString("o")
+
+                            if (-not $taskContent.PSObject.Properties['pending_question']) {
+                                $taskContent | Add-Member -NotePropertyName 'pending_question' -NotePropertyValue $null -Force
+                            }
+                            $taskContent.pending_question = @{
+                                id             = "merge-conflict"
+                                question       = "Merge conflict during squash-merge to main"
+                                context        = "Conflict details: $($mergeResult.conflict_files -join '; '). Worktree preserved at: $worktreePath"
+                                options        = @(
+                                    @{ key = "A"; label = "Resolve manually and retry (recommended)"; rationale = "Inspect the worktree, resolve conflicts, then retry merge" }
+                                    @{ key = "B"; label = "Discard task changes"; rationale = "Remove worktree and abandon this task's changes" }
+                                    @{ key = "C"; label = "Retry with fresh rebase"; rationale = "Reset and attempt rebase again" }
+                                )
+                                recommendation = "A"
+                                asked_at       = (Get-Date).ToUniversalTime().ToString("o")
+                            }
+
+                            if (-not (Test-Path $needsInputDir)) {
+                                New-Item -ItemType Directory -Force -Path $needsInputDir | Out-Null
+                            }
+                            $newPath = Join-Path $needsInputDir $taskFile.Name
+                            $taskContent | ConvertTo-Json -Depth 20 | Set-Content -Path $newPath -Encoding UTF8
+                            Remove-Item -Path $taskFile.FullName -Force
+
+                            Write-Status "Task moved to needs-input for manual conflict resolution" -Type Warn
+                        }
+                    }
+                }
+
                 $tasksProcessed++
                 $processData.tasks_completed = $tasksProcessed
                 $processData.heartbeat_status = "Completed: $($task.name)"
@@ -647,18 +747,168 @@ Do NOT implement the task. Your job is research and preparation only.
     }
 }
 
-# --- Prompt-based types: kickstart, planning, commit, task-creation ---
-elseif ($Type -in @('kickstart', 'planning', 'commit', 'task-creation')) {
+# --- Kickstart type: three-phase product setup ---
+elseif ($Type -eq 'kickstart') {
+    if (-not $Description) { $Description = "Kickstart project setup" }
+
+    $processData.status = 'running'
+    $processData.workflow = "kickstart-pipeline"
+    $processData.description = $Description
+    $processData.heartbeat_status = $Description
+    Write-ProcessFile -Id $procId -Data $processData
+    Write-ProcessActivity -Id $procId -ActivityType "text" -Message "$Description started"
+
+    $productDir = Join-Path $botRoot "workspace\product"
+
+    try {
+        # ===== Phase 1: Create product documents =====
+        $processData.heartbeat_status = "Phase 1: Creating product documents"
+        Write-ProcessFile -Id $procId -Data $processData
+        Write-ProcessActivity -Id $procId -ActivityType "init" -Message "Phase 1 — creating product documents..."
+        Write-Header "Phase 1: Product Documents"
+
+        $workflowContent = ""
+        $workflowPath = Join-Path $botRoot "prompts\workflows\01-plan-product.md"
+        if (Test-Path $workflowPath) {
+            $workflowContent = Get-Content $workflowPath -Raw
+        }
+
+        # Check for briefing files
+        $briefingDir = Join-Path $productDir "briefing"
+        $fileRefs = ""
+        if (Test-Path $briefingDir) {
+            $briefingFiles = Get-ChildItem -Path $briefingDir -File
+            if ($briefingFiles.Count -gt 0) {
+                $fileRefs = "`n`nBriefing files have been saved to the briefing/ directory. Read and use these for context:`n"
+                foreach ($bf in $briefingFiles) {
+                    $fileRefs += "- $($bf.FullName)`n"
+                }
+            }
+        }
+
+        $phase1Prompt = @"
+You are a product planning assistant for the dotbot autonomous development system.
+
+Your task is to create the foundational product documents for a new project based on the user's description.
+
+Follow this workflow for guidance on document structure:
+$workflowContent
+
+User's project description:
+$Prompt
+$fileRefs
+
+Instructions:
+1. Read any briefing files listed above and any existing project files (README.md, etc.) for additional context
+2. Create these product documents directly by writing files to .bot/workspace/product/:
+   - mission.md - What the product is, core principles, goals. MUST start with a section titled "Executive Summary" as the first heading.
+   - tech-stack.md - Technologies, versions, infrastructure decisions
+   - entity-model.md - Data model, entities, relationships. Include a Mermaid.js erDiagram block showing entities and their relationships visually.
+3. Do NOT create tasks, ask questions, or use task management tools. Just create the documents directly.
+4. Write comprehensive, well-structured markdown documents based on what you know from the user's description and any attached files.
+5. Make reasonable inferences where details are missing - the user can refine later.
+
+IMPORTANT: The mission.md file MUST begin with an "Executive Summary" section (## Executive Summary) as the very first content after the title. This is required for the UI to detect that product planning is complete.
+"@
+
+        $streamArgs = @{
+            Prompt = $phase1Prompt
+            Model = $claudeModelName
+            SessionId = $claudeSessionId
+            PersistSession = $false
+        }
+        if ($ShowDebug) { $streamArgs['ShowDebugJson'] = $true }
+        if ($ShowVerbose) { $streamArgs['ShowVerbose'] = $true }
+
+        Invoke-ClaudeStream @streamArgs
+
+        # Verify product docs were created
+        $hasDocs = (Test-Path (Join-Path $productDir "mission.md")) -and
+                   (Test-Path (Join-Path $productDir "tech-stack.md")) -and
+                   (Test-Path (Join-Path $productDir "entity-model.md"))
+
+        if (-not $hasDocs) {
+            throw "Phase 1 failed: product documents were not created"
+        }
+
+        Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Phase 1 complete — product documents created"
+
+        # ===== Phase 2a: Generate task groups =====
+        $processData.heartbeat_status = "Phase 2a: Planning task groups"
+        Write-ProcessFile -Id $procId -Data $processData
+        Write-ProcessActivity -Id $procId -ActivityType "init" -Message "Phase 2a — planning task groups..."
+        Write-Header "Phase 2a: Task Groups"
+
+        $groupsWorkflow = ""
+        $groupsWorkflowPath = Join-Path $botRoot "prompts\workflows\03a-plan-task-groups.md"
+        if (Test-Path $groupsWorkflowPath) {
+            $groupsWorkflow = Get-Content $groupsWorkflowPath -Raw
+        }
+
+        $phase2aPrompt = @"
+$groupsWorkflow
+
+Work autonomously. Do not ask questions. Read the product documents and create task-groups.json.
+"@
+
+        # New session for Phase 2a
+        $claudeSessionId = [System.Guid]::NewGuid().ToString()
+        $streamArgs = @{
+            Prompt = $phase2aPrompt
+            Model = $claudeModelName
+            SessionId = $claudeSessionId
+            PersistSession = $false
+        }
+        if ($ShowDebug) { $streamArgs['ShowDebugJson'] = $true }
+        if ($ShowVerbose) { $streamArgs['ShowVerbose'] = $true }
+
+        Invoke-ClaudeStream @streamArgs
+
+        # Verify task-groups.json was created
+        $groupsPath = Join-Path $productDir "task-groups.json"
+        if (-not (Test-Path $groupsPath)) {
+            throw "Phase 2a failed: task-groups.json was not created"
+        }
+
+        Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Phase 2a complete — task groups planned"
+
+        # ===== Phase 2b: Expand task groups =====
+        $processData.heartbeat_status = "Phase 2b: Expanding task groups into tasks"
+        Write-ProcessFile -Id $procId -Data $processData
+        Write-ProcessActivity -Id $procId -ActivityType "init" -Message "Phase 2b — expanding task groups..."
+        Write-Header "Phase 2b: Task Group Expansion"
+
+        $expandScript = Join-Path $botRoot "systems\runtime\expand-task-groups.ps1"
+        & $expandScript -BotRoot $botRoot -Model $claudeModelName -ProcessId $procId
+
+        Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Phase 2b complete — all task groups expanded"
+
+        # Done
+        $processData.status = 'completed'
+        $processData.completed_at = (Get-Date).ToUniversalTime().ToString("o")
+        $processData.heartbeat_status = "Completed: $Description"
+    } catch {
+        $processData.status = 'failed'
+        $processData.failed_at = (Get-Date).ToUniversalTime().ToString("o")
+        $processData.error = $_.Exception.Message
+        $processData.heartbeat_status = "Failed: $($_.Exception.Message)"
+        Write-Status "Process failed: $($_.Exception.Message)" -Type Error
+    }
+
+    Write-ProcessFile -Id $procId -Data $processData
+    Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Process $procId finished ($($processData.status))"
+}
+
+# --- Prompt-based types: planning, commit, task-creation ---
+elseif ($Type -in @('planning', 'commit', 'task-creation')) {
     # Determine workflow template
     $workflowFile = switch ($Type) {
-        'kickstart'     { Join-Path $botRoot "prompts\workflows\01-plan-product.md" }
         'planning'      { Join-Path $botRoot "prompts\workflows\03-plan-roadmap.md" }
         'commit'        { Join-Path $botRoot "prompts\workflows\02-commit-and-push.md" }
         'task-creation' { Join-Path $botRoot "prompts\workflows\04-new-tasks.md" }
     }
 
     $processData.workflow = switch ($Type) {
-        'kickstart'     { "01-plan-product.md" }
         'planning'      { "03-plan-roadmap.md" }
         'commit'        { "02-commit-and-push.md" }
         'task-creation' { "04-new-tasks.md" }
@@ -685,7 +935,6 @@ $Prompt
 
     if (-not $Description) {
         $Description = switch ($Type) {
-            'kickstart'     { "Kickstart project setup" }
             'planning'      { "Plan roadmap" }
             'commit'        { "Commit and push changes" }
             'task-creation' { "Create new tasks" }

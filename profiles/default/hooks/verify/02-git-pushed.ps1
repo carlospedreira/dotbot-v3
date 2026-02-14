@@ -10,17 +10,23 @@ $details = @{}
 try {
     $currentBranch = git rev-parse --abbrev-ref HEAD 2>$null
     $details['branch'] = $currentBranch
-    
-    $aheadCount = git rev-list --count "origin/$currentBranch..HEAD" 2>$null
-    if ($LASTEXITCODE -eq 0 -and $aheadCount -gt 0) {
-        $details['unpushed_commits'] = [int]$aheadCount
-        $issues += @{
-            issue = "$aheadCount unpushed commit(s) on '$currentBranch'"
-            severity = "error"
-            context = "Push changes: git push origin $currentBranch"
-        }
-    } else {
+
+    # Task branches are squash-merged by the framework — push check not applicable
+    if ($currentBranch -match '^task/') {
         $details['unpushed_commits'] = 0
+        $details['skipped'] = 'task branch (merged by framework)'
+    } else {
+        $aheadCount = git rev-list --count "origin/$currentBranch..HEAD" 2>$null
+        if ($LASTEXITCODE -eq 0 -and $aheadCount -gt 0) {
+            $details['unpushed_commits'] = [int]$aheadCount
+            $issues += @{
+                issue = "$aheadCount unpushed commit(s) on '$currentBranch'"
+                severity = "error"
+                context = "Push changes: git push origin $currentBranch"
+            }
+        } else {
+            $details['unpushed_commits'] = 0
+        }
     }
 } catch {
     $issues += @{

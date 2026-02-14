@@ -14,6 +14,14 @@ You are an autonomous AI coding agent operating in Go Mode. Your mission is to c
 - **Task ID:** {{TASK_ID}}
 - **Task Name:** {{TASK_NAME}}
 
+## Working Directory
+
+You are working in a **git worktree** on branch `{{BRANCH_NAME}}`.
+- Make commits to THIS branch (they'll be squash-merged to main after completion)
+- Do NOT push to remote — merging is handled by the framework
+- Do NOT switch branches or modify git configuration
+- The .bot/ MCP tools access the central task queue (shared via junction)
+
 ## Task Details
 
 **Category:** {{TASK_CATEGORY}}
@@ -103,7 +111,6 @@ You are an autonomous AI coding agent operating in Go Mode. Your mission is to c
    ```bash
    pwsh -ExecutionPolicy Bypass -File ".bot/hooks/verify/00-privacy-scan.ps1" 2>&1
    pwsh -ExecutionPolicy Bypass -File ".bot/hooks/verify/01-git-clean.ps1" 2>&1
-   pwsh -ExecutionPolicy Bypass -File ".bot/hooks/verify/02-git-pushed.ps1" 2>&1
    ```
 
 3. **Handle failures:**

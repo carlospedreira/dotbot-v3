@@ -167,8 +167,12 @@ if (Test-Path $BotDir) {
 # Create empty workspace directories
 $workspaceDirs = @(
     "workspace\tasks\todo",
+    "workspace\tasks\analysing",
+    "workspace\tasks\analysed",
+    "workspace\tasks\needs-input",
     "workspace\tasks\in-progress",
     "workspace\tasks\done",
+    "workspace\tasks\split",
     "workspace\tasks\skipped",
     "workspace\tasks\cancelled",
     "workspace\sessions",
