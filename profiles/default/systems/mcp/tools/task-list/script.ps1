@@ -35,10 +35,22 @@ function Invoke-TaskList {
         $taskStatus = 'unknown'
         if ($index.Todo.ContainsKey($task.id)) {
             $taskStatus = 'todo'
+        } elseif ($index.Analysing.ContainsKey($task.id)) {
+            $taskStatus = 'analysing'
+        } elseif ($index.NeedsInput.ContainsKey($task.id)) {
+            $taskStatus = 'needs-input'
+        } elseif ($index.Analysed.ContainsKey($task.id)) {
+            $taskStatus = 'analysed'
         } elseif ($index.InProgress.ContainsKey($task.id)) {
             $taskStatus = 'in-progress'
         } elseif ($index.Done.ContainsKey($task.id)) {
             $taskStatus = 'done'
+        } elseif ($index.Split.ContainsKey($task.id)) {
+            $taskStatus = 'split'
+        } elseif ($index.Skipped.ContainsKey($task.id)) {
+            $taskStatus = 'skipped'
+        } elseif ($index.Cancelled.ContainsKey($task.id)) {
+            $taskStatus = 'cancelled'
         }
 
         if ($verbose) {

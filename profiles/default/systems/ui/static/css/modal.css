@@ -1756,3 +1756,122 @@
         border-bottom-color: var(--color-primary);
     }
 }
+
+/* ========== KICKSTART MODAL ========== */
+
+/* Dropzone */
+.kickstart-dropzone {
+    border: 2px dashed var(--primary-30);
+    border-radius: 6px;
+    padding: 28px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: transparent;
+}
+
+.kickstart-dropzone:hover {
+    border-color: var(--color-primary-dim);
+    background: var(--primary-05);
+}
+
+.kickstart-dropzone.dragover {
+    border-color: var(--color-secondary);
+    background: var(--secondary-12);
+    box-shadow: 0 0 16px var(--secondary-glow);
+}
+
+.dropzone-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    pointer-events: none;
+}
+
+.dropzone-icon {
+    font-size: 28px;
+    color: var(--color-primary-dim);
+}
+
+.dropzone-text {
+    font-size: 11px;
+    color: var(--label-color);
+}
+
+.dropzone-hint {
+    font-size: 10px;
+    color: var(--label-color);
+    opacity: 0.6;
+}
+
+/* File list */
+.kickstart-file-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.kickstart-file-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--bezel-dark);
+    border-radius: 4px;
+    border-left: 3px solid var(--color-secondary);
+}
+
+.kickstart-file-icon {
+    font-size: 14px;
+    color: var(--color-secondary);
+    flex-shrink: 0;
+}
+
+.kickstart-file-name {
+    flex: 1;
+    font-size: 11px;
+    color: var(--color-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.kickstart-file-size {
+    font-size: 10px;
+    color: var(--label-color);
+    flex-shrink: 0;
+}
+
+.kickstart-file-remove {
+    background: none;
+    border: none;
+    color: var(--label-color);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 3px;
+    line-height: 1;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.kickstart-file-remove:hover {
+    color: var(--color-error, #ff6b6b);
+    background: rgba(255, 107, 107, 0.1);
+}
+
+/* Loading state for kickstart submit button */
+#kickstart-submit.loading .btn-text {
+    display: none;
+}
+
+#kickstart-submit.loading .btn-loading {
+    display: inline;
+}
+
+#kickstart-submit:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}

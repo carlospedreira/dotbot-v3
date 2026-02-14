@@ -6,10 +6,13 @@ inputSchema:
     session_id:
       type: string
       description: Current session ID (from prompt context)
+    process_id:
+      type: string
+      description: Process registry ID (e.g., proc-a1b2c3). When provided, heartbeat updates the process registry file instead of legacy signal files.
     instance_type:
       type: string
       enum: [analysis, execution]
-      description: Which loop this instance is running
+      description: Which loop this instance is running (legacy mode, used when process_id is not available)
     status:
       type: string
       description: Current activity (e.g., "Analysing task d5093...")
@@ -18,5 +21,4 @@ inputSchema:
       description: What's planned next (e.g., "Check dependencies")
   required:
     - session_id
-    - instance_type
     - status

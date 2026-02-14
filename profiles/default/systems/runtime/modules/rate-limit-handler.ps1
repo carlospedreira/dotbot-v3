@@ -161,7 +161,26 @@ function Wait-ForRateLimitReset {
             type = "rate_limit"
             message = "Rate limit reached. Waiting until $resetTimeStr ($tzStr)"
         } | ConvertTo-Json -Compress
-        Add-Content -Path $logPath -Value $event -Encoding utf8NoBOM
+        $maxRetries = 3
+        for ($r = 0; $r -lt $maxRetries; $r++) {
+            try {
+                $fs = [System.IO.FileStream]::new(
+                    $logPath,
+                    [System.IO.FileMode]::Append,
+                    [System.IO.FileAccess]::Write,
+                    [System.IO.FileShare]::ReadWrite
+                )
+                $sw = [System.IO.StreamWriter]::new($fs, [System.Text.Encoding]::UTF8)
+                $sw.WriteLine($event)
+                $sw.Close()
+                $fs.Close()
+                break
+            } catch {
+                if ($r -lt ($maxRetries - 1)) {
+                    Start-Sleep -Milliseconds (50 * ($r + 1))
+                }
+            }
+        }
     } catch {
         # Silently ignore logging errors
     }

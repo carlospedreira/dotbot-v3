@@ -35,6 +35,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     initModalClose();
     initPipelineInfiniteScroll();
     initActions();
+    initProcesses();
+    await initKickstart();
     initNotifications();
 
     // Initialize Aether (ambient feedback)
@@ -55,4 +57,6 @@ window.addEventListener('beforeunload', () => {
     if (runtimeTimer) clearInterval(runtimeTimer);
     if (activityTimer) clearInterval(activityTimer);
     if (gitPollTimer) clearInterval(gitPollTimer);
+    if (kickstartPolling) clearInterval(kickstartPolling);
+    if (processPollingTimer) clearInterval(processPollingTimer);
 });

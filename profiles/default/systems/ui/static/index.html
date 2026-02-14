@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="css/views.css">
     <link rel="stylesheet" href="css/modal.css">
     <link rel="stylesheet" href="css/crt.css">
+    <link rel="stylesheet" href="css/processes.css">
     <link rel="stylesheet" href="css/responsive.css">
     <style>
         /* Hide body until theme is loaded to prevent flash */
@@ -54,6 +55,7 @@
                     <button class="tab active" data-tab="overview">Overview</button>
                     <button class="tab" data-tab="product">Product</button>
                     <button class="tab" data-tab="pipeline">Roadmap</button>
+                    <button class="tab" data-tab="processes">Processes</button>
                     <button class="tab" data-tab="workflow">Workflow</button>
                     <button class="tab" data-tab="settings">Settings</button>
                 </div>
@@ -84,28 +86,40 @@
                                 </div>
                                 <div class="agent-task" id="agent-current-task">No active task</div>
                             </div>
-                            <!-- Loop Mode Selector -->
-                            <div class="mode-selector" id="mode-selector">
-                                <button class="mode-option" data-mode="analysis">Analysis</button>
-                                <button class="mode-option" data-mode="execution">Execution</button>
-                                <button class="mode-option active" data-mode="both">Both</button>
-                            </div>
-                            <!-- Loop Status LEDs -->
-                            <div class="loop-status">
-                                <div class="loop-indicator">
-                                    <span class="led off" id="analysis-loop-led"></span>
-                                    <span>Analysis</span>
-                                </div>
-                                <div class="loop-indicator">
-                                    <span class="led off" id="execution-loop-led"></span>
-                                    <span>Execution</span>
-                                </div>
-                            </div>
+                            <!-- Process Controls -->
                             <div class="control-buttons" id="controls">
-                                <button class="ctrl-btn primary" data-action="start">PLAY</button>
-                                <button class="ctrl-btn" data-action="pause">PAUSE</button>
-                                <button class="ctrl-btn" data-action="resume">RESUME</button>
-                                <button class="ctrl-btn danger" data-action="stop">STOP</button>
+                                <div class="process-control-row">
+                                    <div class="process-control-header">
+                                        <span class="led off" id="analysis-loop-led"></span>
+                                        <span class="process-control-label">Analysis</span>
+                                    </div>
+                                    <div class="process-control-actions">
+                                        <button class="ctrl-btn-xs primary" data-action="start-analysis" title="Launch analysis process">Start</button>
+                                        <button class="ctrl-btn-xs" data-action="stop-analysis" title="Graceful stop: finish current task then end" disabled>Stop</button>
+                                        <button class="ctrl-btn-xs danger" data-action="kill-analysis" title="Immediate: terminate process via PID" disabled>Kill</button>
+                                    </div>
+                                </div>
+                                <div class="process-control-row">
+                                    <div class="process-control-header">
+                                        <span class="led off" id="execution-loop-led"></span>
+                                        <span class="process-control-label">Execution</span>
+                                    </div>
+                                    <div class="process-control-actions">
+                                        <button class="ctrl-btn-xs primary" data-action="start-execution" title="Launch execution process">Start</button>
+                                        <button class="ctrl-btn-xs" data-action="stop-execution" title="Graceful stop: finish current task then end" disabled>Stop</button>
+                                        <button class="ctrl-btn-xs danger" data-action="kill-execution" title="Immediate: terminate process via PID" disabled>Kill</button>
+                                    </div>
+                                </div>
+                                <div class="process-control-row global">
+                                    <div class="process-control-header">
+                                        <span class="process-control-label">Global</span>
+                                    </div>
+                                    <div class="process-control-actions">
+                                        <button class="ctrl-btn-xs primary" data-action="start-both" title="Launch both analysis and execution">Both</button>
+                                        <button class="ctrl-btn-xs" data-action="stop-all" title="Graceful stop all running processes" disabled>Stop</button>
+                                        <button class="ctrl-btn-xs danger" data-action="kill-all" title="Immediately kill all running processes" disabled>Kill</button>
+                                    </div>
+                                </div>
                             </div>
                             <div class="signal-feedback" id="signal-status"></div>
                         </div>
@@ -278,6 +292,46 @@
                     </div>
                 </div>
 
+                <!-- Processes Context: Process Summary -->
+                <div class="context-panel hidden" data-context="processes">
+                    <div class="sidebar-section">
+                        <div class="sidebar-header">
+                            <span class="sidebar-title">◈ Processes</span>
+                        </div>
+                        <div class="sidebar-content">
+                            <div class="process-summary">
+                                <div class="summary-item">
+                                    <span class="summary-label">Running</span>
+                                    <span class="summary-value active" id="proc-running-count">0</span>
+                                </div>
+                                <div class="summary-item">
+                                    <span class="summary-label">Completed</span>
+                                    <span class="summary-value" id="proc-completed-count">0</span>
+                                </div>
+                                <div class="summary-item">
+                                    <span class="summary-label">Failed</span>
+                                    <span class="summary-value" id="proc-failed-count">0</span>
+                                </div>
+                                <div class="summary-item">
+                                    <span class="summary-label">Total Tasks</span>
+                                    <span class="summary-value" id="proc-total-tasks">0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="sidebar-section">
+                        <div class="sidebar-header">
+                            <span class="sidebar-title">◈ Quick Launch</span>
+                        </div>
+                        <div class="sidebar-content">
+                            <div style="display: flex; flex-direction: column; gap: 6px;">
+                                <button class="ctrl-btn primary" id="quick-launch-analysis" style="width: 100%; font-size: 10px;">Launch Analysis</button>
+                                <button class="ctrl-btn primary" id="quick-launch-execution" style="width: 100%; font-size: 10px;">Launch Execution</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Workflow Context: Dynamic Prompts Directories -->
                 <div class="context-panel hidden" data-context="workflow">
                     <div id="prompts-sidebar">
@@ -329,6 +383,10 @@
                                 <div class="stat-value" data-status="todo" id="needs-input-count">0</div>
                             </div>
                             <div class="stat-card">
+                                <div class="stat-label">READY</div>
+                                <div class="stat-value" data-status="todo" id="analysed-count">0</div>
+                            </div>
+                            <div class="stat-card">
                                 <div class="stat-label">IN PROGRESS</div>
                                 <div class="stat-value" data-status="in-progress" id="progress-count">-</div>
                             </div>
@@ -359,6 +417,22 @@
                                     </div>
                                     <div class="crt-scanlines"></div>
                                     <div class="crt-flicker"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Active Processes Widget -->
+                        <div class="module" id="active-processes-module">
+                            <div class="module-header">
+                                <span class="module-title">◈ Active Processes</span>
+                                <span class="module-badge" id="active-process-count">0</span>
+                            </div>
+                            <div class="module-screen">
+                                <div id="active-processes-list">
+                                    <div class="empty-state">No running processes</div>
+                                </div>
+                                <div class="view-all-link" id="view-all-processes" style="display: none;">
+                                    <a href="#" onclick="switchToTab('processes'); return false;">View All Processes &rarr;</a>
                                 </div>
                             </div>
                         </div>
@@ -509,6 +583,48 @@
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Processes Tab -->
+                    <div class="tab-pane" id="tab-processes">
+                        <!-- Launch Bar -->
+                        <div class="process-launch-bar">
+                            <div class="process-launch-group">
+                                <label>Type</label>
+                                <select id="process-type-select">
+                                    <option value="analysis">Analysis</option>
+                                    <option value="execution">Execution</option>
+                                    <option value="kickstart">Kickstart</option>
+                                    <option value="planning">Planning</option>
+                                    <option value="commit">Commit</option>
+                                    <option value="task-creation">Task Creation</option>
+                                </select>
+                            </div>
+                            <div class="process-launch-group" id="process-continue-group">
+                                <label>
+                                    <input type="checkbox" id="process-continue-check"> Continue
+                                </label>
+                            </div>
+                            <div class="process-launch-group">
+                                <label>Model</label>
+                                <select id="process-model-select">
+                                    <option value="">Default</option>
+                                    <option value="Opus">Opus</option>
+                                    <option value="Sonnet">Sonnet</option>
+                                    <option value="Haiku">Haiku</option>
+                                </select>
+                            </div>
+                            <div class="process-launch-group" id="process-prompt-group" style="display: none; flex: 1;">
+                                <label>Prompt</label>
+                                <input type="text" id="process-prompt-input" class="process-prompt-input" placeholder="Optional prompt context...">
+                            </div>
+                            <button class="ctrl-btn primary" id="process-launch-btn">LAUNCH</button>
+                        </div>
+
+                        <!-- Process List -->
+                        <div id="process-list">
+                            <div class="empty-state">No processes</div>
                         </div>
                     </div>
 
@@ -948,6 +1064,46 @@
         </div>
     </div>
 
+    <!-- Kickstart Project Modal -->
+    <div class="modal-overlay" id="kickstart-modal">
+        <div class="modal modal-wide">
+            <div class="modal-header">
+                <span class="modal-title">◈ Kickstart Project</span>
+                <button class="modal-close" id="kickstart-modal-close"><!-- Close icon loaded dynamically --></button>
+            </div>
+            <div class="modal-body">
+                <div class="task-create-form">
+                    <div class="form-group">
+                        <label class="form-label">Describe your project</label>
+                        <textarea class="form-textarea" id="kickstart-prompt" placeholder="What are you building? What problem does it solve? What technologies are you using?" rows="6"></textarea>
+                    </div>
+                    <div class="form-hint">
+                        Claude will create your mission, tech stack, and entity model documents based on your description and any attached files.
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Attach context files (optional)</label>
+                        <div class="kickstart-dropzone" id="kickstart-dropzone">
+                            <div class="dropzone-content">
+                                <div class="dropzone-icon">◇</div>
+                                <div class="dropzone-text">Drop files here or click to browse</div>
+                                <div class="dropzone-hint">Code, docs, images, data & config files — max 2MB each</div>
+                            </div>
+                        </div>
+                        <input type="file" id="kickstart-file-input" style="display: none;" multiple accept=".md,.txt,.pdf,.rtf,.json,.yaml,.yml,.toml,.xml,.csv,.tsv,.ini,.env,.properties,.cfg,.conf,.html,.css,.scss,.less,.svg,.js,.ts,.tsx,.jsx,.py,.cs,.java,.go,.rs,.rb,.php,.swift,.kt,.c,.cpp,.h,.hpp,.sh,.ps1,.sql,.r,.lua,.dart,.vue,.svelte,.png,.jpg,.jpeg,.gif,.webp,.ipynb">
+                        <div id="kickstart-file-list" class="kickstart-file-list"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer task-create-footer">
+                <button class="ctrl-btn" id="kickstart-cancel">Cancel</button>
+                <button class="ctrl-btn primary" id="kickstart-submit">
+                    <span class="btn-text">Kickstart</span>
+                    <span class="btn-loading" style="display: none;">Starting...</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast notifications -->
     <div class="toast-container" id="toast-container"></div>
 
@@ -965,7 +1121,9 @@
     <script src="modules/sidebar.js"></script>
     <script src="modules/workflow.js"></script>
     <script src="modules/product.js"></script>
+    <script src="modules/kickstart.js"></script>
     <script src="modules/tasks.js"></script>
+    <script src="modules/processes.js"></script>
     <script src="modules/controls.js"></script>
     <script src="modules/activity.js"></script>
     <script src="modules/polling.js"></script>

@@ -31,16 +31,21 @@ function Invoke-TaskGetNext {
     # 1. Analysed tasks (ready for implementation, already pre-processed)
     # 2. Todo tasks (need analysis first, or legacy mode)
     
+    $blockedCount = 0
+
     if ($preferAnalysed) {
-        # Check for analysed tasks first
-        $analysedTasks = @($index.Analysed.Values) | Sort-Object priority
-        if ($analysedTasks.Count -gt 0) {
-            $nextTask = $analysedTasks | Select-Object -First 1
+        # Check for analysed tasks first (dependency-aware)
+        $analysedResult = Get-NextAnalysedTask
+        if ($analysedResult.Task) {
+            $nextTask = $analysedResult.Task
             $taskStatus = 'analysed'
-            Write-Verbose "[task-get-next] Found analysed task: $($nextTask.id)"
+            $blockedCount = $analysedResult.BlockedCount
+            Write-Verbose "[task-get-next] Found analysed task: $($nextTask.id) ($blockedCount blocked by dependencies)"
+        } elseif ($analysedResult.BlockedCount -gt 0) {
+            Write-Verbose "[task-get-next] All $($analysedResult.BlockedCount) analysed task(s) blocked by unmet dependencies"
         }
     }
-    
+
     # Only fall back to todo tasks when not preferring analysed
     if (-not $nextTask -and -not $preferAnalysed) {
         $nextTask = Get-NextTask
@@ -51,15 +56,18 @@ function Invoke-TaskGetNext {
         # Check if there are tasks in other states that might explain why nothing is available
         $analysingCount = $index.Analysing.Count
         $needsInputCount = $index.NeedsInput.Count
-        
+
         $statusMessage = "No pending tasks available."
+        if ($blockedCount -gt 0) {
+            $statusMessage += " $blockedCount analysed task(s) blocked by unmet dependencies."
+        }
         if ($analysingCount -gt 0) {
             $statusMessage += " $analysingCount task(s) being analysed."
         }
         if ($needsInputCount -gt 0) {
             $statusMessage += " $needsInputCount task(s) waiting for input."
         }
-        
+
         Write-Verbose "[task-get-next] No eligible tasks found"
         return @{
             success = $true
@@ -67,6 +75,7 @@ function Invoke-TaskGetNext {
             message = $statusMessage
             analysing_count = $analysingCount
             needs_input_count = $needsInputCount
+            blocked_count = $blockedCount
         }
     }
 

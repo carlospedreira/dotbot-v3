@@ -93,18 +93,44 @@ function Invoke-TaskAnswerQuestion {
     
     # Clear pending question
     $taskContent.pending_question = $null
-    
-    # Update task properties - move back to analysing for continued analysis
-    $taskContent.status = 'analysing'
     $taskContent.updated_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
     
-    # Ensure analysing directory exists
-    if (-not (Test-Path $analysingDir)) {
-        New-Item -ItemType Directory -Force -Path $analysingDir | Out-Null
-    }
+    # Check if the answer indicates the task should be skipped
+    $isSkipAnswer = $resolvedAnswer -match '(?i)skip\s*task|skip\s*-|already\s*exist'
     
-    # Move file to analysing directory
-    $newFilePath = Join-Path $analysingDir $taskFile.Name
+    if ($isSkipAnswer) {
+        # Transition directly to skipped
+        $taskContent.status = 'skipped'
+        
+        # Add skip_history entry
+        if (-not $taskContent.PSObject.Properties['skip_history']) {
+            $taskContent | Add-Member -NotePropertyName 'skip_history' -NotePropertyValue @() -Force
+        }
+        $existingSkips = @($taskContent.skip_history)
+        $existingSkips += @{
+            skipped_at = $taskContent.updated_at
+            reason = "Skipped via question answer: $resolvedAnswer"
+        }
+        $taskContent.skip_history = $existingSkips
+        
+        $skippedDir = Join-Path $tasksBaseDir "skipped"
+        if (-not (Test-Path $skippedDir)) {
+            New-Item -ItemType Directory -Force -Path $skippedDir | Out-Null
+        }
+        $newFilePath = Join-Path $skippedDir $taskFile.Name
+        $newStatus = 'skipped'
+        $message = "Question answered - task skipped"
+    } else {
+        # Move back to analysing for continued analysis
+        $taskContent.status = 'analysing'
+        
+        if (-not (Test-Path $analysingDir)) {
+            New-Item -ItemType Directory -Force -Path $analysingDir | Out-Null
+        }
+        $newFilePath = Join-Path $analysingDir $taskFile.Name
+        $newStatus = 'analysing'
+        $message = "Question answered - task returned to analysis"
+    }
     
     # Save updated task to new location
     $taskContent | ConvertTo-Json -Depth 20 | Set-Content -Path $newFilePath -Encoding UTF8
@@ -113,11 +139,11 @@ function Invoke-TaskAnswerQuestion {
     # Return result
     return @{
         success = $true
-        message = "Question answered - task returned to analysis"
+        message = $message
         task_id = $taskId
         task_name = $taskContent.name
         old_status = 'needs-input'
-        new_status = 'analysing'
+        new_status = $newStatus
         question = $pendingQuestion.question
         answer = $resolvedAnswer
         answer_type = $answerType

@@ -7,7 +7,7 @@
     "split_threshold_effort": "XL",
     "question_timeout_hours": null,
     "mode": "on-demand",
-    "model": "Sonnet"
+    "model": "Opus"
   },
   "execution": {
     "model": "Opus"

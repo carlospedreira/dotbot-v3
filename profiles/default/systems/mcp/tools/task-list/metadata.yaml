@@ -6,7 +6,7 @@ inputSchema:
     status:
       type: string
       description: Filter by task status
-      enum: [todo, in-progress, done]
+      enum: [todo, analysing, needs-input, analysed, in-progress, done, split, skipped, cancelled]
     category:
       type: string
       description: Filter by task category

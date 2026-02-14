@@ -22,9 +22,23 @@ You are connected to a steering channel that allows the operator to send guidanc
 
 ### Example Heartbeat Call
 
+When you have a **Process ID** (from the Process Context section), use it:
+
 ```
 mcp__dotbot__steering_heartbeat({
   session_id: "{{SESSION_ID}}",
+  process_id: "<your-process-id>",
+  status: "Editing CalendarEvent.cs",
+  next_action: "Add EF Core configuration"
+})
+```
+
+When running without a process ID (legacy mode), use `instance_type` instead:
+
+```
+mcp__dotbot__steering_heartbeat({
+  session_id: "{{SESSION_ID}}",
+  instance_type: "execution",
   status: "Editing CalendarEvent.cs",
   next_action: "Add EF Core configuration"
 })

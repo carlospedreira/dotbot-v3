@@ -54,6 +54,13 @@ function switchContextPanel(tabId) {
         targetPanel.classList.remove('hidden');
     }
 
+    // Start/stop process polling based on tab
+    if (tabId === 'processes') {
+        startProcessPolling();
+    } else {
+        stopProcessPolling();
+    }
+
     // Update task summary when switching to pipeline tab
     if (tabId === 'pipeline' && lastState?.tasks) {
         updateTaskSummary(lastState.tasks);

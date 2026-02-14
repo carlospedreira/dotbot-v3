@@ -97,7 +97,17 @@ async function updateProductFileNav() {
         const docs = data.docs || [];
 
         if (docs.length === 0) {
-            container.innerHTML = '<div class="empty-state">No product docs</div>';
+            if (typeof isNewProject !== 'undefined' && isNewProject) {
+                container.innerHTML = `
+                    <div class="kickstart-sidebar-cta">
+                        <div class="kickstart-glyph">◈</div>
+                        <div class="kickstart-description">No product docs yet. Kickstart your project to create them.</div>
+                        <button class="kickstart-btn" onclick="openKickstartModal()">KICKSTART</button>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = '<div class="empty-state">No product docs</div>';
+            }
             return;
         }
 

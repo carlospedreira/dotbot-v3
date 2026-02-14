@@ -21,6 +21,12 @@ $BotDir = $PSScriptRoot
 $UIDir = Join-Path $BotDir "systems\ui"
 $ServerScript = Join-Path $UIDir "server.ps1"
 
+# Log startup to unified diagnostic log
+$controlDir = Join-Path $BotDir ".control"
+if (-not (Test-Path $controlDir)) { New-Item -Path $controlDir -ItemType Directory -Force | Out-Null }
+$diagLog = Join-Path $controlDir "diag.log"
+"$(Get-Date -Format o) [STARTUP] go.ps1 launched. BotDir=$BotDir" | Add-Content -Path $diagLog
+
 Write-Host "  Starting .bot UI..." -ForegroundColor Cyan
 Write-Host ""
 

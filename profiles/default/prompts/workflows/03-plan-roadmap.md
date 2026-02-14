@@ -1,7 +1,7 @@
 ---
 name: Plan Roadmap
 description: Automatic roadmap generation from product documents using dotbot MCP tools
-version: 2.0
+version: 3.0
 ---
 
 # Roadmap Planning Workflow
@@ -11,27 +11,60 @@ This workflow automatically generates a comprehensive task roadmap from your pro
 ## Goal
 Transform product specifications into granular, context-window-sized tasks tracked in `.bot/workspace/tasks/todo/` using the `task_create_bulk` MCP tool.
 
+## Agent Teams Strategy
+
+When agent teams are available, use a team-based approach for parallel analysis:
+
+### Team Composition
+
+1. **Architect (Lead)** — Reads all product docs, identifies implementation phases, designs the dependency graph, and coordinates the team.
+2. **Feature Analyst: Infrastructure & Foundation** — Handles project setup, database, configuration, hosting, CI/CD tasks.
+3. **Feature Analyst: Core & Integrations** — Handles primary business logic, external API integrations, and service layer tasks.
+4. **Feature Analyst: Background & Intelligence** — Handles background jobs, scheduled tasks, AI integration, rules engines, and notification systems.
+
+### Team Workflow
+
+1. **Lead** reads all product docs and creates a shared brief: functional areas, entity relationships, technology constraints, and phase boundaries.
+2. **Lead** assigns functional areas to each Feature Analyst.
+3. Each **Feature Analyst** independently:
+   - Analyzes their assigned area
+   - Generates task breakdowns with effort estimates, acceptance criteria, and dependencies
+   - Creates tasks via `task_create_bulk`
+4. **Lead** synthesizes results:
+   - Resolves cross-cutting dependencies between analysts' tasks
+   - Verifies no duplicate tasks exist (use `task_list` to check)
+   - Validates dependency chains are correct
+   - Generates `roadmap-overview.md`
+
+### Fallback
+
+If agent teams are not available, execute all steps sequentially in a single session.
+
 ## Required Product Documents
 
 Before running this workflow, ensure these files exist in `.bot/workspace/product/`:
 
-| Document | Purpose |
-|----------|----------|
-| `mission.md` | Core principles, goals, target audience |
-| `prd.md` | Full product requirements document |
-| `tech-stack.md` | Technology choices and libraries |
-| `entity-model.md` | Data model and entity relationships |
+| Document | Path | Purpose |
+|----------|------|----------|
+| Mission | `.bot/workspace/product/mission.md` | Core principles, goals, target audience |
+| Tech Stack | `.bot/workspace/product/tech-stack.md` | Technology choices and libraries |
+| Entity Model | `.bot/workspace/product/entity-model.md` | Data model and entity relationships |
+
+Optional but recommended:
+- `.bot/workspace/product/prd.md` — Full product requirements document (if available)
+- Any other docs in `.bot/workspace/product/` — Read all for additional context
 
 ## Automatic Execution Process
 
 ### Step 1: Load All Product Context
 
-**Read ALL product documents in sequence:**
+**Read ALL product documents:**
 
-1. `.bot/workspace/product/mission.md` - Understand core principles and goals
-2. `.bot/workspace/product/tech-stack.md` - Know the technology stack and libraries
-3. `.bot/workspace/product/entity-model.md` - Understand data model and relationships
-4. `.bot/workspace/product/prd.md` - Full specification with features and requirements
+1. `.bot/workspace/product/mission.md` — Core principles and goals
+2. `.bot/workspace/product/tech-stack.md` — Technology stack and libraries
+3. `.bot/workspace/product/entity-model.md` — Data model and relationships
+4. `.bot/workspace/product/prd.md` — Full specification (if exists)
+5. Any other `.md` files in `.bot/workspace/product/` — Additional context
 
 **Extract from these documents:**
 - Major functional areas and features
@@ -44,7 +77,7 @@ Before running this workflow, ensure these files exist in `.bot/workspace/produc
 
 ### Step 2: Identify Implementation Phases
 
-Based on the PRD and entity model, identify natural implementation phases:
+Based on the product docs and entity model, identify natural implementation phases:
 
 **Phase 1: Foundation**
 - Project structure and solution setup
@@ -78,9 +111,11 @@ Based on the PRD and entity model, identify natural implementation phases:
 - Error handling improvements
 - Performance optimization
 
+Adapt these phases to fit the actual project. Not all projects need all phases.
+
 ### Step 3: Generate Task Breakdown
 
-For each feature/component identified in the PRD:
+For each feature/component identified in the product docs:
 
 **Apply the breakdown algorithm:**
 1. Identify the functional area (Email, Calendar, Rules, etc.)
@@ -131,15 +166,14 @@ Assign each task to a category:
 
 ### Step 6: Create Tasks via MCP
 
-**Use `task_create_bulk` to create all tasks at once:**
+**Use `task_create_bulk` to create all tasks:**
 
 ```javascript
-// Call dotbot MCP task_create_bulk tool
 task_create_bulk({
   tasks: [
     {
       name: "Initialize solution and project structure",
-      description: "Create solution with projects as defined in PRD. Configure project references and add core packages from tech-stack.md.",
+      description: "Create solution with projects as defined in product docs. Configure project references and add core packages from tech-stack.md.",
       category: "infrastructure",
       priority: 1,
       effort: "M",
@@ -151,42 +185,33 @@ task_create_bulk({
       ],
       steps: [
         "Create solution file",
-        "Create each project from PRD structure",
+        "Create each project from product doc structure",
         "Add project references",
         "Install packages from tech-stack.md"
       ]
-    },
-    {
-      name: "Configure database and DbContext",
-      description: "Set up DbContext with database provider from tech-stack.md. Configure connection string. Create initial migration with core entities from entity-model.md.",
-      category: "infrastructure",
-      priority: 2,
-      effort: "M",
-      dependencies: ["Initialize solution and project structure"],
-      acceptance_criteria: [
-        "DbContext configured correctly",
-        "Initial migration created",
-        "Database created on startup",
-        "Migrations run successfully"
-      ],
-      steps: [
-        "Create DbContext class",
-        "Configure database connection",
-        "Add entity configurations from entity-model.md",
-        "Create initial migration",
-        "Test database creation"
-      ]
     }
-    // ... continue for all tasks derived from PRD
+    // ... continue for all identified tasks
   ]
 })
 ```
 
-**Batch size:** Create tasks in batches of 20-30 if the total exceeds 50 tasks.
+**Batching:** If the total exceeds 50 tasks, create in batches of 20-30. When batching:
+1. Create infrastructure/foundation tasks first
+2. Note the IDs returned from each batch
+3. Use those IDs as dependencies in subsequent batches
 
-### Step 7: Generate Roadmap Overview
+### Step 7: Cross-Reference and Validate
 
-After creating tasks, generate `.bot/workspace/product/roadmap-overview.md`:
+After all tasks are created:
+
+1. Call `task_list` to retrieve all tasks
+2. Verify no duplicate tasks exist (similar names or overlapping scope)
+3. Verify dependency chains are valid (no circular dependencies, no missing references)
+4. Verify all functional areas from the product docs are covered
+
+### Step 8: Generate Roadmap Overview
+
+Generate `.bot/workspace/product/roadmap-overview.md`:
 
 ```markdown
 # Task Roadmap Overview
@@ -212,9 +237,8 @@ Estimated Total Effort: [Sum]
 ## Implementation Phases
 
 ### Phase 1: Foundation
-Goal: [Goal from PRD]
+Goal: [Goal]
 Tasks: [list with priorities]
-Estimated Duration: [X weeks]
 
 ### Phase 2: Core Features
 ...
@@ -228,12 +252,12 @@ Estimated Duration: [X weeks]
 3. Begin implementation with `task_get_next`
 ```
 
-### Step 8: Present Summary to User
+### Step 9: Present Summary
 
 After creating all tasks:
 
 ```
-✓ Roadmap generated from product documents
+Roadmap generated from product documents
 
 Created [N] tasks:
 - Infrastructure: [count]
@@ -279,7 +303,7 @@ Each task created via `task_create_bulk` must include:
 Include:
 - **What**: Specific component or feature
 - **Where**: Which project/namespace
-- **Why**: Context from PRD/mission
+- **Why**: Context from product docs/mission
 - **How**: Key technical requirements from tech-stack.md
 - **Patterns**: Reference existing patterns to follow
 
@@ -298,10 +322,11 @@ Include:
 
 ## Success Criteria
 
-✅ All product documents read and analyzed
-✅ All features from PRD represented as tasks
-✅ Tasks properly categorized and prioritized
-✅ Dependencies correctly mapped
-✅ Tasks created in `.bot/workspace/tasks/todo/` via MCP
-✅ Roadmap overview generated
-✅ User informed of results
+- All product documents read and analyzed
+- All features from product docs represented as tasks
+- Tasks properly categorized and prioritized
+- Dependencies correctly mapped
+- Tasks created in `.bot/workspace/tasks/todo/` via MCP
+- No duplicate tasks
+- Roadmap overview generated
+- Summary reported

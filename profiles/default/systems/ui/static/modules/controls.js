@@ -13,16 +13,16 @@ let currentLoopMode = 'both';
  */
 const ANALYSIS_MODEL_OPTIONS = [
     {
-        id: 'Sonnet',
-        name: 'Sonnet',
-        badge: 'Recommended',
-        description: 'Cost-efficient with strong reasoning for task analysis'
-    },
-    {
         id: 'Opus',
         name: 'Opus',
-        badge: null,
+        badge: 'Recommended',
         description: 'Most capable model for complex analysis'
+    },
+    {
+        id: 'Sonnet',
+        name: 'Sonnet',
+        badge: null,
+        description: 'Cost-efficient with strong reasoning for task analysis'
     },
     {
         id: 'Haiku',
@@ -76,7 +76,7 @@ async function loadSettings() {
         }
 
         // Update model selection
-        const savedAnalysisModel = settings.analysisModel || 'Sonnet';
+        const savedAnalysisModel = settings.analysisModel || 'Opus';
         const savedExecutionModel = settings.executionModel || 'Opus';
         selectAnalysisModel(savedAnalysisModel, false);
         selectExecutionModel(savedExecutionModel, false);
@@ -243,13 +243,43 @@ function initControlButtons() {
     if (!controls) return;
 
     controls.addEventListener('click', async (e) => {
-        const btn = e.target.closest('.ctrl-btn');
+        const btn = e.target.closest('.ctrl-btn, .ctrl-btn-xs');
         if (!btn || btn.disabled) return;
 
         const action = btn.dataset.action;
         if (!action) return;
 
-        await sendControlSignal(action);
+        switch (action) {
+            case 'start-analysis':
+                await launchProcessFromOverview('analysis');
+                break;
+            case 'start-execution':
+                await launchProcessFromOverview('execution');
+                break;
+            case 'start-both':
+                await launchBoth();
+                break;
+            case 'stop-analysis':
+                await stopProcessesByType('analysis');
+                break;
+            case 'stop-execution':
+                await stopProcessesByType('execution');
+                break;
+            case 'stop-all':
+                await stopAllProcesses();
+                break;
+            case 'kill-analysis':
+                await killProcessesByType('analysis');
+                break;
+            case 'kill-execution':
+                await killProcessesByType('execution');
+                break;
+            case 'kill-all':
+                await killAllProcesses();
+                break;
+            default:
+                await sendControlSignal(action);
+        }
     });
 
     // Panic reset button handler
@@ -260,53 +290,199 @@ function initControlButtons() {
             await sendControlSignal('reset');
         });
     }
-    
-    // Initialize mode selector
-    initModeSelector();
 }
 
 /**
- * Initialize loop mode selector
- */
-function initModeSelector() {
-    const modeSelector = document.getElementById('mode-selector');
-    if (!modeSelector) return;
-    
-    modeSelector.querySelectorAll('.mode-option').forEach(option => {
-        option.addEventListener('click', () => {
-            const mode = option.dataset.mode;
-            selectLoopMode(mode);
-        });
-    });
-}
-
-/**
- * Select loop mode and update UI
- * @param {string} mode - Mode to select ("analysis", "execution", or "both")
- */
-function selectLoopMode(mode) {
-    currentLoopMode = mode;
-    
-    const modeSelector = document.getElementById('mode-selector');
-    if (!modeSelector) return;
-    
-    // Update active state
-    modeSelector.querySelectorAll('.mode-option').forEach(option => {
-        option.classList.toggle('active', option.dataset.mode === mode);
-    });
-}
-
-/**
- * Get the current loop mode
- * @returns {string} Current mode
+ * Current loop mode (kept for backward compat with sendControlSignal)
  */
 function getLoopMode() {
     return currentLoopMode;
 }
 
 /**
- * Send control signal to the server
- * @param {string} action - Action to send (start, stop, pause, resume, reset)
+ * Launch a process from the Overview quick launch buttons
+ * @param {string} type - Process type ("analysis" or "execution")
+ */
+async function launchProcessFromOverview(type) {
+    const signalStatus = document.getElementById('signal-status');
+
+    try {
+        const response = await fetch(`${API_BASE}/api/process/launch`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type, continue: true })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showSignalFeedback(`Launched ${type}: ${data.process_id}`);
+            showToast(`${type} process launched`, 'success');
+        } else {
+            showSignalFeedback(`Error: ${data.error || 'Launch failed'}`);
+        }
+
+        await pollState();
+
+    } catch (error) {
+        console.error('Launch error:', error);
+        showSignalFeedback(`Error: ${error.message}`);
+    }
+}
+
+/**
+ * Stop all running processes
+ */
+async function stopAllProcesses() {
+    try {
+        const response = await fetch(`${API_BASE}/api/control`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'stop' })
+        });
+
+        const result = await response.json();
+        showSignalFeedback('Stop signal sent to all processes');
+        await pollState();
+
+    } catch (error) {
+        console.error('Stop all error:', error);
+        showSignalFeedback(`Error: ${error.message}`);
+    }
+}
+
+/**
+ * Launch both analysis and execution processes
+ */
+async function launchBoth() {
+    try {
+        const [analysisRes, executionRes] = await Promise.all([
+            fetch(`${API_BASE}/api/process/launch`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'analysis', continue: true })
+            }),
+            fetch(`${API_BASE}/api/process/launch`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'execution', continue: true })
+            })
+        ]);
+
+        const analysisData = await analysisRes.json();
+        const executionData = await executionRes.json();
+
+        const launched = [];
+        if (analysisData.success) launched.push('analysis');
+        if (executionData.success) launched.push('execution');
+
+        if (launched.length > 0) {
+            showSignalFeedback(`Launched: ${launched.join(', ')}`);
+            showToast(`${launched.length} process(es) launched`, 'success');
+        } else {
+            showSignalFeedback('Launch failed');
+        }
+
+        await pollState();
+
+    } catch (error) {
+        console.error('Launch both error:', error);
+        showSignalFeedback(`Error: ${error.message}`);
+    }
+}
+
+/**
+ * Gracefully stop processes by type
+ * @param {string} type - Process type ("analysis" or "execution")
+ */
+async function stopProcessesByType(type) {
+    try {
+        const response = await fetch(`${API_BASE}/api/process/stop-by-type`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            showSignalFeedback(`Stop signal sent to ${data.count} ${type} process(es)`);
+            showToast(`${type} stop signal sent`, 'success');
+        } else {
+            showSignalFeedback(`Error: ${data.error || 'Stop failed'}`);
+        }
+
+        await pollState();
+
+    } catch (error) {
+        console.error('Stop by type error:', error);
+        showSignalFeedback(`Error: ${error.message}`);
+    }
+}
+
+/**
+ * Kill processes by type (immediate termination via PID)
+ * @param {string} type - Process type ("analysis" or "execution")
+ */
+async function killProcessesByType(type) {
+    if (!confirm(`Kill all ${type} processes immediately? This will terminate them without finishing their current task.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/api/process/kill-by-type`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            showSignalFeedback(`Killed ${data.count} ${type} process(es)`);
+            showToast(`${type} process(es) killed`, 'warning');
+        } else {
+            showSignalFeedback(`Error: ${data.error || 'Kill failed'}`);
+        }
+
+        await pollState();
+
+    } catch (error) {
+        console.error('Kill by type error:', error);
+        showSignalFeedback(`Error: ${error.message}`);
+    }
+}
+
+/**
+ * Kill all running processes immediately
+ */
+async function killAllProcesses() {
+    if (!confirm('Kill ALL running processes immediately? This will terminate them without finishing their current task.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/api/process/kill-all`, {
+            method: 'POST'
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            showSignalFeedback(`Killed ${data.count} process(es)`);
+            showToast(`All processes killed (${data.count})`, 'warning');
+        } else {
+            showSignalFeedback(`Error: ${data.error || 'Kill failed'}`);
+        }
+
+        await pollState();
+
+    } catch (error) {
+        console.error('Kill all error:', error);
+        showSignalFeedback(`Error: ${error.message}`);
+    }
+}
+
+/**
+ * Send control signal to the server (legacy, used by reset)
+ * @param {string} action - Action to send (reset)
  */
 async function sendControlSignal(action) {
     const signalStatus = document.getElementById('signal-status');
@@ -315,11 +491,7 @@ async function sendControlSignal(action) {
         const buttons = document.querySelectorAll('.ctrl-btn, .panic-btn');
         buttons.forEach(btn => btn.disabled = true);
 
-        // Include mode for start action
         const body = { action };
-        if (action === 'start') {
-            body.mode = currentLoopMode;
-        }
 
         const response = await fetch(`${API_BASE}/api/control`, {
             method: 'POST',
@@ -344,8 +516,8 @@ async function sendControlSignal(action) {
             signalStatus.classList.add('visible');
         }
     } finally {
-        const buttons = document.querySelectorAll('.ctrl-btn, .panic-btn');
-        buttons.forEach(btn => btn.disabled = false);
+        const panicBtn = document.querySelector('.panic-btn');
+        if (panicBtn) panicBtn.disabled = false;
     }
 }
 

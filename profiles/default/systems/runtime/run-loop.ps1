@@ -239,6 +239,7 @@ $runningSignal = Join-Path $controlDir "running.signal"
 @{
     started_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     session_id = $sessionId
+    pid = $PID
 } | ConvertTo-Json | Set-Content -Path $runningSignal -Force
 
 Write-Host ""
@@ -368,7 +369,22 @@ try {
             $shouldLogWaiting = $true
             
             if (Test-Path $activityFile) {
-                $lastLine = Get-Content -Path $activityFile -Tail 1 -ErrorAction SilentlyContinue
+                try {
+                    $fs = [System.IO.FileStream]::new(
+                        $activityFile,
+                        [System.IO.FileMode]::Open,
+                        [System.IO.FileAccess]::Read,
+                        [System.IO.FileShare]::ReadWrite
+                    )
+                    $sr = [System.IO.StreamReader]::new($fs)
+                    $allText = $sr.ReadToEnd()
+                    $sr.Close()
+                    $fs.Close()
+                    $lines = $allText -split "`n" | Where-Object { $_.Trim() }
+                    $lastLine = if ($lines.Count -gt 0) { $lines[-1] } else { $null }
+                } catch {
+                    $lastLine = $null
+                }
                 if ($lastLine) {
                     try {
                         $lastActivity = $lastLine | ConvertFrom-Json
@@ -493,7 +509,9 @@ try {
                 $signal = Get-Content $signalPath -Raw | ConvertFrom-Json
                 $signal | Add-Member -NotePropertyName 'claude_session_id' -NotePropertyValue $claudeSessionId -Force
                 $signal | Add-Member -NotePropertyName 'current_task_id' -NotePropertyValue $task.id -Force
-                $signal | ConvertTo-Json | Set-Content $signalPath
+                $tempFile = "$signalPath.tmp"
+                $signal | ConvertTo-Json | Set-Content -Path $tempFile -Force
+                Move-Item -Path $tempFile -Destination $signalPath -Force
             } catch {
                 Write-Warning "Failed to update signal file: $_"
             }

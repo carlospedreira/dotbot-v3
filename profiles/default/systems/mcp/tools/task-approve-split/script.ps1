@@ -60,8 +60,8 @@ function Invoke-TaskApproveSplit {
         $taskContent.updated_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
         
         # Record rejection in split_proposal
-        $taskContent.split_proposal.rejected_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
-        $taskContent.split_proposal.status = 'rejected'
+        $taskContent.split_proposal | Add-Member -NotePropertyName 'rejected_at' -NotePropertyValue (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'") -Force
+        $taskContent.split_proposal | Add-Member -NotePropertyName 'status' -NotePropertyValue 'rejected' -Force
         
         # Ensure analysing directory exists
         if (-not (Test-Path $analysingDir)) {
@@ -112,14 +112,16 @@ function Invoke-TaskApproveSplit {
         $subTasksToCreate += $subTaskDef
     }
     
-    # Create sub-tasks
-    $createResult = Invoke-TaskCreateBulk -Arguments @{ tasks = $subTasksToCreate }
-    
-    if (-not $createResult.success) {
-        throw "Failed to create sub-tasks: $($createResult.message)"
+    # Create sub-tasks (skip if empty — e.g. duplicate/redundant task archival)
+    if ($subTasksToCreate.Count -gt 0) {
+        $createResult = Invoke-TaskCreateBulk -Arguments @{ tasks = $subTasksToCreate }
+        if (-not $createResult.success) {
+            throw "Failed to create sub-tasks: $($createResult.message)"
+        }
+        $childTaskIds = @($createResult.created_tasks | ForEach-Object { $_.id })
+    } else {
+        $childTaskIds = @()
     }
-    
-    $childTaskIds = $createResult.created_task_ids
     
     # Update original task for split status
     $taskContent.status = 'split'
@@ -142,8 +144,8 @@ function Invoke-TaskApproveSplit {
     $taskContent.child_tasks = $childTaskIds
     
     # Update split_proposal status
-    $taskContent.split_proposal.approved_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
-    $taskContent.split_proposal.status = 'approved'
+    $taskContent.split_proposal | Add-Member -NotePropertyName 'approved_at' -NotePropertyValue (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'") -Force
+    $taskContent.split_proposal | Add-Member -NotePropertyName 'status' -NotePropertyValue 'approved' -Force
     
     # Ensure split directory exists
     if (-not (Test-Path $splitDir)) {

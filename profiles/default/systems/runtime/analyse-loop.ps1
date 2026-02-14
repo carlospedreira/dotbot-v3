@@ -48,7 +48,7 @@ param(
     
     [Parameter(Mandatory = $false)]
     [ValidateSet('Opus', 'Sonnet', 'Haiku')]
-    [string]$Model = 'Sonnet',
+[string]$Model = 'Opus',
     
     [Parameter(Mandatory = $false)]
     [switch]$ShowDebug,
@@ -104,7 +104,7 @@ Import-Module "$PSScriptRoot\..\mcp\modules\SessionTracking.psm1" -Force
 
 # Load settings for analysis mode and model
 $settingsPath = Join-Path $PSScriptRoot "..\..\defaults\settings.default.json"
-$settings = @{ analysis = @{ mode = 'batch'; model = 'Sonnet' } }
+$settings = @{ analysis = @{ mode = 'batch'; model = 'Opus' } }
 if (Test-Path $settingsPath) {
     try {
         $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
@@ -120,7 +120,7 @@ if (-not $Mode) {
 
 # Determine model (parameter overrides settings)
 if (-not $PSBoundParameters.ContainsKey('Model')) {
-    $Model = if ($settings.analysis -and $settings.analysis.model) { $settings.analysis.model } else { 'Sonnet' }
+    $Model = if ($settings.analysis -and $settings.analysis.model) { $settings.analysis.model } else { 'Opus' }
 }
 
 # Build prompt builder function for analysis
@@ -391,6 +391,7 @@ $runningSignal = Join-Path $controlDir "analysing.signal"
     started_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     session_id = $sessionId
     mode = $Mode
+    pid = $PID
 } | ConvertTo-Json | Set-Content -Path $runningSignal -Force
 
 Write-Host ""
@@ -619,7 +620,9 @@ try {
                 $signal = Get-Content $signalPath -Raw | ConvertFrom-Json
                 $signal | Add-Member -NotePropertyName 'claude_session_id' -NotePropertyValue $claudeSessionId -Force
                 $signal | Add-Member -NotePropertyName 'current_task_id' -NotePropertyValue $task.id -Force
-                $signal | ConvertTo-Json | Set-Content $signalPath
+                $tempFile = "$signalPath.tmp"
+                $signal | ConvertTo-Json | Set-Content -Path $tempFile -Force
+                Move-Item -Path $tempFile -Destination $signalPath -Force
             } catch {
                 Write-Warning "Failed to update signal file: $_"
             }

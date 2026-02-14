@@ -45,7 +45,6 @@ function Write-ActivityLog {
     # Determine phase: parameter > environment variable > null (for backward compatibility)
     $effectivePhase = if ($Phase) { $Phase } elseif ($env:DOTBOT_CURRENT_PHASE) { $env:DOTBOT_CURRENT_PHASE } else { $null }
 
-    $logPath = Join-Path $controlDir "activity.jsonl"
     $event = @{
         timestamp = (Get-Date).ToUniversalTime().ToString("o")
         type = $Type
@@ -54,7 +53,54 @@ function Write-ActivityLog {
         phase = $effectivePhase  # Include phase for filtering (null for backward compat)
     } | ConvertTo-Json -Compress
 
-    Add-Content -Path $logPath -Value $event -Encoding utf8NoBOM
+    # Write to global activity.jsonl (always, for oscilloscope / backward compat)
+    $logPath = Join-Path $controlDir "activity.jsonl"
+    $maxRetries = 3
+    for ($r = 0; $r -lt $maxRetries; $r++) {
+        try {
+            $fs = [System.IO.FileStream]::new(
+                $logPath,
+                [System.IO.FileMode]::Append,
+                [System.IO.FileAccess]::Write,
+                [System.IO.FileShare]::ReadWrite
+            )
+            $sw = [System.IO.StreamWriter]::new($fs, [System.Text.Encoding]::UTF8)
+            $sw.WriteLine($event)
+            $sw.Close()
+            $fs.Close()
+            break
+        } catch {
+            if ($r -lt ($maxRetries - 1)) {
+                Start-Sleep -Milliseconds (50 * ($r + 1))
+            }
+            # Final retry failure is silently ignored (non-critical logging)
+        }
+    }
+
+    # Also write to per-process activity log when DOTBOT_PROCESS_ID is set
+    $procId = $env:DOTBOT_PROCESS_ID
+    if ($procId) {
+        $processLogPath = Join-Path $controlDir "processes\$procId.activity.jsonl"
+        for ($r = 0; $r -lt $maxRetries; $r++) {
+            try {
+                $fs = [System.IO.FileStream]::new(
+                    $processLogPath,
+                    [System.IO.FileMode]::Append,
+                    [System.IO.FileAccess]::Write,
+                    [System.IO.FileShare]::ReadWrite
+                )
+                $sw = [System.IO.StreamWriter]::new($fs, [System.Text.Encoding]::UTF8)
+                $sw.WriteLine($event)
+                $sw.Close()
+                $fs.Close()
+                break
+            } catch {
+                if ($r -lt ($maxRetries - 1)) {
+                    Start-Sleep -Milliseconds (50 * ($r + 1))
+                }
+            }
+        }
+    }
 }
 
 function Write-ClaudeLog {
@@ -391,6 +437,11 @@ function Invoke-ClaudeStream {
 
     # Clear any previous rate limit info
     $script:LastRateLimitInfo = $null
+
+    # Refresh theme if ui-settings.json changed since last invocation
+    if (Update-DotBotTheme) {
+        $script:theme = Get-DotBotTheme
+    }
 
     # Use theme colors
     $t = $script:theme

@@ -1,0 +1,439 @@
+/* DOTBOT Control Panel - Processes Tab Styles */
+
+/* ========== LAUNCH BAR ========== */
+.process-launch-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: var(--bg-module);
+    border: 1px solid var(--primary-12);
+    border-radius: 4px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.process-launch-bar label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--label-color);
+    font-family: var(--font-ui);
+}
+
+.process-launch-bar select,
+.process-launch-bar input[type="text"] {
+    background: var(--bg-screen);
+    border: 1px solid var(--primary-15);
+    color: var(--color-primary);
+    padding: 6px 10px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+}
+
+.process-launch-bar select:focus,
+.process-launch-bar input[type="text"]:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.process-launch-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.process-launch-group.hidden {
+    display: none;
+}
+
+.process-prompt-input {
+    min-width: 200px;
+    flex: 1;
+}
+
+/* ========== PROCESS GROUPS ========== */
+.process-group {
+    margin-bottom: 16px;
+}
+
+.process-group-header {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--color-secondary);
+    padding: 8px 12px 6px;
+    border-bottom: 1px solid var(--secondary-12);
+    font-family: var(--font-ui);
+}
+
+/* ========== PROCESS ROWS ========== */
+.process-row {
+    border: 1px solid var(--primary-08);
+    border-radius: 3px;
+    margin: 4px 8px;
+    transition: border-color 0.2s;
+}
+
+.process-row:hover {
+    border-color: var(--primary-20);
+}
+
+.process-row.expanded {
+    border-color: var(--primary-30);
+}
+
+.process-row-main {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    cursor: pointer;
+    min-height: 36px;
+}
+
+.process-status-icon {
+    flex-shrink: 0;
+    width: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.process-status-icon .led {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.process-status-icon .led.active {
+    background: var(--color-success);
+    box-shadow: 0 0 6px var(--success-50);
+    animation: processPulse 2s ease-in-out infinite;
+}
+
+.process-status-icon .led.success {
+    background: var(--color-success-dim);
+}
+
+.process-status-icon .led.error {
+    background: var(--color-error);
+    box-shadow: 0 0 4px rgb(var(--color-error-rgb) / 0.4);
+}
+
+.process-status-icon .led.off {
+    background: var(--color-muted);
+    opacity: 0.5;
+}
+
+@keyframes processPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.process-id {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--color-muted);
+    flex-shrink: 0;
+    min-width: 80px;
+}
+
+.process-name {
+    font-size: 12px;
+    color: var(--color-primary);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.process-time {
+    font-size: 10px;
+    color: var(--color-muted);
+    flex-shrink: 0;
+    min-width: 60px;
+    text-align: right;
+}
+
+.process-status-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    flex-shrink: 0;
+    min-width: 80px;
+    text-align: right;
+    font-family: var(--font-ui);
+}
+
+.process-ttl {
+    font-weight: 400;
+    font-size: 9px;
+    color: var(--color-muted);
+    margin-left: 4px;
+}
+
+.status-running .process-status-label { color: var(--color-success); }
+.status-completed .process-status-label { color: var(--color-success-dim); }
+.status-failed .process-status-label { color: var(--color-error); }
+.status-stopped .process-status-label { color: var(--color-muted); }
+
+/* ========== PROCESS ACTIONS ========== */
+.process-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.process-action-btn {
+    padding: 3px 8px;
+    font-size: 10px;
+    font-weight: 600;
+    font-family: var(--font-ui);
+    letter-spacing: 0.05em;
+    background: var(--primary-10);
+    border: 1px solid var(--primary-20);
+    color: var(--color-primary);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.process-action-btn:hover {
+    background: var(--primary-20);
+    border-color: var(--color-primary);
+}
+
+.process-action-btn.danger {
+    background: rgb(var(--color-error-rgb) / 0.1);
+    border-color: rgb(var(--color-error-rgb) / 0.2);
+    color: var(--color-error);
+}
+
+.process-action-btn.danger:hover {
+    background: rgb(var(--color-error-rgb) / 0.2);
+    border-color: var(--color-error);
+}
+
+/* ========== PROCESS DETAIL (EXPANDED) ========== */
+.process-detail {
+    border-top: 1px solid var(--primary-10);
+    padding: 10px 12px;
+    background: var(--bg-screen);
+}
+
+.process-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--primary-08);
+    margin-bottom: 10px;
+}
+
+.process-meta-item {
+    font-size: 11px;
+    color: var(--color-primary-dim);
+}
+
+.process-meta-item b {
+    color: var(--label-color);
+    font-weight: 600;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+/* ========== PROCESS OUTPUT VIEWER ========== */
+.process-output {
+    max-height: 250px;
+    overflow-y: auto;
+    background: var(--bg-deep);
+    border: 1px solid var(--primary-08);
+    border-radius: 3px;
+    padding: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.process-output-line {
+    display: flex;
+    gap: 8px;
+    padding: 2px 4px;
+    border-bottom: 1px solid rgb(var(--color-bezel-rgb) / 0.3);
+}
+
+.process-output-line:last-child {
+    border-bottom: none;
+}
+
+.process-output-line .output-time {
+    color: var(--color-bezel);
+    flex-shrink: 0;
+    min-width: 65px;
+    font-size: 10px;
+}
+
+.process-output-line .output-type {
+    color: var(--color-muted);
+    flex-shrink: 0;
+    min-width: 60px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.process-output-line .output-msg {
+    color: var(--color-success);
+    word-break: break-word;
+}
+
+.process-output-line.warning .output-msg {
+    color: var(--color-warning);
+}
+
+.process-output-line.tool .output-type {
+    color: var(--color-secondary);
+}
+
+/* ========== PROCESS INLINE WHISPER ========== */
+.process-whisper-inline {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--primary-08);
+}
+
+.process-whisper-input {
+    flex: 1;
+    background: var(--bg-deep);
+    border: 1px solid var(--primary-15);
+    color: var(--color-primary);
+    padding: 6px 10px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+}
+
+.process-whisper-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.process-whisper-input::placeholder {
+    color: var(--color-muted);
+}
+
+.process-whisper-priority {
+    background: var(--bg-screen);
+    border: 1px solid var(--primary-15);
+    color: var(--color-primary);
+    padding: 6px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+}
+
+/* ========== PROCESSES TAB SIDEBAR ========== */
+.process-summary .summary-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+}
+
+.process-summary .summary-label {
+    font-size: 11px;
+    color: var(--label-color);
+}
+
+.process-summary .summary-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-primary);
+    font-family: var(--font-mono);
+}
+
+.process-summary .summary-value.active {
+    color: var(--color-success);
+}
+
+/* ========== ACTIVE PROCESSES WIDGET (Overview Tab) ========== */
+.active-process-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--primary-08);
+}
+
+.active-process-row:last-child {
+    border-bottom: none;
+}
+
+.active-process-row .led {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.active-process-row .led.active {
+    background: var(--color-success);
+    box-shadow: 0 0 6px var(--success-50);
+    animation: processPulse 2s ease-in-out infinite;
+}
+
+.active-process-type {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-secondary);
+    flex-shrink: 0;
+    min-width: 70px;
+    font-family: var(--font-ui);
+}
+
+.active-process-name {
+    font-size: 12px;
+    color: var(--color-primary);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.active-process-time {
+    font-size: 10px;
+    color: var(--color-muted);
+    flex-shrink: 0;
+}
+
+.view-all-link {
+    padding: 8px 10px;
+    text-align: right;
+    border-top: 1px solid var(--primary-08);
+}
+
+.view-all-link a {
+    font-size: 11px;
+    color: var(--color-secondary);
+    text-decoration: none;
+    font-family: var(--font-ui);
+    letter-spacing: 0.03em;
+}
+
+.view-all-link a:hover {
+    color: var(--color-primary);
+    text-decoration: underline;
+}

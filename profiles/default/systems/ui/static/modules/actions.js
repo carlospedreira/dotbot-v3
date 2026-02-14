@@ -27,6 +27,7 @@ function initActions() {
         if (e.key === 'Escape') {
             closeSlideout();
             closeTaskCreateModal();
+            if (typeof closeKickstartModal === 'function') closeKickstartModal();
         }
     });
 

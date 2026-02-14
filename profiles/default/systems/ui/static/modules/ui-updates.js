@@ -30,6 +30,9 @@ function updateUI(state) {
         updateTaskSummary(state.tasks);
     }
 
+    // Update active processes widget on Overview tab
+    updateActiveProcessesWidget();
+
     // Check for notable state changes and show notifications
     if (typeof checkNotifications === 'function') {
         checkNotifications(state);
@@ -56,6 +59,7 @@ function updateTaskCounts(tasks) {
     setElementText('done-count', tasks.done);
     setElementText('analysing-count', tasks.analysing || 0);
     setElementText('needs-input-count', tasks.needs_input || 0);
+    setElementText('analysed-count', tasks.analysed || 0);
 
     // Pipeline counts - Analysis stage
     setElementText('pipeline-todo-count', tasks.todo);
@@ -516,46 +520,25 @@ function updateControlSignalStatus(control) {
  * @param {Object} loops - Combined loop state (optional)
  */
 function updateControlButtonStates(session, control, loops) {
-    const startBtn = document.querySelector('.ctrl-btn[data-action="start"]');
-    const pauseBtn = document.querySelector('.ctrl-btn[data-action="pause"]');
-    const resumeBtn = document.querySelector('.ctrl-btn[data-action="resume"]');
-    const stopBtn = document.querySelector('.ctrl-btn[data-action="stop"]');
+    const analysisAlive = loops?.analysis_alive ?? false;
+    const executionAlive = loops?.execution_alive ?? false;
+    const anyAlive = loops?.any_alive ?? false;
 
-    // Determine current session state
-    const sessionStatus = session?.status || 'stopped';
-    const isPaused = sessionStatus === 'paused';
-    const isRunning = sessionStatus === 'running';
-    const isStopping = sessionStatus === 'stopping';
+    const btnMap = [
+        { action: 'start-analysis', enabled: !analysisAlive },
+        { action: 'stop-analysis', enabled: analysisAlive },
+        { action: 'kill-analysis', enabled: analysisAlive },
+        { action: 'start-execution', enabled: !executionAlive },
+        { action: 'stop-execution', enabled: executionAlive },
+        { action: 'kill-execution', enabled: executionAlive },
+        { action: 'start-both', enabled: !analysisAlive || !executionAlive },
+        { action: 'stop-all', enabled: anyAlive },
+        { action: 'kill-all', enabled: anyAlive },
+    ];
 
-    // Use PID-validated loop state if available, otherwise fall back to session status
-    const anyLoopAlive = loops?.any_alive ?? (isRunning || isPaused);
-    const anyLoopRunning = loops?.any_running ?? isRunning;
-
-    // Check for pending control signals
-    const hasPendingStop = control?.stop || false;
-    const hasPendingPause = control?.pause || false;
-    const hasPendingResume = control?.resume || false;
-    const hasPendingSignal = hasPendingStop || hasPendingPause || hasPendingResume;
-
-    // Enable/disable logic:
-    // START: enabled only if no loops running and no pending signals
-    if (startBtn) {
-        startBtn.disabled = !(!anyLoopRunning && !isPaused && !hasPendingSignal);
-    }
-
-    // PAUSE: enabled only if running (either session status or any loop alive) and no pending signals
-    if (pauseBtn) {
-        pauseBtn.disabled = !(anyLoopAlive && !hasPendingSignal);
-    }
-
-    // RESUME: enabled only if paused or has pending pause/stop signal
-    if (resumeBtn) {
-        resumeBtn.disabled = !(isPaused || hasPendingPause || hasPendingStop);
-    }
-
-    // STOP: enabled if any loop is alive or has pending signal (but not already pending stop)
-    if (stopBtn) {
-        stopBtn.disabled = !(anyLoopAlive && !hasPendingStop);
+    for (const { action, enabled } of btnMap) {
+        const btn = document.querySelector(`[data-action="${action}"]`);
+        if (btn) btn.disabled = !enabled;
     }
 }
 
@@ -675,10 +658,71 @@ function updateExecutiveSummary() {
     if (!container) return;
 
     if (executiveSummary) {
+        // Normal: show executive summary from product docs
         container.innerHTML = `<div class="summary-title">◈ Executive Summary</div><p>${escapeHtml(executiveSummary)}</p>`;
+        container.style.display = 'block';
+    } else if (typeof isNewProject !== 'undefined' && isNewProject) {
+        // New project: show kickstart CTA in this slot
+        renderKickstartCTA(container);
         container.style.display = 'block';
     } else {
         container.style.display = 'none';
+    }
+}
+
+/**
+ * Update the Active Processes widget on the Overview tab.
+ * Uses processesData from processes.js if available, otherwise fetches.
+ */
+async function updateActiveProcessesWidget() {
+    const listEl = document.getElementById('active-processes-list');
+    const countBadge = document.getElementById('active-process-count');
+    const viewAllLink = document.getElementById('view-all-processes');
+
+    if (!listEl) return;
+
+    // Use cached process data if the Processes tab has already polled
+    let processes = (typeof processesData !== 'undefined') ? processesData : [];
+
+    // If no cached data, do a quick fetch
+    if (!processes || processes.length === 0) {
+        try {
+            const response = await fetch(`${API_BASE}/api/processes`);
+            if (response.ok) {
+                const data = await response.json();
+                processes = data.processes || [];
+            }
+        } catch (e) {
+            // Silently fail - widget is supplementary
+        }
+    }
+
+    const running = processes.filter(p => p.status === 'running' || p.status === 'starting');
+
+    if (countBadge) countBadge.textContent = running.length;
+
+    if (running.length === 0) {
+        listEl.innerHTML = '<div class="empty-state">No running processes</div>';
+        if (viewAllLink) viewAllLink.style.display = 'none';
+        return;
+    }
+
+    let html = '';
+    for (const proc of running.slice(0, 5)) {
+        const typeLabel = proc.type ? proc.type.charAt(0).toUpperCase() + proc.type.slice(1) : '--';
+        const name = proc.task_name || proc.description || proc.id;
+        const timeAgo = (typeof getTimeAgo === 'function') ? getTimeAgo(proc.started_at) : '';
+        html += `<div class="active-process-row">`;
+        html += `  <span class="led active"></span>`;
+        html += `  <span class="active-process-type">${typeLabel}</span>`;
+        html += `  <span class="active-process-name">${escapeHtml(name)}</span>`;
+        html += `  <span class="active-process-time">${timeAgo}</span>`;
+        html += `</div>`;
+    }
+    listEl.innerHTML = html;
+
+    if (viewAllLink) {
+        viewAllLink.style.display = processes.length > 0 ? '' : 'none';
     }
 }
 

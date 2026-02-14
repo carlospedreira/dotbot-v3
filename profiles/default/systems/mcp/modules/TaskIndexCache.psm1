@@ -15,6 +15,8 @@ $script:TaskIndex = @{
     InProgress = @{}
     Done = @{}
     Split = @{}         # Tasks that were split into sub-tasks
+    Skipped = @{}       # Tasks that were skipped
+    Cancelled = @{}     # Tasks that were cancelled
     DoneIds = @()       # Quick lookup for dependency checking (by id)
     DoneNames = @()     # Quick lookup for dependency checking (by name)
     DoneSlugs = @()     # Quick lookup for dependency checking (by slug)
@@ -49,11 +51,13 @@ function Update-TaskIndex {
     $script:TaskIndex.InProgress = @{}
     $script:TaskIndex.Done = @{}
     $script:TaskIndex.Split = @{}
+    $script:TaskIndex.Skipped = @{}
+    $script:TaskIndex.Cancelled = @{}
     $script:TaskIndex.DoneIds = @()
     $script:TaskIndex.DoneNames = @()
     $script:TaskIndex.DoneSlugs = @()
 
-    foreach ($status in @('todo', 'analysing', 'needs-input', 'analysed', 'in-progress', 'done', 'split')) {
+    foreach ($status in @('todo', 'analysing', 'needs-input', 'analysed', 'in-progress', 'done', 'split', 'skipped', 'cancelled')) {
         $dir = Join-Path $baseDir $status
         if (-not (Test-Path $dir)) {
             continue
@@ -98,6 +102,8 @@ function Update-TaskIndex {
                         $script:TaskIndex.DoneSlugs += $slug
                     }
                     'split' { $script:TaskIndex.Split[$content.id] = $entry }
+                    'skipped' { $script:TaskIndex.Skipped[$content.id] = $entry }
+                    'cancelled' { $script:TaskIndex.Cancelled[$content.id] = $entry }
                 }
             } catch {
                 Write-Warning "[TaskIndex] Failed to read: $($file.FullName) - $_"
@@ -184,6 +190,16 @@ function Get-SplitTasks {
     return @($index.Split.Values)
 }
 
+function Get-SkippedTasks {
+    $index = Get-TaskIndex
+    return @($index.Skipped.Values)
+}
+
+function Get-CancelledTasks {
+    $index = Get-TaskIndex
+    return @($index.Cancelled.Values)
+}
+
 function Get-DoneTasks {
     param(
         [int]$Limit = 0
@@ -233,6 +249,12 @@ function Get-AllTasks {
     }
     if (-not $Status -or $Status -eq 'split') {
         $tasks += @($index.Split.Values)
+    }
+    if (-not $Status -or $Status -eq 'skipped') {
+        $tasks += @($index.Skipped.Values)
+    }
+    if (-not $Status -or $Status -eq 'cancelled') {
+        $tasks += @($index.Cancelled.Values)
     }
 
     # Apply filters
@@ -285,6 +307,25 @@ function Test-DependencyMet {
     return $false
 }
 
+function Test-AllDependenciesMet {
+    param(
+        [object]$Task,
+        [array]$DoneNames,
+        [array]$DoneSlugs,
+        [array]$DoneIds
+    )
+
+    if (-not $Task.dependencies -or $Task.dependencies.Count -eq 0) {
+        return $true
+    }
+    # Handle both string and array dependencies
+    $deps = if ($Task.dependencies -is [array]) { $Task.dependencies } else { @($Task.dependencies) }
+    $unmet = $deps | Where-Object {
+        -not (Test-DependencyMet -Dependency $_ -DoneNames $DoneNames -DoneSlugs $DoneSlugs -DoneIds $DoneIds)
+    }
+    return $unmet.Count -eq 0
+}
+
 function Get-NextTask {
     $index = Get-TaskIndex
     $doneNames = $index.DoneNames
@@ -292,21 +333,35 @@ function Get-NextTask {
     $doneIds = $index.DoneIds
 
     # Filter tasks with unmet dependencies
-    # Dependencies can be stored as task names, slugs, or IDs
     $eligible = @($index.Todo.Values) | Where-Object {
-        if (-not $_.dependencies -or $_.dependencies.Count -eq 0) {
-            return $true
-        }
-        # Handle both string and array dependencies
-        $deps = if ($_.dependencies -is [array]) { $_.dependencies } else { @($_.dependencies) }
-        $unmet = $deps | Where-Object {
-            -not (Test-DependencyMet -Dependency $_ -DoneNames $doneNames -DoneSlugs $doneSlugs -DoneIds $doneIds)
-        }
-        return $unmet.Count -eq 0
+        Test-AllDependenciesMet -Task $_ -DoneNames $doneNames -DoneSlugs $doneSlugs -DoneIds $doneIds
     }
 
     # Return highest priority (lowest number)
     return $eligible | Sort-Object priority | Select-Object -First 1
+}
+
+function Get-NextAnalysedTask {
+    $index = Get-TaskIndex
+    $doneNames = $index.DoneNames
+    $doneSlugs = $index.DoneSlugs
+    $doneIds = $index.DoneIds
+
+    # Filter analysed tasks with unmet dependencies
+    $eligible = @($index.Analysed.Values) | Where-Object {
+        Test-AllDependenciesMet -Task $_ -DoneNames $doneNames -DoneSlugs $doneSlugs -DoneIds $doneIds
+    }
+
+    $total = @($index.Analysed.Values).Count
+    $blockedCount = $total - @($eligible).Count
+
+    # Return highest priority (lowest number) + blocked count for reporting
+    $next = $eligible | Sort-Object priority | Select-Object -First 1
+    return @{
+        Task = $next
+        BlockedCount = $blockedCount
+        TotalCount = $total
+    }
 }
 
 function Test-TaskDone {
@@ -348,6 +403,12 @@ function Get-TaskById {
     if ($index.Split.ContainsKey($TaskId)) {
         return $index.Split[$TaskId]
     }
+    if ($index.Skipped.ContainsKey($TaskId)) {
+        return $index.Skipped[$TaskId]
+    }
+    if ($index.Cancelled.ContainsKey($TaskId)) {
+        return $index.Cancelled[$TaskId]
+    }
 
     return $null
 }
@@ -356,7 +417,7 @@ function Get-TaskStats {
     $index = Get-TaskIndex
 
     $stats = @{
-        total = $index.Todo.Count + $index.Analysing.Count + $index.NeedsInput.Count + $index.Analysed.Count + $index.InProgress.Count + $index.Done.Count + $index.Split.Count
+        total = $index.Todo.Count + $index.Analysing.Count + $index.NeedsInput.Count + $index.Analysed.Count + $index.InProgress.Count + $index.Done.Count + $index.Split.Count + $index.Skipped.Count + $index.Cancelled.Count
         todo = $index.Todo.Count
         analysing = $index.Analysing.Count
         needs_input = $index.NeedsInput.Count
@@ -364,6 +425,8 @@ function Get-TaskStats {
         in_progress = $index.InProgress.Count
         done = $index.Done.Count
         split = $index.Split.Count
+        skipped = $index.Skipped.Count
+        cancelled = $index.Cancelled.Count
         by_category = @{}
         by_effort = @{}
         by_priority_range = @{
@@ -373,7 +436,7 @@ function Get-TaskStats {
         }
     }
 
-    $allTasks = @($index.Todo.Values) + @($index.Analysing.Values) + @($index.NeedsInput.Values) + @($index.Analysed.Values) + @($index.InProgress.Values) + @($index.Done.Values)
+    $allTasks = @($index.Todo.Values) + @($index.Analysing.Values) + @($index.NeedsInput.Values) + @($index.Analysed.Values) + @($index.InProgress.Values) + @($index.Done.Values) + @($index.Skipped.Values) + @($index.Cancelled.Values)
 
     foreach ($task in $allTasks) {
         # Count by category
@@ -455,10 +518,14 @@ Export-ModuleMember -Function @(
     'Get-InProgressTasks',
     'Get-DoneTasks',
     'Get-SplitTasks',
+    'Get-SkippedTasks',
+    'Get-CancelledTasks',
     'Get-AllTasks',
     'Get-NextTask',
+    'Get-NextAnalysedTask',
     'Test-TaskDone',
     'Test-DependencyMet',
+    'Test-AllDependenciesMet',
     'Get-TaskById',
     'Get-TaskStats',
     'Get-RemainingEffort',

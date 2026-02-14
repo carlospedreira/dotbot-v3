@@ -28,6 +28,10 @@ $controlDir = Join-Path $botRoot ".control"
 Import-Module (Join-Path $botRoot "systems\runtime\modules\DotBotTheme.psm1") -Force
 $t = Get-DotBotTheme
 
+if (-not (Test-Path $controlDir)) { New-Item -Path $controlDir -ItemType Directory -Force | Out-Null }
+$processesDir = Join-Path $controlDir "processes"
+if (-not (Test-Path $processesDir)) { New-Item -Path $processesDir -ItemType Directory -Force | Out-Null }
+
 # Import MCP session tools
 . "$botRoot\systems\mcp\tools\session-get-state\script.ps1"
 . "$botRoot\systems\mcp\tools\session-get-stats\script.ps1"
@@ -620,7 +624,7 @@ function Get-BotState {
         $recentCompleted = $doneTasks |
             ForEach-Object {
                 try {
-                    $taskContent = Get-Content $_.FullName -Raw | ConvertFrom-Json
+                    $taskContent = Get-Content $_.FullName -Raw -ErrorAction Stop | ConvertFrom-Json
                     @{
                         id = $taskContent.id
                         name = $taskContent.name
@@ -660,7 +664,7 @@ function Get-BotState {
                     $null
                 }
             } | Where-Object { $_ -ne $null } |
-            Sort-Object { [DateTime]$_.completed_at } -Descending |
+            Sort-Object { if ($_.completed_at) { [DateTime]$_.completed_at } else { [DateTime]::MinValue } } -Descending |
             Select-Object -First 100
     }
 
@@ -670,7 +674,7 @@ function Get-BotState {
         $analysingTasksList = $analysingTasks |
             ForEach-Object {
                 try {
-                    $taskContent = Get-Content $_.FullName -Raw | ConvertFrom-Json
+                    $taskContent = Get-Content $_.FullName -Raw -ErrorAction Stop | ConvertFrom-Json
                     @{
                         id = $taskContent.id
                         name = $taskContent.name
@@ -690,7 +694,7 @@ function Get-BotState {
         $needsInputTasksList = $needsInputTasks |
             ForEach-Object {
                 try {
-                    $taskContent = Get-Content $_.FullName -Raw | ConvertFrom-Json
+                    $taskContent = Get-Content $_.FullName -Raw -ErrorAction Stop | ConvertFrom-Json
                     @{
                         id = $taskContent.id
                         name = $taskContent.name
@@ -711,7 +715,7 @@ function Get-BotState {
         $analysedTasksList = $analysedTasks |
             ForEach-Object {
                 try {
-                    $taskContent = Get-Content $_.FullName -Raw | ConvertFrom-Json
+                    $taskContent = Get-Content $_.FullName -Raw -ErrorAction Stop | ConvertFrom-Json
                     [PSCustomObject]@{
                         id = $taskContent.id
                         name = $taskContent.name
@@ -745,7 +749,7 @@ function Get-BotState {
         $upcomingTasks = $todoTasks |
             ForEach-Object {
                 try {
-                    $taskContent = Get-Content $_.FullName -Raw | ConvertFrom-Json
+                    $taskContent = Get-Content $_.FullName -Raw -ErrorAction Stop | ConvertFrom-Json
                     [PSCustomObject]@{
                         id = $taskContent.id
                         name = $taskContent.name
@@ -840,19 +844,23 @@ function Get-BotState {
         }
     }
     
-    # Read instance info from signal files
+    # Read instance info from signal files (legacy) AND process registry (new)
     $instances = @{
         analysis = $null
         execution = $null
     }
 
-    # Analysis instance
+    # Check legacy signal files for backward compat
     $analysisSignal = Join-Path $controlDir "analysing.signal"
     $isAnalysisRunning = Test-Path $analysisSignal
     if ($isAnalysisRunning) {
         try {
             $sig = Get-Content $analysisSignal -Raw | ConvertFrom-Json
-            $isAlive = $null -ne (Get-Process -Id $sig.pid -ErrorAction SilentlyContinue)
+            $isAlive = $true
+            if ($sig.pid) {
+                try { $isAlive = $null -ne (Get-Process -Id $sig.pid -ErrorAction SilentlyContinue) }
+                catch { $isAlive = $false }
+            }
             $instances.analysis = @{
                 instance_id = $sig.instance_id
                 pid = $sig.pid
@@ -862,18 +870,19 @@ function Get-BotState {
                 next_action = $sig.next_action
                 alive = $isAlive
             }
-        } catch {
-            # Signal file corrupted or process check failed
-        }
+        } catch {}
     }
 
-    # Execution instance
     $runningSignal = Join-Path $controlDir "running.signal"
     $isActuallyRunning = Test-Path $runningSignal
     if ($isActuallyRunning) {
         try {
             $sig = Get-Content $runningSignal -Raw | ConvertFrom-Json
-            $isAlive = $null -ne (Get-Process -Id $sig.pid -ErrorAction SilentlyContinue)
+            $isAlive = $true
+            if ($sig.pid) {
+                try { $isAlive = $null -ne (Get-Process -Id $sig.pid -ErrorAction SilentlyContinue) }
+                catch { $isAlive = $false }
+            }
             $instances.execution = @{
                 instance_id = $sig.instance_id
                 pid = $sig.pid
@@ -883,16 +892,61 @@ function Get-BotState {
                 next_action = $sig.next_action
                 alive = $isAlive
             }
-        } catch {
-            # Signal file corrupted or process check failed
+        } catch {}
+    }
+
+    # Also check process registry for running processes
+    $runningProcesses = @()
+    if (Test-Path $processesDir) {
+        $procFiles = Get-ChildItem -Path $processesDir -Filter "*.json" -File -ErrorAction SilentlyContinue
+        foreach ($pf in $procFiles) {
+            try {
+                $proc = Get-Content $pf.FullName -Raw | ConvertFrom-Json
+                if ($proc.status -eq 'running' -or $proc.status -eq 'starting') {
+                    $runningProcesses += $proc
+
+                    # PID check isolated so errors can't skip instance population
+                    $isAlive = $true
+                    if ($proc.pid) {
+                        try { $isAlive = $null -ne (Get-Process -Id $proc.pid -ErrorAction SilentlyContinue) }
+                        catch { $isAlive = $true }  # Assume alive if PID check fails
+                    }
+
+                    # Populate instances from process registry (override stale legacy signal entries)
+                    if ($proc.type -eq 'analysis' -and (-not $instances.analysis -or $instances.analysis.alive -ne $true)) {
+                        $instances.analysis = @{
+                            instance_id = $proc.id
+                            pid = $proc.pid
+                            started_at = $proc.started_at
+                            last_heartbeat = $proc.last_heartbeat
+                            status = $proc.heartbeat_status
+                            next_action = $proc.heartbeat_next_action
+                            alive = $isAlive
+                        }
+                        $isAnalysisRunning = $true
+                    }
+                    if ($proc.type -eq 'execution' -and (-not $instances.execution -or $instances.execution.alive -ne $true)) {
+                        $instances.execution = @{
+                            instance_id = $proc.id
+                            pid = $proc.pid
+                            started_at = $proc.started_at
+                            last_heartbeat = $proc.last_heartbeat
+                            status = $proc.heartbeat_status
+                            next_action = $proc.heartbeat_next_action
+                            alive = $isAlive
+                        }
+                        $isActuallyRunning = $true
+                    }
+                }
+            } catch {}
         }
     }
 
-    # Track combined loop state
-    $analysisAlive = $instances.analysis?.alive -eq $true
-    $executionAlive = $instances.execution?.alive -eq $true
-    $anyLoopRunning = $isAnalysisRunning -or $isActuallyRunning
-    $anyLoopAlive = $analysisAlive -or $executionAlive
+    # Track combined loop state (explicit null checks - avoid ?. operator on hashtables)
+    $analysisAlive = ($null -ne $instances.analysis) -and ($instances.analysis.alive -eq $true)
+    $executionAlive = ($null -ne $instances.execution) -and ($instances.execution.alive -eq $true)
+    $anyLoopRunning = $isAnalysisRunning -or $isActuallyRunning -or ($runningProcesses.Count -gt 0)
+    $anyLoopAlive = $analysisAlive -or $executionAlive -or ($runningProcesses.Count -gt 0)
 
     # Check control signals - check for any stop signal (generic or loop-specific)
     $controlSignals = @{
@@ -943,7 +997,7 @@ function Get-BotState {
             analysed_list = @($analysedTasksList)
             recent_completed = @($recentCompleted)  # Ensure array even with single item
             completed_total = if ($doneTasks.Count) { $doneTasks.Count } else { 0 }
-            action_required = $needsInputTasks.Count + $splitTasks.Count
+            action_required = $needsInputTasks.Count
         }
         session = $sessionInfo
         control = $controlSignals
@@ -1112,88 +1166,86 @@ function Set-ControlSignal {
             if (Test-Path $stopExecutionSignal) { Remove-Item $stopExecutionSignal -Force }
         }
         "stop" {
-            # Remove pause signal if exists, keep running signal (it will be removed by the loop)
+            # Remove pause signal if exists
             $pauseSignal = Join-Path $controlDir "pause.signal"
             if (Test-Path $pauseSignal) { Remove-Item $pauseSignal -Force }
 
-            # Create loop-specific stop signals to stop BOTH loops
+            # Create loop-specific stop signals for legacy loops
             $signalContent = @{
                 action = $Action
                 timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
             } | ConvertTo-Json
 
-            # Create stop-analysis.signal for the analysis loop
             $stopAnalysisSignal = Join-Path $controlDir "stop-analysis.signal"
             $signalContent | Set-Content -Path $stopAnalysisSignal -Force
 
-            # Create stop-execution.signal for the execution loop
             $stopExecutionSignal = Join-Path $controlDir "stop-execution.signal"
             $signalContent | Set-Content -Path $stopExecutionSignal -Force
+
+            # Also create stop files for all running processes in registry
+            if (Test-Path $processesDir) {
+                $procFiles = Get-ChildItem -Path $processesDir -Filter "*.json" -File -ErrorAction SilentlyContinue
+                foreach ($pf in $procFiles) {
+                    try {
+                        $proc = Get-Content $pf.FullName -Raw | ConvertFrom-Json
+                        if ($proc.status -eq 'running') {
+                            $stopFile = Join-Path $processesDir "$($proc.id).stop"
+                            "stop" | Set-Content -Path $stopFile -Force
+                        }
+                    } catch {}
+                }
+            }
         }
         "start" {
-            # Start action - launch loop(s) based on mode
-            $runLoopPath = Join-Path $botRoot "systems\runtime\run-loop.ps1"
-            $analyseLoopPath = Join-Path $botRoot "systems\runtime\analyse-loop.ps1"
-            
+            # Start action - launch process(es) via unified launcher
+            $launcherPath = Join-Path $botRoot "systems\runtime\launch-process.ps1"
+
+            if (-not (Test-Path $launcherPath)) {
+                return @{ success = $false; message = "Launcher script not found" }
+            }
+
             # Check settings for debug mode and model selection
             $settingsFile = Join-Path $controlDir "ui-settings.json"
             $showDebug = $false
             $showVerbose = $false
-            $analysisModel = "Sonnet"
+            $analysisModel = "Opus"
             $executionModel = "Opus"
             if (Test-Path $settingsFile) {
                 try {
-                    $settings = Get-Content $settingsFile -Raw | ConvertFrom-Json
-                    $showDebug = [bool]$settings.showDebug
-                    $showVerbose = [bool]$settings.showVerbose
-                    if ($settings.analysisModel) { $analysisModel = $settings.analysisModel }
-                    if ($settings.executionModel) { $executionModel = $settings.executionModel }
-                } catch {
-                    # Ignore settings parse errors
-                }
+                    $uiSettings = Get-Content $settingsFile -Raw | ConvertFrom-Json
+                    $showDebug = [bool]$uiSettings.showDebug
+                    $showVerbose = [bool]$uiSettings.showVerbose
+                    if ($uiSettings.analysisModel) { $analysisModel = $uiSettings.analysisModel }
+                    if ($uiSettings.executionModel) { $executionModel = $uiSettings.executionModel }
+                } catch {}
             }
-            
+
             $launched = @()
-            
-            # Launch analysis loop if mode is "analysis" or "both"
+
+            # Launch analysis process if mode is "analysis" or "both"
             if ($Mode -in @("analysis", "both")) {
-                if (Test-Path $analyseLoopPath) {
-                    $args = @("-NoExit", "-File", "`"$analyseLoopPath`"")
-                    if ($showDebug) { $args += "-ShowDebug" }
-                    if ($showVerbose) { $args += "-ShowVerbose" }
-                    $args += "-Model"
-                    $args += $analysisModel
-                    Start-Process pwsh -ArgumentList $args -WindowStyle Normal
-                    $launched += "analysis"
-                    Write-Status "Launched analysis loop with model: $analysisModel" -Type Success
-                } else {
-                    Write-Status "Analysis loop script not found at $analyseLoopPath" -Type Warn
-                }
+                $args = @("-NoExit", "-File", "`"$launcherPath`"", "-Type", "analysis", "-Continue", "-Model", $analysisModel)
+                if ($showDebug) { $args += "-ShowDebug" }
+                if ($showVerbose) { $args += "-ShowVerbose" }
+                Start-Process pwsh -ArgumentList $args -WindowStyle Normal
+                $launched += "analysis"
+                Write-Status "Launched analysis process with model: $analysisModel" -Type Success
             }
-            
-            # Launch execution loop if mode is "execution" or "both"
+
+            # Launch execution process if mode is "execution" or "both"
             if ($Mode -in @("execution", "both")) {
-                if (Test-Path $runLoopPath) {
-                    $args = @("-NoExit", "-File", "`"$runLoopPath`"")
-                    if ($showDebug) { $args += "-ShowDebug" }
-                    if ($showVerbose) { $args += "-ShowVerbose" }
-                    $args += "-Model"
-                    $args += $executionModel
-                    Start-Process pwsh -ArgumentList $args -WindowStyle Normal
-                    $launched += "execution"
-                    Write-Status "Launched execution loop with model: $executionModel" -Type Success
-                } else {
-                    Write-Status "Execution loop script not found at $runLoopPath" -Type Warn
-                }
+                $args = @("-NoExit", "-File", "`"$launcherPath`"", "-Type", "execution", "-Continue", "-Model", $executionModel)
+                if ($showDebug) { $args += "-ShowDebug" }
+                if ($showVerbose) { $args += "-ShowVerbose" }
+                Start-Process pwsh -ArgumentList $args -WindowStyle Normal
+                $launched += "execution"
+                Write-Status "Launched execution process with model: $executionModel" -Type Success
             }
-            
+
             if ($launched.Count -eq 0) {
-                return @{
-                    success = $false
-                    message = "No loop scripts found"
-                }
+                return @{ success = $false; message = "No processes launched" }
             }
-            
+
             return @{
                 success = $true
                 action = $Action
@@ -1254,7 +1306,7 @@ try {
             }
         }
 
-        $isPollingEndpoint = $url -in @('/api/state', '/api/activity/tail', '/api/git-status')
+        $isPollingEndpoint = $url -in @('/api/state', '/api/activity/tail', '/api/git-status', '/api/processes') -or $url -like '/api/process/*/output'
         $logLine = "$($t.Bezel)[$timestamp]$($t.Reset) $($t.Label)$method$($t.Reset) $($t.Cyan)$url$($t.Reset) $($t.Bezel)(#$script:requestCount)$($t.Reset)"
         
         if ($isPollingEndpoint) {
@@ -1386,6 +1438,321 @@ try {
                         }
                     }
                     $content = @{ docs = $docs } | ConvertTo-Json -Depth 5 -Compress
+                    break
+                }
+
+                "/api/product/kickstart" {
+                    # Kickstart project: save briefing files and invoke Claude to create product docs
+                    if ($method -eq "POST") {
+                        $contentType = "application/json; charset=utf-8"
+                        try {
+                            $reader = New-Object System.IO.StreamReader($request.InputStream)
+                            $body = $reader.ReadToEnd() | ConvertFrom-Json
+                            $reader.Close()
+
+                            $userPrompt = $body.prompt
+                            $files = @($body.files)
+
+                            if (-not $userPrompt) {
+                                $statusCode = 400
+                                $content = @{
+                                    success = $false
+                                    error = "Missing required 'prompt' field"
+                                } | ConvertTo-Json -Compress
+                            } else {
+                                # Validate file constraints
+                                $maxFileSize = 2MB
+                                $maxFiles = 10
+                                $validFiles = @()
+
+                                if ($files.Count -gt $maxFiles) {
+                                    $statusCode = 400
+                                    $content = @{
+                                        success = $false
+                                        error = "Maximum $maxFiles files allowed"
+                                    } | ConvertTo-Json -Compress
+                                } else {
+                                    $filesValid = $true
+                                    foreach ($file in $files) {
+                                        if (-not $file -or -not $file.name -or -not $file.content) { continue }
+                                        # Decode base64 to check size
+                                        try {
+                                            $decoded = [Convert]::FromBase64String($file.content)
+                                            if ($decoded.Length -gt $maxFileSize) {
+                                                $filesValid = $false
+                                                $statusCode = 400
+                                                $content = @{
+                                                    success = $false
+                                                    error = "File '$($file.name)' exceeds 2MB limit"
+                                                } | ConvertTo-Json -Compress
+                                                break
+                                            }
+                                            $validFiles += @{
+                                                name = $file.name -replace '[^\w\-\.]', '_'
+                                                bytes = $decoded
+                                            }
+                                        } catch {
+                                            $filesValid = $false
+                                            $statusCode = 400
+                                            $content = @{
+                                                success = $false
+                                                error = "Invalid base64 content for file '$($file.name)'"
+                                            } | ConvertTo-Json -Compress
+                                            break
+                                        }
+                                    }
+
+                                    if ($filesValid) {
+                                        # Create briefing directory and save files
+                                        $briefingDir = Join-Path $botRoot "workspace\product\briefing"
+                                        if (-not (Test-Path $briefingDir)) {
+                                            New-Item -Path $briefingDir -ItemType Directory -Force | Out-Null
+                                        }
+
+                                        $savedFiles = @()
+                                        foreach ($vf in $validFiles) {
+                                            $filePath = Join-Path $briefingDir $vf.name
+                                            [System.IO.File]::WriteAllBytes($filePath, $vf.bytes)
+                                            $savedFiles += $filePath
+                                        }
+
+                                        # Read workflow content
+                                        $workflowPath = Join-Path $botRoot "prompts\workflows\01-plan-product.md"
+                                        $workflowContent = if (Test-Path $workflowPath) {
+                                            Get-Content -Path $workflowPath -Raw
+                                        } else {
+                                            "Create mission.md, tech-stack.md, and entity-model.md product documents."
+                                        }
+
+                                        # Build file references for the prompt
+                                        $fileRefs = ""
+                                        if ($savedFiles.Count -gt 0) {
+                                            $fileRefs = "`n`nBriefing files have been saved to the briefing/ directory. Read and use these for context:`n"
+                                            foreach ($sf in $savedFiles) {
+                                                $fileRefs += "- $sf`n"
+                                            }
+                                        }
+
+                                        # Compose system prompt
+                                        $systemPrompt = @"
+You are a product planning assistant for the dotbot autonomous development system.
+
+Your task is to create the foundational product documents for a new project based on the user's description.
+
+Follow this workflow for guidance on document structure:
+$workflowContent
+
+User's project description:
+$userPrompt
+$fileRefs
+
+Instructions:
+1. Read any briefing files listed above and any existing project files (README.md, etc.) for additional context
+2. Create these product documents directly by writing files to .bot/workspace/product/:
+   - mission.md - What the product is, core principles, goals. MUST start with a section titled "Executive Summary" as the first heading.
+   - tech-stack.md - Technologies, versions, infrastructure decisions
+   - entity-model.md - Data model, entities, relationships. Include a Mermaid.js erDiagram block showing entities and their relationships visually.
+3. Do NOT create tasks, ask questions, or use task management tools. Just create the documents directly.
+4. Write comprehensive, well-structured markdown documents based on what you know from the user's description and any attached files.
+5. Make reasonable inferences where details are missing - the user can refine later.
+
+IMPORTANT: The mission.md file MUST begin with an "Executive Summary" section (## Executive Summary) as the very first content after the title. This is required for the UI to detect that product planning is complete.
+"@
+
+                                        # Build roadmap prompt for phase 2 (chained after doc creation)
+                                        $roadmapPrompt = @"
+You are a roadmap planning assistant for dotbot.
+
+Instructions:
+1. Read the workflow file at .bot/prompts/workflows/03-plan-roadmap.md — this is your primary guide
+2. Read .bot/prompts/workflows/04-new-tasks.md for task schema reference
+3. Read ALL product docs in .bot/workspace/product/ (mission.md, tech-stack.md, entity-model.md, and any others present)
+4. Follow the workflow to generate a comprehensive task roadmap
+5. Create tasks via the task_create_bulk MCP tool (the dotbot MCP server provides this)
+6. Generate roadmap-overview.md and save it to .bot/workspace/product/roadmap-overview.md
+7. Do NOT ask interactive questions — work autonomously
+8. Do NOT create change requests — this is initial roadmap generation
+"@
+
+                                        # Run Claude CLI in background — Phase 1: create docs, Phase 2: plan roadmap
+                                        $claudeCliModule = Join-Path $botRoot "systems\runtime\ClaudeCLI\ClaudeCLI.psm1"
+
+                                        $scriptBlock = {
+                                            param($claudeModule, $kickstartPrompt, $roadmapPrompt, $botRoot)
+                                            $diagLog = Join-Path $botRoot ".control\kickstart-diag.log"
+
+                                            # Direct activity log writer (bypasses Write-ActivityLog's $PSScriptRoot issue in Start-Job)
+                                            function Write-Activity($type, $msg) {
+                                                $logPath = Join-Path $botRoot ".control\activity.jsonl"
+                                                $event = @{
+                                                    timestamp = (Get-Date).ToUniversalTime().ToString("o")
+                                                    type      = $type
+                                                    message   = $msg
+                                                    task_id   = $null
+                                                    phase     = $null
+                                                } | ConvertTo-Json -Compress
+                                                $maxRetries = 3
+                                                for ($r = 0; $r -lt $maxRetries; $r++) {
+                                                    try {
+                                                        $fs = [System.IO.FileStream]::new(
+                                                            $logPath,
+                                                            [System.IO.FileMode]::Append,
+                                                            [System.IO.FileAccess]::Write,
+                                                            [System.IO.FileShare]::ReadWrite
+                                                        )
+                                                        $sw = [System.IO.StreamWriter]::new($fs, [System.Text.Encoding]::UTF8)
+                                                        $sw.WriteLine($event)
+                                                        $sw.Close()
+                                                        $fs.Close()
+                                                        break
+                                                    } catch {
+                                                        if ($r -lt ($maxRetries - 1)) {
+                                                            Start-Sleep -Milliseconds (50 * ($r + 1))
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            try {
+                                                Set-Location (Split-Path -Parent $botRoot)
+                                                Import-Module $claudeModule -Force
+
+                                                # Phase 1: Create product documents
+                                                Write-Activity "init" "kickstart — creating product documents..."
+                                                "$(Get-Date -Format o) [PHASE1] Creating product docs..." | Add-Content -Path $diagLog
+                                                Invoke-ClaudeStream -Prompt $kickstartPrompt -Model Sonnet
+                                                "$(Get-Date -Format o) [PHASE1] Complete" | Add-Content -Path $diagLog
+
+                                                # Phase 2: If docs were created, plan roadmap
+                                                $productDir = Join-Path $botRoot "workspace\product"
+                                                $hasDocs = (Test-Path (Join-Path $productDir "mission.md")) -and
+                                                           (Test-Path (Join-Path $productDir "tech-stack.md")) -and
+                                                           (Test-Path (Join-Path $productDir "entity-model.md"))
+
+                                                if ($hasDocs) {
+                                                    Write-Activity "text" "Product documents created. Starting roadmap planning..."
+                                                    Write-Activity "init" "roadmap — reading workflows and generating tasks..."
+                                                    "$(Get-Date -Format o) [PHASE2] Docs exist. Starting roadmap planning..." | Add-Content -Path $diagLog
+                                                    Invoke-ClaudeStream -Prompt $roadmapPrompt -Model Sonnet
+                                                    Write-Activity "text" "Roadmap complete! Tasks created."
+                                                    "$(Get-Date -Format o) [PHASE2] Complete" | Add-Content -Path $diagLog
+                                                } else {
+                                                    Write-Activity "text" "Product docs not found — roadmap skipped."
+                                                    "$(Get-Date -Format o) [PHASE2] Skipped — product docs not found after phase 1" | Add-Content -Path $diagLog
+                                                }
+                                            } catch {
+                                                Write-Activity "error" "Kickstart error: $($_.Exception.Message)"
+                                                "$(Get-Date -Format o) [ERROR] $($_.Exception.Message)`n$($_.ScriptStackTrace)" | Add-Content -Path $diagLog
+                                            }
+                                        }
+
+                                        # Launch as tracked process (keep Start-Job for two-phase chaining)
+                                        Start-Job -ScriptBlock $scriptBlock -ArgumentList $claudeCliModule, $systemPrompt, $roadmapPrompt, $botRoot | Out-Null
+
+                                        $content = @{
+                                            success = $true
+                                            message = "Kickstart initiated. Claude will create product documents, then plan the roadmap."
+                                        } | ConvertTo-Json -Compress
+                                        Write-Status "Product kickstart initiated via Claude CLI (with roadmap chaining)" -Type Info
+                                    }
+                                }
+                            }
+                        } catch {
+                            $statusCode = 500
+                            $content = @{
+                                success = $false
+                                error = "Failed to kickstart project: $($_.Exception.Message)"
+                            } | ConvertTo-Json -Compress
+                        }
+                    } else {
+                        $statusCode = 405
+                        $content = "Method not allowed"
+                    }
+                    break
+                }
+
+                "/api/product/plan-roadmap" {
+                    $contentType = "application/json; charset=utf-8"
+                    if ($method -eq "POST") {
+                        try {
+                            # Validate product docs exist
+                            $productDir = Join-Path $botRoot "workspace\product"
+                            $requiredDocs = @("mission.md", "tech-stack.md", "entity-model.md")
+                            $missingDocs = @()
+                            foreach ($doc in $requiredDocs) {
+                                $docPath = Join-Path $productDir $doc
+                                if (-not (Test-Path $docPath)) {
+                                    $missingDocs += $doc
+                                }
+                            }
+
+                            if ($missingDocs.Count -gt 0) {
+                                $statusCode = 400
+                                $content = @{
+                                    success = $false
+                                    error = "Missing required product docs: $($missingDocs -join ', '). Run kickstart first."
+                                } | ConvertTo-Json -Compress
+                            } else {
+                                # Compose a concise prompt — tell Claude to READ the workflow files
+                                # rather than embedding them (avoids CLI argument size limits)
+                                $roadmapSystemPrompt = @"
+You are a roadmap planning assistant for dotbot.
+
+Instructions:
+1. Read the workflow file at .bot/prompts/workflows/03-plan-roadmap.md — this is your primary guide
+2. Read .bot/prompts/workflows/04-new-tasks.md for task schema reference
+3. Read ALL product docs in .bot/workspace/product/ (mission.md, tech-stack.md, entity-model.md, and any others present)
+4. Follow the workflow to generate a comprehensive task roadmap
+5. Create tasks via the task_create_bulk MCP tool (the dotbot MCP server provides this)
+6. Generate roadmap-overview.md and save it to .bot/workspace/product/roadmap-overview.md
+7. Do NOT ask interactive questions — work autonomously
+8. Do NOT create change requests — this is initial roadmap generation
+"@
+
+                                # Run Claude CLI in background (non-blocking)
+                                $claudeCliModule = Join-Path $botRoot "systems\runtime\ClaudeCLI\ClaudeCLI.psm1"
+
+                                $scriptBlock = {
+                                    param($claudeModule, $prompt, $botRoot)
+                                    $diagLog = Join-Path $botRoot ".control\diag.log"
+                                    try {
+                                        "$(Get-Date -Format o) [1] Starting roadmap job" | Add-Content -Path $diagLog
+                                        $repoRoot = Split-Path -Parent $botRoot
+                                        Set-Location $repoRoot
+                                        "$(Get-Date -Format o) [2] CWD set to: $(Get-Location)" | Add-Content -Path $diagLog
+                                        "$(Get-Date -Format o) [3] Importing module: $claudeModule" | Add-Content -Path $diagLog
+                                        Import-Module $claudeModule -Force
+                                        "$(Get-Date -Format o) [4] Module imported. Prompt length: $($prompt.Length) chars" | Add-Content -Path $diagLog
+                                        "$(Get-Date -Format o) [5] Invoking claude.exe..." | Add-Content -Path $diagLog
+                                        Invoke-ClaudeStream -Prompt $prompt -Model Sonnet
+                                        "$(Get-Date -Format o) [6] Invoke-ClaudeStream returned" | Add-Content -Path $diagLog
+                                    } catch {
+                                        "$(Get-Date -Format o) [ERROR] $($_.Exception.Message)`n$($_.ScriptStackTrace)" | Add-Content -Path $diagLog
+                                    }
+                                }
+
+                                # Launch via process manager
+                                $launcherPath = Join-Path $botRoot "systems\runtime\launch-process.ps1"
+                                $launchArgs = @("-NoExit", "-File", "`"$launcherPath`"", "-Type", "planning", "-Model", "Sonnet", "-Description", "`"Plan project roadmap`"")
+                                Start-Process pwsh -ArgumentList $launchArgs -WindowStyle Normal | Out-Null
+
+                                $content = @{
+                                    success = $true
+                                    message = "Roadmap planning initiated via process manager."
+                                } | ConvertTo-Json -Compress
+                                Write-Status "Roadmap planning launched as tracked process" -Type Info
+                            }
+                        } catch {
+                            $statusCode = 500
+                            $content = @{
+                                success = $false
+                                error = "Failed to start roadmap planning: $($_.Exception.Message)"
+                            } | ConvertTo-Json -Compress
+                        }
+                    } else {
+                        $statusCode = 405
+                        $content = "Method not allowed"
+                    }
                     break
                 }
 
@@ -1662,7 +2029,7 @@ try {
                     $defaultSettings = @{
                         showDebug = $false
                         showVerbose = $false
-                        analysisModel = "Sonnet"
+                        analysisModel = "Opus"
                         executionModel = "Opus"
                     }
 
@@ -1684,11 +2051,15 @@ try {
                             $body = $reader.ReadToEnd() | ConvertFrom-Json
                             $reader.Close()
 
-                            # Load existing settings or use defaults
-                            $settings = $defaultSettings
+                            # Load existing settings into defaults hashtable (hashtable supports adding new keys;
+                            # PSCustomObject from ConvertFrom-Json does not, which silently drops new properties)
+                            $settings = $defaultSettings.Clone()
                             if (Test-Path $settingsFile) {
                                 try {
-                                    $settings = Get-Content $settingsFile -Raw | ConvertFrom-Json
+                                    $existingSettings = Get-Content $settingsFile -Raw | ConvertFrom-Json
+                                    foreach ($prop in $existingSettings.PSObject.Properties) {
+                                        $settings[$prop.Name] = $prop.Value
+                                    }
                                 } catch { }
                             }
 
@@ -1898,13 +2269,13 @@ try {
                     }
 
                     $state.polled_at = [DateTime]::UtcNow.ToString("o")
-                    $content = $state | ConvertTo-Json -Depth 10 -Compress
+                    $content = $state | ConvertTo-Json -Depth 20 -Compress
                     break
                 }
 
                 "/api/state" {
                     $contentType = "application/json; charset=utf-8"
-                    $content = Get-BotState | ConvertTo-Json -Depth 10 -Compress
+                    $content = Get-BotState | ConvertTo-Json -Depth 20 -Compress
                     break
                 }
 
@@ -1994,59 +2365,20 @@ try {
                 }
 
                 "/api/git/commit-and-push" {
-                    # Invoke Claude to commit and push changes
+                    # Launch commit process via unified launcher
                     if ($method -eq "POST") {
                         $contentType = "application/json; charset=utf-8"
                         try {
-                            # Read the workflow file for context
-                            $workflowPath = Join-Path $botRoot "prompts\workflows\02-commit-and-push.md"
-                            $workflowContent = if (Test-Path $workflowPath) {
-                                Get-Content -Path $workflowPath -Raw
-                            } else {
-                                "Organize uncommitted changes into clean, atomic commits with meaningful messages, then push."
-                            }
-
-                            # Compose the system prompt for Claude
-                            $systemPrompt = @"
-You are a git commit assistant for the dotbot autonomous development system.
-
-Your task is to organize uncommitted changes into clean, logical commits and push them to the remote repository.
-
-Follow this workflow:
-$workflowContent
-
-Important guidelines:
-1. Review all uncommitted changes (staged, unstaged, untracked)
-2. Group related changes into logical commits
-3. Write clear, conventional commit messages (type: subject format)
-4. Stage and commit each logical group
-5. Push all commits to the remote
-6. If there are no changes to commit, just report that the repo is clean
-
-Begin by analyzing the current git status.
-"@
-
-                            # Run Claude CLI in background (non-blocking)
-                            $claudeCliModule = Join-Path $botRoot "systems\runtime\ClaudeCLI\ClaudeCLI.psm1"
-
-                            # Start the Claude invocation as a background job
-                            $scriptBlock = {
-                                param($claudeModule, $prompt, $botRoot)
-
-                                # Change to project root for proper context
-                                Set-Location (Split-Path -Parent $botRoot)
-
-                                Import-Module $claudeModule -Force
-                                Invoke-ClaudeStream -Prompt $prompt -Model Sonnet
-                            }
-
-                            Start-Job -ScriptBlock $scriptBlock -ArgumentList $claudeCliModule, $systemPrompt, $botRoot | Out-Null
+                            $launcherPath = Join-Path $botRoot "systems\runtime\launch-process.ps1"
+                            $launchArgs = @("-NoExit", "-File", "`"$launcherPath`"", "-Type", "commit", "-Model", "Sonnet", "-Description", "`"Commit and push changes`"")
+                            $proc = Start-Process pwsh -ArgumentList $launchArgs -WindowStyle Normal -PassThru
 
                             $content = @{
                                 success = $true
-                                message = "Commit and push started. Claude is organizing changes."
+                                pid = $proc.Id
+                                message = "Commit and push started via process manager."
                             } | ConvertTo-Json -Compress
-                            Write-Status "Git commit-and-push initiated via Claude CLI" -Type Info
+                            Write-Status "Git commit-and-push launched as process (PID: $($proc.Id))" -Type Info
                         } catch {
                             $statusCode = 500
                             $content = @{
@@ -2290,30 +2622,22 @@ Begin by analyzing the current git status.
                         foreach ($file in $files) {
                             try {
                                 $task = Get-Content $file.FullName -Raw | ConvertFrom-Json
-                                $actionItems += @{
-                                    type = "question"
-                                    task_id = $task.id
-                                    task_name = $task.name
-                                    question = $task.pending_question
-                                    created_at = $task.updated_at
-                                }
-                            } catch { }
-                        }
-                    }
-                    
-                    # Get split tasks (approvals)
-                    $splitDir = Join-Path $tasksDir "split"
-                    if (Test-Path $splitDir) {
-                        $files = Get-ChildItem -Path $splitDir -Filter "*.json" -ErrorAction SilentlyContinue
-                        foreach ($file in $files) {
-                            try {
-                                $task = Get-Content $file.FullName -Raw | ConvertFrom-Json
-                                $actionItems += @{
-                                    type = "split"
-                                    task_id = $task.id
-                                    task_name = $task.name
-                                    split_proposal = $task.split_proposal
-                                    created_at = $task.updated_at
+                                if ($task.split_proposal) {
+                                    $actionItems += @{
+                                        type = "split"
+                                        task_id = $task.id
+                                        task_name = $task.name
+                                        split_proposal = $task.split_proposal
+                                        created_at = $task.updated_at
+                                    }
+                                } else {
+                                    $actionItems += @{
+                                        type = "question"
+                                        task_id = $task.id
+                                        task_name = $task.name
+                                        question = $task.pending_question
+                                        created_at = $task.updated_at
+                                    }
                                 }
                             } catch { }
                         }
@@ -2323,7 +2647,7 @@ Begin by analyzing the current git status.
                         success = $true
                         items = $actionItems
                         count = $actionItems.Count
-                    } | ConvertTo-Json -Depth 10 -Compress
+                    } | ConvertTo-Json -Depth 20 -Compress
                     break
                 }
 
@@ -2450,27 +2774,19 @@ $userPrompt
 Now create the task using mcp__dotbot__task_create with needs_interview=$needsInterview. Do not ask questions or provide commentary.
 "@
 
-                                # Run Claude CLI in background (non-blocking)
-                                $claudeCliModule = Join-Path $botRoot "systems\runtime\ClaudeCLI\ClaudeCLI.psm1"
-
-                                # Start the Claude invocation as a background job
-                                $scriptBlock = {
-                                    param($claudeModule, $prompt, $botRoot)
-
-                                    # Change to project root for proper context
-                                    Set-Location (Split-Path -Parent $botRoot)
-
-                                    Import-Module $claudeModule -Force
-                                    Invoke-ClaudeStream -Prompt $prompt -Model Sonnet
-                                }
-
-                                Start-Job -ScriptBlock $scriptBlock -ArgumentList $claudeCliModule, $systemPrompt, $botRoot | Out-Null
+                                # Launch via process manager
+                                $launcherPath = Join-Path $botRoot "systems\runtime\launch-process.ps1"
+                                $escapedPrompt = $systemPrompt -replace '"', '\"' -replace "`n", ' ' -replace "`r", ''
+                                # Truncate if too long for CLI args
+                                if ($escapedPrompt.Length -gt 8000) { $escapedPrompt = $escapedPrompt.Substring(0, 8000) }
+                                $launchArgs = @("-NoExit", "-File", "`"$launcherPath`"", "-Type", "task-creation", "-Model", "Sonnet", "-Description", "`"Create task from user request`"", "-Prompt", "`"$escapedPrompt`"")
+                                Start-Process pwsh -ArgumentList $launchArgs -WindowStyle Normal | Out-Null
 
                                 $content = @{
                                     success = $true
-                                    message = "Task creation started. Claude is processing your request."
+                                    message = "Task creation started via process manager."
                                 } | ConvertTo-Json -Compress
-                                Write-Status "Task creation initiated via Claude CLI" -Type Info
+                                Write-Status "Task creation launched as tracked process" -Type Info
                             }
                         } catch {
                             $statusCode = 500
@@ -2508,7 +2824,19 @@ Now create the task using mcp__dotbot__task_create with needs_interview=$needsIn
                         try {
                             # If tail is requested (initial load), read last N lines
                             if ($tailLines -gt 0 -and $position -eq 0) {
-                                $allLines = Get-Content -Path $logPath -Tail $tailLines -ErrorAction SilentlyContinue
+                                # Read with FileShare.ReadWrite to avoid blocking concurrent writers
+                                $stream = [System.IO.FileStream]::new(
+                                    $logPath,
+                                    [System.IO.FileMode]::Open,
+                                    [System.IO.FileAccess]::Read,
+                                    [System.IO.FileShare]::ReadWrite
+                                )
+                                $reader = [System.IO.StreamReader]::new($stream)
+                                $allText = $reader.ReadToEnd()
+                                $newPosition = $stream.Position
+                                $reader.Close()
+                                $stream.Close()
+                                $allLines = ($allText -split "`n") | Where-Object { $_.Trim() } | Select-Object -Last $tailLines
                                 $events = @()
                                 foreach ($line in $allLines) {
                                     if ($line) {
@@ -2519,9 +2847,6 @@ Now create the task using mcp__dotbot__task_create with needs_interview=$needsIn
                                         }
                                     }
                                 }
-                                # Set position to end of file for subsequent polls
-                                $fileInfo = Get-Item $logPath
-                                $newPosition = $fileInfo.Length
                                 
                                 $content = @{
                                     events = $events
@@ -2529,7 +2854,12 @@ Now create the task using mcp__dotbot__task_create with needs_interview=$needsIn
                                 } | ConvertTo-Json -Depth 10 -Compress
                             } else {
                                 # Normal streaming from position
-                                $stream = [System.IO.File]::OpenRead($logPath)
+                                $stream = [System.IO.FileStream]::new(
+                                    $logPath,
+                                    [System.IO.FileMode]::Open,
+                                    [System.IO.FileAccess]::Read,
+                                    [System.IO.FileShare]::ReadWrite
+                                )
                                 $stream.Seek($position, 'Begin') | Out-Null
                                 $reader = [System.IO.StreamReader]::new($stream)
                                 
@@ -2561,6 +2891,375 @@ Now create the task using mcp__dotbot__task_create with needs_interview=$needsIn
                                 error = "Failed to read activity log: $_"
                             } | ConvertTo-Json -Compress
                         }
+                    }
+                    break
+                }
+
+                # --- Process Management API ---
+
+                "/api/processes" {
+                    $contentType = "application/json; charset=utf-8"
+
+                    # List all processes from registry
+                    $processList = @()
+                    $processFiles = Get-ChildItem -Path $processesDir -Filter "*.json" -File -ErrorAction SilentlyContinue
+                    $now = [DateTime]::UtcNow
+
+                    foreach ($pf in $processFiles) {
+                        try {
+                            $proc = Get-Content $pf.FullName -Raw | ConvertFrom-Json
+
+                            # TTL cleanup: remove failed/stopped processes older than 5 minutes
+                            if ($proc.status -in @('failed', 'stopped') -and $proc.failed_at) {
+                                $failedTime = [DateTime]::Parse($proc.failed_at)
+                                if (($now - $failedTime).TotalMinutes -gt 5) {
+                                    Remove-Item $pf.FullName -Force -ErrorAction SilentlyContinue
+                                    # Also remove activity and whisper files
+                                    $actFile = Join-Path $processesDir "$($proc.id).activity.jsonl"
+                                    $whisperFile = Join-Path $processesDir "$($proc.id).whisper.jsonl"
+                                    $stopFile = Join-Path $processesDir "$($proc.id).stop"
+                                    Remove-Item $actFile -Force -ErrorAction SilentlyContinue
+                                    Remove-Item $whisperFile -Force -ErrorAction SilentlyContinue
+                                    Remove-Item $stopFile -Force -ErrorAction SilentlyContinue
+                                    continue
+                                }
+                            }
+
+                            # Detect dead PIDs for running processes
+                            if ($proc.status -eq 'running' -and $proc.pid) {
+                                $isAlive = $null -ne (Get-Process -Id $proc.pid -ErrorAction SilentlyContinue)
+                                if (-not $isAlive) {
+                                    $proc.status = 'stopped'
+                                    $proc.failed_at = $now.ToString("o")
+                                    $proc | ConvertTo-Json -Depth 10 | Set-Content -Path $pf.FullName -Force
+                                }
+                            }
+
+                            $processList += $proc
+                        } catch {}
+                    }
+
+                    # Apply query filters if present
+                    $filterType = $request.QueryString["type"]
+                    $filterStatus = $request.QueryString["status"]
+                    if ($filterType) { $processList = @($processList | Where-Object { $_.type -eq $filterType }) }
+                    if ($filterStatus) { $processList = @($processList | Where-Object { $_.status -eq $filterStatus }) }
+
+                    $content = @{ processes = @($processList) } | ConvertTo-Json -Depth 10 -Compress
+                    break
+                }
+
+                { $_ -like "/api/process/*/output" } {
+                    $contentType = "application/json; charset=utf-8"
+                    $procId = ($url -replace "^/api/process/", "" -replace "/output$", "")
+
+                    $activityFile = Join-Path $processesDir "$procId.activity.jsonl"
+                    $position = [int]($request.QueryString["position"])
+                    $tail = [int]($request.QueryString["tail"])
+                    if ($tail -le 0) { $tail = 50 }
+
+                    if (Test-Path $activityFile) {
+                        try {
+                            $fs = [System.IO.FileStream]::new($activityFile, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+                            $sr = [System.IO.StreamReader]::new($fs, [System.Text.Encoding]::UTF8)
+                            $allText = $sr.ReadToEnd()
+                            $sr.Close(); $fs.Close()
+
+                            $allLines = @($allText -split "`n" | Where-Object { $_.Trim() })
+                            $totalLines = $allLines.Count
+
+                            $events = @()
+                            $startIdx = if ($position -gt 0) { $position } else { [Math]::Max(0, $totalLines - $tail) }
+                            for ($li = $startIdx; $li -lt $totalLines; $li++) {
+                                try { $events += ($allLines[$li] | ConvertFrom-Json) } catch {}
+                            }
+
+                            $content = @{
+                                events = @($events)
+                                position = $totalLines
+                                total = $totalLines
+                            } | ConvertTo-Json -Depth 10 -Compress
+                        } catch {
+                            $content = @{ events = @(); position = 0; error = "$_" } | ConvertTo-Json -Compress
+                        }
+                    } else {
+                        $content = @{ events = @(); position = 0 } | ConvertTo-Json -Compress
+                    }
+                    break
+                }
+
+                { $_ -like "/api/process/*/stop" } {
+                    if ($method -eq "POST") {
+                        $contentType = "application/json; charset=utf-8"
+                        $procId = ($url -replace "^/api/process/", "" -replace "/stop$", "")
+
+                        # Create stop signal file
+                        $stopFile = Join-Path $processesDir "$procId.stop"
+                        "stop" | Set-Content -Path $stopFile -Force
+
+                        $content = @{ success = $true; process_id = $procId; message = "Stop signal sent" } | ConvertTo-Json -Compress
+                        Write-Status "Stop signal sent to process $procId" -Type Info
+                    } else {
+                        $statusCode = 405
+                        $content = "Method not allowed"
+                    }
+                    break
+                }
+
+                { $_ -like "/api/process/*/kill" } {
+                    if ($method -eq "POST") {
+                        $contentType = "application/json; charset=utf-8"
+                        $procId = ($url -replace "^/api/process/", "" -replace "/kill$", "")
+
+                        $procFile = Join-Path $processesDir "$procId.json"
+                        if (Test-Path $procFile) {
+                            try {
+                                $procData = Get-Content $procFile -Raw | ConvertFrom-Json
+                                $pid = $procData.pid
+                                if ($pid) {
+                                    Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+                                }
+                                # Update process registry
+                                $procData.status = "stopped"
+                                $procData | Add-Member -NotePropertyName "failed_at" -NotePropertyValue ((Get-Date).ToUniversalTime().ToString("o")) -Force
+                                $procData | ConvertTo-Json -Depth 10 | Set-Content -Path $procFile -Force -Encoding utf8NoBOM
+                                # Create stop signal file for cleanup
+                                $stopFile = Join-Path $processesDir "$procId.stop"
+                                "stop" | Set-Content -Path $stopFile -Force
+                                $content = @{ success = $true; process_id = $procId; message = "Process killed (PID: $pid)" } | ConvertTo-Json -Compress
+                                Write-Status "Killed process $procId (PID: $pid)" -Type Warning
+                            } catch {
+                                $content = @{ success = $false; error = "Kill failed: $_" } | ConvertTo-Json -Compress
+                            }
+                        } else {
+                            $statusCode = 404
+                            $content = @{ error = "Process not found: $procId" } | ConvertTo-Json -Compress
+                        }
+                    } else {
+                        $statusCode = 405
+                        $content = "Method not allowed"
+                    }
+                    break
+                }
+
+                "/api/process/stop-by-type" {
+                    if ($method -eq "POST") {
+                        $contentType = "application/json; charset=utf-8"
+                        $reader = New-Object System.IO.StreamReader($request.InputStream)
+                        $body = $reader.ReadToEnd()
+                        $reader.Close()
+                        $data = $body | ConvertFrom-Json
+                        $targetType = $data.type
+
+                        $stopped = @()
+                        $procFiles = Get-ChildItem -Path $processesDir -Filter "*.json" -File -ErrorAction SilentlyContinue
+                        foreach ($pf in $procFiles) {
+                            try {
+                                $pData = Get-Content $pf.FullName -Raw | ConvertFrom-Json
+                                if ($pData.type -eq $targetType -and ($pData.status -eq "running" -or $pData.status -eq "starting")) {
+                                    $stopFile = Join-Path $processesDir "$($pData.id).stop"
+                                    "stop" | Set-Content -Path $stopFile -Force
+                                    $stopped += $pData.id
+                                }
+                            } catch {}
+                        }
+                        $content = @{ success = $true; stopped = $stopped; count = $stopped.Count } | ConvertTo-Json -Compress
+                        Write-Status "Stop signal sent to $($stopped.Count) $targetType process(es)" -Type Info
+                    } else {
+                        $statusCode = 405
+                        $content = "Method not allowed"
+                    }
+                    break
+                }
+
+                "/api/process/kill-by-type" {
+                    if ($method -eq "POST") {
+                        $contentType = "application/json; charset=utf-8"
+                        $reader = New-Object System.IO.StreamReader($request.InputStream)
+                        $body = $reader.ReadToEnd()
+                        $reader.Close()
+                        $data = $body | ConvertFrom-Json
+                        $targetType = $data.type
+
+                        $killed = @()
+                        $procFiles = Get-ChildItem -Path $processesDir -Filter "*.json" -File -ErrorAction SilentlyContinue
+                        foreach ($pf in $procFiles) {
+                            try {
+                                $pData = Get-Content $pf.FullName -Raw | ConvertFrom-Json
+                                if ($pData.type -eq $targetType -and ($pData.status -eq "running" -or $pData.status -eq "starting")) {
+                                    if ($pData.pid) {
+                                        Stop-Process -Id $pData.pid -Force -ErrorAction SilentlyContinue
+                                    }
+                                    $pData.status = "stopped"
+                                    $pData | Add-Member -NotePropertyName "failed_at" -NotePropertyValue ((Get-Date).ToUniversalTime().ToString("o")) -Force
+                                    $pData | ConvertTo-Json -Depth 10 | Set-Content -Path $pf.FullName -Force -Encoding utf8NoBOM
+                                    $stopFile = Join-Path $processesDir "$($pData.id).stop"
+                                    "stop" | Set-Content -Path $stopFile -Force
+                                    $killed += $pData.id
+                                }
+                            } catch {}
+                        }
+                        $content = @{ success = $true; killed = $killed; count = $killed.Count } | ConvertTo-Json -Compress
+                        Write-Status "Killed $($killed.Count) $targetType process(es)" -Type Warning
+                    } else {
+                        $statusCode = 405
+                        $content = "Method not allowed"
+                    }
+                    break
+                }
+
+                "/api/process/kill-all" {
+                    if ($method -eq "POST") {
+                        $contentType = "application/json; charset=utf-8"
+
+                        $killed = @()
+                        $procFiles = Get-ChildItem -Path $processesDir -Filter "*.json" -File -ErrorAction SilentlyContinue
+                        foreach ($pf in $procFiles) {
+                            try {
+                                $pData = Get-Content $pf.FullName -Raw | ConvertFrom-Json
+                                if ($pData.status -eq "running" -or $pData.status -eq "starting") {
+                                    if ($pData.pid) {
+                                        Stop-Process -Id $pData.pid -Force -ErrorAction SilentlyContinue
+                                    }
+                                    $pData.status = "stopped"
+                                    $pData | Add-Member -NotePropertyName "failed_at" -NotePropertyValue ((Get-Date).ToUniversalTime().ToString("o")) -Force
+                                    $pData | ConvertTo-Json -Depth 10 | Set-Content -Path $pf.FullName -Force -Encoding utf8NoBOM
+                                    $stopFile = Join-Path $processesDir "$($pData.id).stop"
+                                    "stop" | Set-Content -Path $stopFile -Force
+                                    $killed += $pData.id
+                                }
+                            } catch {}
+                        }
+                        $content = @{ success = $true; killed = $killed; count = $killed.Count } | ConvertTo-Json -Compress
+                        Write-Status "Killed all processes ($($killed.Count) total)" -Type Warning
+                    } else {
+                        $statusCode = 405
+                        $content = "Method not allowed"
+                    }
+                    break
+                }
+
+                { $_ -like "/api/process/*/whisper" } {
+                    if ($method -eq "POST") {
+                        $contentType = "application/json; charset=utf-8"
+                        $procId = ($url -replace "^/api/process/", "" -replace "/whisper$", "")
+
+                        $reader = New-Object System.IO.StreamReader($request.InputStream)
+                        $body = $reader.ReadToEnd()
+                        $reader.Close()
+                        $data = $body | ConvertFrom-Json
+
+                        $whisperFile = Join-Path $processesDir "$procId.whisper.jsonl"
+                        $whisper = @{
+                            instruction = $data.message
+                            priority = if ($data.priority) { $data.priority } else { "normal" }
+                            timestamp = (Get-Date).ToUniversalTime().ToString("o")
+                        } | ConvertTo-Json -Compress
+
+                        Add-Content -Path $whisperFile -Value $whisper -Encoding utf8NoBOM
+
+                        $content = @{ success = $true; process_id = $procId } | ConvertTo-Json -Compress
+                        Write-Status "Whisper sent to process $procId" -Type Success
+                    } else {
+                        $statusCode = 405
+                        $content = "Method not allowed"
+                    }
+                    break
+                }
+
+                { $_ -like "/api/process/*" -and $_ -notlike "/api/process/*/output" -and $_ -notlike "/api/process/*/stop" -and $_ -notlike "/api/process/*/kill" -and $_ -notlike "/api/process/*/whisper" -and $_ -ne "/api/process/launch" -and $_ -ne "/api/process/stop-by-type" -and $_ -ne "/api/process/kill-by-type" -and $_ -ne "/api/process/kill-all" } {
+                    $contentType = "application/json; charset=utf-8"
+                    $procId = $url -replace "^/api/process/", ""
+
+                    $procFile = Join-Path $processesDir "$procId.json"
+                    if (Test-Path $procFile) {
+                        $content = Get-Content $procFile -Raw
+                    } else {
+                        $statusCode = 404
+                        $content = @{ error = "Process not found: $procId" } | ConvertTo-Json -Compress
+                    }
+                    break
+                }
+
+                "/api/process/launch" {
+                    if ($method -eq "POST") {
+                        $contentType = "application/json; charset=utf-8"
+                        $reader = New-Object System.IO.StreamReader($request.InputStream)
+                        $body = $reader.ReadToEnd()
+                        $reader.Close()
+                        $data = $body | ConvertFrom-Json
+
+                        $launchType = $data.type
+                        if (-not $launchType) {
+                            $content = @{ success = $false; error = "type is required" } | ConvertTo-Json -Compress
+                            break
+                        }
+
+                        $launcherPath = Join-Path $botRoot "systems\runtime\launch-process.ps1"
+                        if (-not (Test-Path $launcherPath)) {
+                            $content = @{ success = $false; error = "Launcher script not found" } | ConvertTo-Json -Compress
+                            break
+                        }
+
+                        # Build arguments
+                        $launchArgs = @("-NoExit", "-File", "`"$launcherPath`"", "-Type", $launchType)
+
+                        if ($data.task_id) { $launchArgs += @("-TaskId", $data.task_id) }
+                        if ($data.prompt) { $launchArgs += @("-Prompt", "`"$($data.prompt -replace '"', '\"')`"") }
+                        if ($data.continue -eq $true) { $launchArgs += "-Continue" }
+                        if ($data.description) { $launchArgs += @("-Description", "`"$($data.description -replace '"', '\"')`"") }
+
+                        # Model: from request, or from settings
+                        $launchModel = if ($data.model) { $data.model } else {
+                            switch ($launchType) {
+                                'analysis' { if ($settings.analysis?.model) { $settings.analysis.model } else { 'Opus' } }
+                                default    { if ($settings.execution?.model) { $settings.execution.model } else { 'Opus' } }
+                            }
+                        }
+                        $launchArgs += @("-Model", $launchModel)
+
+                        # Check settings for debug/verbose
+                        $settingsFile = Join-Path $controlDir "ui-settings.json"
+                        if (Test-Path $settingsFile) {
+                            try {
+                                $uiSettings = Get-Content $settingsFile -Raw | ConvertFrom-Json
+                                if ([bool]$uiSettings.showDebug) { $launchArgs += "-ShowDebug" }
+                                if ([bool]$uiSettings.showVerbose) { $launchArgs += "-ShowVerbose" }
+                            } catch {}
+                        }
+
+                        # Launch as separate process
+                        $proc = Start-Process pwsh -ArgumentList $launchArgs -WindowStyle Normal -PassThru
+
+                        # Wait briefly for process file to be created
+                        Start-Sleep -Milliseconds 500
+
+                        # Find the process ID from the registry (most recent by started_at)
+                        $procFiles = Get-ChildItem -Path $processesDir -Filter "*.json" -File -ErrorAction SilentlyContinue |
+                            Sort-Object LastWriteTime -Descending
+                        $launchedProcId = $null
+                        foreach ($pf in $procFiles) {
+                            try {
+                                $pData = Get-Content $pf.FullName -Raw | ConvertFrom-Json
+                                if ($pData.pid -eq $proc.Id) {
+                                    $launchedProcId = $pData.id
+                                    break
+                                }
+                            } catch {}
+                        }
+
+                        $content = @{
+                            success = $true
+                            process_id = $launchedProcId
+                            pid = $proc.Id
+                            type = $launchType
+                            model = $launchModel
+                        } | ConvertTo-Json -Compress
+
+                        Write-Status "Launched $launchType process (PID: $($proc.Id))" -Type Success
+                    } else {
+                        $statusCode = 405
+                        $content = "Method not allowed"
                     }
                     break
                 }

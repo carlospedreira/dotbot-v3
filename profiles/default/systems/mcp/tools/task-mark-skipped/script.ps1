@@ -30,17 +30,28 @@ function Invoke-TaskMarkSkipped {
     $skippedDir = Join-Path $tasksBaseDir "skipped"
     
     # Map status to directory
+    $analysingDir = Join-Path $tasksBaseDir "analysing"
+    $analysedDir = Join-Path $tasksBaseDir "analysed"
+    $needsInputDir = Join-Path $tasksBaseDir "needs-input"
+    $splitDir = Join-Path $tasksBaseDir "split"
+    $cancelledDir = Join-Path $tasksBaseDir "cancelled"
+
     $statusDirs = @{
         'todo' = $todosDir
+        'analysing' = $analysingDir
+        'needs-input' = $needsInputDir
+        'analysed' = $analysedDir
         'in-progress' = $inProgressDir
         'done' = $doneDir
         'skipped' = $skippedDir
+        'split' = $splitDir
+        'cancelled' = $cancelledDir
     }
-    
+
     # Find the task file
     $taskFile = $null
     $currentStatus = $null
-    $validStatuses = @('todo', 'in-progress', 'done', 'skipped')
+    $validStatuses = @('todo', 'analysing', 'needs-input', 'analysed', 'in-progress', 'done', 'skipped', 'split', 'cancelled')
     
     foreach ($status in $validStatuses) {
         $dir = $statusDirs[$status]
