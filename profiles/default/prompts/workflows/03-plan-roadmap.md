@@ -1,3 +1,4 @@
+<!-- Used by 'planning' process type only. NOT used during kickstart. -->
 ---
 name: Plan Roadmap
 description: Automatic roadmap generation from product documents using dotbot MCP tools

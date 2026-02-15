@@ -111,8 +111,8 @@ function renderProcessList(processes) {
         groups[type].push(proc);
     }
 
-    // Sort within groups: running first, then completed, then failed/stopped
-    const statusOrder = { 'starting': 0, 'running': 1, 'completed': 2, 'stopped': 3, 'failed': 4 };
+    // Sort within groups: running first, then needs-input, then completed, then failed/stopped
+    const statusOrder = { 'starting': 0, 'running': 1, 'needs-input': 2, 'completed': 3, 'stopped': 4, 'failed': 5 };
     for (const type in groups) {
         groups[type].sort((a, b) => (statusOrder[a.status] || 5) - (statusOrder[b.status] || 5));
     }
@@ -131,6 +131,8 @@ function renderProcessList(processes) {
             const displayName = proc.task_name || proc.description || proc.id;
             const isExpanded = expandedProcessId === proc.id;
             const isRunning = proc.status === 'running' || proc.status === 'starting';
+            const isNeedsInput = proc.status === 'needs-input';
+            const isActive = isRunning || isNeedsInput;
 
             // TTL countdown for failed/stopped
             let ttlHtml = '';
@@ -152,7 +154,13 @@ function renderProcessList(processes) {
             const displayStatus = isProcessCrashed(proc) ? 'crashed' : proc.status;
             html += `    <span class="process-status-label">${displayStatus}${ttlHtml}</span>`;
 
-            if (isRunning) {
+            if (isNeedsInput) {
+                html += `    <div class="process-actions">`;
+                html += `      <button class="process-action-btn primary" onclick="event.stopPropagation(); toggleProcessExpand('${proc.id}')" title="Answer Questions">Answer</button>`;
+                html += `      <button class="process-action-btn" onclick="event.stopPropagation(); stopProcess('${proc.id}')" title="Graceful Stop">S</button>`;
+                html += `      <button class="process-action-btn danger" onclick="event.stopPropagation(); killProcess('${proc.id}')" title="Kill (immediate)">K</button>`;
+                html += `    </div>`;
+            } else if (isRunning) {
                 html += `    <div class="process-actions">`;
                 html += `      <button class="process-action-btn" onclick="event.stopPropagation(); showProcessWhisper('${proc.id}')" title="Whisper">W</button>`;
                 html += `      <button class="process-action-btn" onclick="event.stopPropagation(); stopProcess('${proc.id}')" title="Graceful Stop">S</button>`;
@@ -161,6 +169,11 @@ function renderProcessList(processes) {
             }
 
             html += `  </div>`;
+
+            // Heartbeat subtitle — visible without expanding
+            if (isActive && proc.heartbeat_status) {
+                html += `<div class="process-heartbeat-subtitle">${escapeHtml(proc.heartbeat_status)}</div>`;
+            }
 
             // Expanded detail panel
             if (isExpanded) {
@@ -177,6 +190,47 @@ function renderProcessList(processes) {
                     html += `  <span class="process-meta-item"><b>Next:</b> ${escapeHtml(proc.heartbeat_next_action)}</span>`;
                 }
                 html += `</div>`;
+
+                // Interview questions UI (when needs-input with pending_questions)
+                if (isNeedsInput && proc.pending_questions) {
+                    const questionsData = proc.pending_questions;
+                    const questions = questionsData.questions || [];
+                    const round = proc.interview_round || 1;
+                    const roundLabel = round > 1 ? ` (Round ${round})` : '';
+
+                    html += `<div class="process-interview" data-process-id="${proc.id}">`;
+                    html += `  <div class="process-interview-header">Interview Questions${escapeHtml(roundLabel)}</div>`;
+
+                    questions.forEach((q, idx) => {
+                        if (idx > 0) html += '<div class="question-divider"></div>';
+                        html += `<div class="interview-question" data-question-id="${escapeHtml(q.id)}">`;
+                        html += `  <div class="interview-question-text">${escapeHtml(q.question)}</div>`;
+                        if (q.context) {
+                            html += `  <div class="interview-question-context">${escapeHtml(q.context)}</div>`;
+                        }
+                        html += `  <div class="interview-options">`;
+                        (q.options || []).forEach(opt => {
+                            const recClass = opt.key === q.recommendation ? ' recommended' : '';
+                            html += `<div class="interview-option${recClass}" data-key="${escapeHtml(opt.key)}" data-question-key="${escapeHtml(q.id)}" onclick="selectInterviewOption(this)">`;
+                            html += `  <span class="interview-option-key">${escapeHtml(opt.key)}</span>`;
+                            html += `  <div class="interview-option-content">`;
+                            html += `    <div class="interview-option-label">${escapeHtml(opt.label)}</div>`;
+                            if (opt.rationale) {
+                                html += `    <div class="interview-option-rationale">${escapeHtml(opt.rationale)}</div>`;
+                            }
+                            html += `  </div>`;
+                            html += `</div>`;
+                        });
+                        html += `  </div>`;
+                        html += `</div>`;
+                    });
+
+                    html += `<div class="process-interview-actions">`;
+                    html += `  <button class="ctrl-btn" onclick="submitInterviewFromProcess('${proc.id}', true)">Skip & Continue</button>`;
+                    html += `  <button class="ctrl-btn primary" onclick="submitInterviewFromProcess('${proc.id}', false)">Submit Answers</button>`;
+                    html += `</div>`;
+                    html += `</div>`;
+                }
 
                 // Output viewer
                 html += `<div class="process-output" id="process-output-${proc.id}">`;
@@ -441,6 +495,7 @@ function getProcessStatusClass(status, proc) {
     switch (status) {
         case 'running':
         case 'starting': return 'status-running';
+        case 'needs-input': return 'status-needs-input';
         case 'completed': return 'status-completed';
         case 'failed': return 'status-failed';
         case 'stopped': return 'status-stopped';
@@ -453,6 +508,7 @@ function getProcessStatusIcon(status, proc) {
     switch (status) {
         case 'running':
         case 'starting': return '<span class="led active"></span>';
+        case 'needs-input': return '<span class="led warning"></span>';
         case 'completed': return '<span class="led success"></span>';
         case 'failed': return '<span class="led error"></span>';
         case 'stopped': return '<span class="led off"></span>';
@@ -496,6 +552,107 @@ async function quickLaunch(type) {
         }
     } catch (error) {
         showToast(`Launch error: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * Toggle interview option selection (single-select per question)
+ */
+function selectInterviewOption(element) {
+    const questionEl = element.closest('.interview-question');
+    if (!questionEl) return;
+
+    // Single-select within each question
+    questionEl.querySelectorAll('.interview-option').forEach(opt => {
+        opt.classList.remove('selected');
+    });
+    element.classList.add('selected');
+}
+
+/**
+ * Submit interview answers from the Process tab
+ * @param {string} processId - Process ID
+ * @param {boolean} skipped - Whether user is skipping the interview
+ */
+async function submitInterviewFromProcess(processId, skipped) {
+    const container = document.querySelector(`.process-interview[data-process-id="${processId}"]`);
+    if (!container) return;
+
+    if (!skipped) {
+        // Collect answers from all questions
+        const questionEls = container.querySelectorAll('.interview-question');
+        const answers = [];
+        let allAnswered = true;
+
+        questionEls.forEach(qEl => {
+            const questionId = qEl.dataset.questionId;
+            const selectedOpt = qEl.querySelector('.interview-option.selected');
+            const questionText = qEl.querySelector('.interview-question-text')?.textContent || '';
+
+            if (!selectedOpt) {
+                allAnswered = false;
+            } else {
+                const key = selectedOpt.dataset.key;
+                const label = selectedOpt.querySelector('.interview-option-label')?.textContent || key;
+                answers.push({
+                    question_id: questionId,
+                    question: questionText,
+                    answer: `${key}: ${label}`
+                });
+            }
+        });
+
+        if (!allAnswered) {
+            showToast('Please answer all questions before submitting', 'warning');
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}/api/process/answer`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    process_id: processId,
+                    answers: answers,
+                    skipped: false
+                })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                showToast('Interview answers submitted', 'success');
+                pollProcesses();
+            } else {
+                showToast('Failed to submit answers: ' + (result.error || 'Unknown error'), 'error');
+            }
+        } catch (error) {
+            console.error('Error submitting interview answers:', error);
+            showToast('Error submitting answers', 'error');
+        }
+    } else {
+        // Skip
+        try {
+            const response = await fetch(`${API_BASE}/api/process/answer`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    process_id: processId,
+                    answers: [],
+                    skipped: true
+                })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                showToast('Interview skipped — proceeding with kickstart', 'info');
+                pollProcesses();
+            } else {
+                showToast('Failed to skip: ' + (result.error || 'Unknown error'), 'error');
+            }
+        } catch (error) {
+            console.error('Error skipping interview:', error);
+            showToast('Error skipping interview', 'error');
+        }
     }
 }
 

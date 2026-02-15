@@ -1,3 +1,4 @@
+<!-- Used by 'task-creation' process type only. NOT used during kickstart. -->
 ---
 name: New Tasks
 description: Create change requests and generate tasks

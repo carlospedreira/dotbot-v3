@@ -179,6 +179,7 @@
 }
 
 .status-running .process-status-label { color: var(--color-success); }
+.status-needs-input .process-status-label { color: var(--color-warning); }
 .status-completed .process-status-label { color: var(--color-success-dim); }
 .status-failed .process-status-label { color: var(--color-error); }
 .status-stopped .process-status-label { color: var(--color-muted); }
@@ -436,4 +437,143 @@
 .view-all-link a:hover {
     color: var(--color-primary);
     text-decoration: underline;
+}
+
+/* ========== NEEDS-INPUT STATUS ========== */
+.process-status-icon .led.warning {
+    background: var(--color-warning);
+    box-shadow: 0 0 6px rgb(var(--color-warning-rgb, 255 170 0) / 0.5);
+    animation: processPulse 1.5s ease-in-out infinite;
+}
+
+.status-needs-input .process-row-main {
+    border-left: 2px solid var(--color-warning);
+}
+
+.process-action-btn.primary {
+    background: var(--primary-15);
+    border-color: var(--color-primary);
+    font-weight: 700;
+}
+
+.process-action-btn.primary:hover {
+    background: var(--primary-25);
+}
+
+/* ========== HEARTBEAT SUBTITLE ========== */
+.process-heartbeat-subtitle {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--color-muted);
+    padding: 0 12px 6px 38px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ========== INTERVIEW UI (Process Tab) ========== */
+.process-interview {
+    border: 1px solid var(--primary-12);
+    border-radius: 3px;
+    padding: 12px;
+    margin-bottom: 10px;
+    background: var(--bg-module);
+}
+
+.process-interview-header {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-warning);
+    margin-bottom: 10px;
+    font-family: var(--font-ui);
+}
+
+.interview-question {
+    margin-bottom: 12px;
+}
+
+.interview-question-text {
+    font-size: 12px;
+    color: var(--color-primary);
+    margin-bottom: 4px;
+    font-weight: 500;
+}
+
+.interview-question-context {
+    font-size: 11px;
+    color: var(--color-muted);
+    margin-bottom: 8px;
+    font-style: italic;
+}
+
+.interview-options {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.interview-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 10px;
+    border: 1px solid var(--primary-12);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.interview-option:hover {
+    border-color: var(--primary-25);
+    background: var(--primary-05);
+}
+
+.interview-option.selected {
+    border-color: var(--color-primary);
+    background: var(--primary-10);
+}
+
+.interview-option.recommended {
+    border-left: 2px solid var(--color-success);
+}
+
+.interview-option-key {
+    font-size: 10px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    color: var(--color-secondary);
+    flex-shrink: 0;
+    min-width: 18px;
+    padding-top: 1px;
+}
+
+.interview-option-content {
+    flex: 1;
+}
+
+.interview-option-label {
+    font-size: 12px;
+    color: var(--color-primary);
+}
+
+.interview-option-rationale {
+    font-size: 10px;
+    color: var(--color-muted);
+    margin-top: 2px;
+}
+
+.question-divider {
+    border-top: 1px solid var(--primary-08);
+    margin: 10px 0;
+}
+
+.process-interview-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--primary-08);
 }

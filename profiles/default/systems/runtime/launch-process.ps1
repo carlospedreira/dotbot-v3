@@ -130,7 +130,7 @@ if (Test-Path $settingsPath) {
 # Resolve model (parameter > settings > default)
 if (-not $Model) {
     $Model = switch ($Type) {
-        'analysis' { if ($settings.analysis?.model) { $settings.analysis.model } else { 'Opus' } }
+        { $_ -in @('analysis', 'kickstart') } { if ($settings.analysis?.model) { $settings.analysis.model } else { 'Opus' } }
         default    { if ($settings.execution?.model) { $settings.execution.model } else { 'Opus' } }
     }
 }
@@ -185,6 +185,17 @@ function Test-ProcessStopSignal {
     param([string]$Id)
     $stopFile = Join-Path $processesDir "$Id.stop"
     Test-Path $stopFile
+}
+
+function Add-YamlFrontMatter {
+    param([string]$FilePath, [hashtable]$Metadata)
+    $yaml = "---`n"
+    foreach ($key in ($Metadata.Keys | Sort-Object)) {
+        $yaml += "${key}: `"$($Metadata[$key])`"`n"
+    }
+    $yaml += "---`n`n"
+    $existing = Get-Content $FilePath -Raw
+    ($yaml + $existing) | Set-Content -Path $FilePath -Encoding utf8NoBOM -NoNewline
 }
 
 # --- Crash Trap ---
@@ -920,6 +931,17 @@ Review all context above. Decide whether to write clarification-questions.json (
                 if (Test-Path $summaryPath) {
                     Write-Status "Interview complete — summary written" -Type Complete
                     Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Interview complete after $interviewRound round(s)"
+
+                    # Add YAML front matter to interview summary
+                    $meta = @{
+                        generated_at = (Get-Date).ToUniversalTime().ToString("o")
+                        model = $interviewModel
+                        process_id = $procId
+                        phase = "phase-0-interview"
+                        generator = "dotbot-kickstart"
+                    }
+                    Add-YamlFrontMatter -FilePath $summaryPath -Metadata $meta
+
                     break
                 }
 
@@ -1096,6 +1118,21 @@ IMPORTANT: The mission.md file MUST begin with an "Executive Summary" section (#
             throw "Phase 1 failed: product documents were not created"
         }
 
+        # Add YAML front matter to Phase 1 product docs
+        $phase1Meta = @{
+            generated_at = (Get-Date).ToUniversalTime().ToString("o")
+            model = $claudeModelName
+            process_id = $procId
+            phase = "phase-1-product-docs"
+            generator = "dotbot-kickstart"
+        }
+        foreach ($docName in @("mission.md", "tech-stack.md", "entity-model.md")) {
+            $docPath = Join-Path $productDir $docName
+            if (Test-Path $docPath) {
+                Add-YamlFrontMatter -FilePath $docPath -Metadata $phase1Meta
+            }
+        }
+
         Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Phase 1 complete — product documents created"
 
         # ===== Phase 2a: Generate task groups =====
@@ -1114,6 +1151,11 @@ IMPORTANT: The mission.md file MUST begin with an "Executive Summary" section (#
 $groupsWorkflow
 
 Work autonomously. Do not ask questions. Read the product documents and create task-groups.json.
+
+CRITICAL: Your ONLY job is to create task-groups.json in .bot/workspace/product/.
+Do NOT read other workflow files from the prompts/workflows/ directory.
+Do NOT use task management MCP tools. Do NOT create individual tasks.
+Do NOT read or follow 03-plan-roadmap.md or 04-new-tasks.md — those are for other process types.
 "@
 
         # New session for Phase 2a
@@ -1135,6 +1177,14 @@ Work autonomously. Do not ask questions. Read the product documents and create t
             throw "Phase 2a failed: task-groups.json was not created"
         }
 
+        # Inject metadata into task-groups.json
+        $groupsJson = Get-Content $groupsPath -Raw | ConvertFrom-Json
+        $groupsJson | Add-Member -NotePropertyName "generated_at" -NotePropertyValue (Get-Date).ToUniversalTime().ToString("o") -Force
+        $groupsJson | Add-Member -NotePropertyName "model" -NotePropertyValue $claudeModelName -Force
+        $groupsJson | Add-Member -NotePropertyName "process_id" -NotePropertyValue $procId -Force
+        $groupsJson | Add-Member -NotePropertyName "generator" -NotePropertyValue "dotbot-kickstart" -Force
+        $groupsJson | ConvertTo-Json -Depth 10 | Set-Content -Path $groupsPath -Encoding utf8NoBOM
+
         Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Phase 2a complete — task groups planned"
 
         # ===== Generate roadmap-overview.md (deterministic, no LLM) =====
@@ -1153,6 +1203,14 @@ Work autonomously. Do not ask questions. Read the product documents and create t
             $totalTasks = ($sortedGroups | ForEach-Object { $_.estimated_task_count } | Measure-Object -Sum).Sum
 
             $roadmap = [System.Collections.ArrayList]::new()
+            [void]$roadmap.Add("---")
+            [void]$roadmap.Add("generated_at: `"$((Get-Date).ToUniversalTime().ToString("o"))`"")
+            [void]$roadmap.Add("model: `"$claudeModelName`"")
+            [void]$roadmap.Add("process_id: `"$procId`"")
+            [void]$roadmap.Add("phase: `"phase-2b-roadmap`"")
+            [void]$roadmap.Add("generator: `"dotbot-kickstart`"")
+            [void]$roadmap.Add("---")
+            [void]$roadmap.Add("")
             [void]$roadmap.Add("# Roadmap Overview")
             [void]$roadmap.Add("")
             [void]$roadmap.Add("**Project:** $($groupsData.project_name)")

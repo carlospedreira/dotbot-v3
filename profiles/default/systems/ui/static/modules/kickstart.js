@@ -8,6 +8,7 @@ let isNewProject = false;
 let kickstartInProgress = false;
 let analyseInProgress = false;
 let kickstartFiles = [];       // { name, size, content (base64) }
+let kickstartProcessId = null; // process_id returned from backend
 let kickstartPolling = null;   // interval ID for doc appearance detection
 let roadmapPolling = null;     // interval ID for task creation detection
 
@@ -342,6 +343,7 @@ async function submitKickstart() {
         if (result.success) {
             closeKickstartModal();
             kickstartInProgress = true;
+            kickstartProcessId = result.process_id || null;
 
             // Re-render CTAs to show in-progress state
             if (typeof updateExecutiveSummary === 'function') updateExecutiveSummary();

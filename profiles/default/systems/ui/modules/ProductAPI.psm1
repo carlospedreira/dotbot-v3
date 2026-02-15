@@ -169,24 +169,14 @@ function Start-ProductKickstart {
         $savedFiles += $filePath
     }
 
-    # Launch kickstart as a tracked process via launch-process.ps1
-    $launcherPath = Join-Path $botRoot "systems\runtime\launch-process.ps1"
-    $escapedPrompt = $UserPrompt -replace '"', '\"'
-    $launchArgs = @(
-        "-File", "`"$launcherPath`"",
-        "-Type", "kickstart",
-        "-Model", "Sonnet",
-        "-Prompt", "`"$escapedPrompt`"",
-        "-Description", "`"Kickstart: project setup`""
-    )
-    if ($NeedsInterview) {
-        $launchArgs += "-NeedsInterview"
-    }
-    Start-Process pwsh -ArgumentList $launchArgs -WindowStyle Normal | Out-Null
+    # Launch kickstart via ProcessAPI (proper tracking with PID + process_id)
+    $launchResult = Start-ProcessLaunch -Type "kickstart" -Prompt $UserPrompt `
+        -Description "Kickstart: project setup" -NeedsInterview:$NeedsInterview
     Write-Status "Product kickstart launched as tracked process" -Type Info
 
     return @{
         success = $true
+        process_id = $launchResult.process_id
         message = "Kickstart initiated. Product documents, task groups, and task expansion will run in a tracked process."
     }
 }

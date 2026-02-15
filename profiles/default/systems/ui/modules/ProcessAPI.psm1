@@ -288,7 +288,8 @@ function Start-ProcessLaunch {
         [string]$Prompt,
         [bool]$Continue = $false,
         [string]$Description,
-        [string]$Model
+        [string]$Model,
+        [switch]$NeedsInterview
     )
     $processesDir = $script:Config.ProcessesDir
     $botRoot = $script:Config.BotRoot
@@ -306,6 +307,7 @@ function Start-ProcessLaunch {
     if ($Prompt) { $launchArgs += @("-Prompt", "`"$($Prompt -replace '"', '\"')`"") }
     if ($Continue) { $launchArgs += "-Continue" }
     if ($Description) { $launchArgs += @("-Description", "`"$($Description -replace '"', '\"')`"") }
+    if ($NeedsInterview) { $launchArgs += "-NeedsInterview" }
 
     # Model: from request, or from settings
     $launchModel = if ($Model) { $Model } else {
