@@ -248,7 +248,7 @@ try {
 
                         foreach ($file in $orderedFiles) {
                             $docContent = Get-Content -Path $file.FullName -Raw
-                            if ($docContent -match '##? Executive Summary\s*\r?\n+\s*([^\r\n#]+)') {
+                            if ($docContent -match '(?m)##? Executive Summary\s*\r?\n+\s*(.+)') {
                                 $executiveSummary = $matches[1].Trim()
                                 break
                             }
