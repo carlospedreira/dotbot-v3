@@ -385,6 +385,36 @@
     border-radius: 0;
 }
 
+/* Links */
+.doc-viewer a {
+    color: var(--color-secondary);
+    text-decoration: underline;
+    text-decoration-color: var(--secondary-25);
+    text-underline-offset: 2px;
+    transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+
+.doc-viewer a:hover {
+    color: var(--color-secondary);
+    text-decoration-color: var(--color-secondary);
+    text-shadow: 0 0 8px var(--secondary-25);
+}
+
+/* Links */
+.markdown-content a {
+    color: var(--color-secondary);
+    text-decoration: underline;
+    text-decoration-color: var(--secondary-25);
+    text-underline-offset: 2px;
+    transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+
+.markdown-content a:hover {
+    color: var(--color-secondary);
+    text-decoration-color: var(--color-secondary);
+    text-shadow: 0 0 8px var(--secondary-25);
+}
+
 /* Legacy code styling (for any unclassified code) */
 .doc-viewer code {
     background: var(--bg-black-overlay-heavy);

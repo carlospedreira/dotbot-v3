@@ -17,6 +17,14 @@ function formatCellContent(text) {
         return `\x00CODE${idx}\x00`;
     });
 
+    // Links [text](url) - extract before escaping to preserve raw URLs
+    const linkPlaceholders = [];
+    processed = processed.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, linkText, url) => {
+        const idx = linkPlaceholders.length;
+        linkPlaceholders.push(`<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(linkText)}</a>`);
+        return `\x00LINK${idx}\x00`;
+    });
+
     // Escape HTML on the non-code parts
     processed = escapeHtml(processed);
 
@@ -26,6 +34,9 @@ function formatCellContent(text) {
 
     // Restore code placeholders
     processed = processed.replace(/\x00CODE(\d+)\x00/g, (_, idx) => codePlaceholders[parseInt(idx)]);
+
+    // Restore link placeholders
+    processed = processed.replace(/\x00LINK(\d+)\x00/g, (_, idx) => linkPlaceholders[parseInt(idx)]);
 
     return processed;
 }
@@ -378,6 +389,14 @@ function markdownToHtml(markdown) {
     // Bold and italic
     text = text.replace(/\*\*(.+?)\*\*/g, '___BOLD_START___$1___BOLD_END___');
     text = text.replace(/\*(.+?)\*/g, '___ITALIC_START___$1___ITALIC_END___');
+
+    // Links [text](url)
+    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, linkText, url) => {
+        const placeholder = `___LINK_PLACEHOLDER_${placeholderCount}___`;
+        placeholders[placeholder] = `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(linkText)}</a>`;
+        placeholderCount++;
+        return placeholder;
+    });
 
     // Lists - unordered (- item)
     text = text.replace(/^- (.+)$/gm, '___ULI_START___$1___ULI_END___');
