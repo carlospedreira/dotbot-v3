@@ -56,13 +56,19 @@ function Get-ProcessList {
                 }
             }
 
-            # Detect dead PIDs for running processes
-            if ($proc.status -eq 'running' -and $proc.pid) {
+            # Detect dead PIDs for running/starting processes
+            if ($proc.status -in @('running', 'starting') -and $proc.pid) {
                 $isAlive = $null -ne (Get-Process -Id $proc.pid -ErrorAction SilentlyContinue)
                 if (-not $isAlive) {
                     $proc.status = 'stopped'
                     $proc.failed_at = $now.ToString("o")
+                    $proc | Add-Member -NotePropertyName 'error' -NotePropertyValue "Process terminated unexpectedly" -Force
                     $proc | ConvertTo-Json -Depth 10 | Set-Content -Path $pf.FullName -Force
+
+                    # Write activity log so the PROCESSES tab output shows what happened
+                    $actFile = Join-Path $processesDir "$($proc.id).activity.jsonl"
+                    $event = @{ timestamp = $now.ToString("o"); type = "text"; message = "Process terminated unexpectedly (PID $($proc.pid) no longer alive)" } | ConvertTo-Json -Compress
+                    Add-Content -Path $actFile -Value $event -ErrorAction SilentlyContinue
                 }
             }
 
@@ -294,7 +300,7 @@ function Start-ProcessLaunch {
     }
 
     # Build arguments
-    $launchArgs = @("-NoExit", "-File", "`"$launcherPath`"", "-Type", $Type)
+    $launchArgs = @("-File", "`"$launcherPath`"", "-Type", $Type)
 
     if ($TaskId) { $launchArgs += @("-TaskId", $TaskId) }
     if ($Prompt) { $launchArgs += @("-Prompt", "`"$($Prompt -replace '"', '\"')`"") }

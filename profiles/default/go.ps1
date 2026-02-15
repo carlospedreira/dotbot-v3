@@ -52,7 +52,7 @@ Write-Host "   Location: $UIDir" -ForegroundColor DarkGray
 Write-Host ""
 
 # Start the server in a new PowerShell window
-Start-Process pwsh -ArgumentList "-NoExit", "-File", "`"$ServerScript`""
+Start-Process pwsh -ArgumentList "-File", "`"$ServerScript`""
 
 # Open browser after a short delay
 Start-Sleep -Seconds 2

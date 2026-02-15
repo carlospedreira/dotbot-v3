@@ -7,7 +7,7 @@ Operator helper script for the steering channel.
 Send whispers to running DOTBOT sessions and monitor their status.
 
 .EXAMPLE
-.\steering.ps1 whisper -SessionId "2026-02-05T06-35-10Z" -Message "Focus on tests" -Priority normal
+.\steering.ps1 whisper -SessionId "proc-a1b2c3" -Message "Focus on tests" -Priority normal
 
 .EXAMPLE
 .\steering.ps1 status
@@ -16,7 +16,7 @@ Send whispers to running DOTBOT sessions and monitor their status.
 .\steering.ps1 watch
 
 .EXAMPLE
-.\steering.ps1 abort -SessionId "2026-02-05T06-35-10Z"
+.\steering.ps1 abort -SessionId "proc-a1b2c3"
 #>
 
 param(
@@ -50,9 +50,24 @@ if (Test-Path $themePath) {
 
 $controlDir = Join-Path $PSScriptRoot "..\..\..\.control"
 $controlDir = [System.IO.Path]::GetFullPath($controlDir)
-$whisperFile = Join-Path $controlDir "whisper.jsonl"
+$processesDir = Join-Path $controlDir "processes"
 $statusFile = Join-Path $controlDir "steering-status.json"
-$runningSignal = Join-Path $controlDir "running.signal"
+
+function Get-RunningProcesses {
+    $procs = @()
+    if (Test-Path $processesDir) {
+        $procFiles = Get-ChildItem -Path $processesDir -Filter "*.json" -File -ErrorAction SilentlyContinue
+        foreach ($pf in $procFiles) {
+            try {
+                $proc = Get-Content $pf.FullName -Raw | ConvertFrom-Json
+                if ($proc.status -eq 'running') {
+                    $procs += $proc
+                }
+            } catch {}
+        }
+    }
+    return $procs
+}
 
 function Send-Whisper {
     param(
@@ -64,12 +79,12 @@ function Send-Whisper {
         [string]$Priority = 'normal'
     )
 
-    if (-not (Test-Path $controlDir)) {
-        New-Item -ItemType Directory -Path $controlDir -Force | Out-Null
+    if (-not (Test-Path $processesDir)) {
+        New-Item -ItemType Directory -Path $processesDir -Force | Out-Null
     }
 
+    $whisperFile = Join-Path $processesDir "$SessionId.whisper.jsonl"
     $whisper = @{
-        instance_id = $SessionId
         instruction = $Message
         priority = $Priority
         timestamp = (Get-Date).ToUniversalTime().ToString("o")
@@ -77,14 +92,14 @@ function Send-Whisper {
 
     Add-Content -Path $whisperFile -Value $whisper -Encoding utf8NoBOM
 
-    Write-Host "$($t.Success)✓$($t.Reset) Whisper sent to $($t.Primary)$SessionId$($t.Reset)"
+    Write-Host "$($t.Success)$($t.Reset) Whisper sent to $($t.Primary)$SessionId$($t.Reset)"
     Write-Host "  $($t.Muted)Priority:$($t.Reset) $Priority"
     Write-Host "  $($t.Muted)Message:$($t.Reset) $Message"
 }
 
 function Get-SteeringStatus {
     if (-not (Test-Path $statusFile)) {
-        Write-Host "$($t.Warning)⚠$($t.Reset) No steering status file found"
+        Write-Host "$($t.Warning)$($t.Reset) No steering status file found"
         Write-Host "  $($t.Muted)Either no session is running or it hasn't posted status yet.$($t.Reset)"
         return
     }
@@ -98,18 +113,17 @@ function Get-SteeringStatus {
                   else { "$([int]$age.TotalHours)h ago" }
 
         Write-Host ""
-        Write-Host "$($t.Primary)╭─ Steering Status ─────────────────────╮$($t.Reset)"
-        Write-Host "$($t.Primary)│$($t.Reset) $($t.Muted)Session:$($t.Reset)     $($status.session_id)"
-        Write-Host "$($t.Primary)│$($t.Reset) $($t.Muted)Status:$($t.Reset)      $($status.status)"
+        Write-Host "$($t.Primary)--- Steering Status ---$($t.Reset)"
+        Write-Host "$($t.Primary)|$($t.Reset) $($t.Muted)Session:$($t.Reset)     $($status.session_id)"
+        Write-Host "$($t.Primary)|$($t.Reset) $($t.Muted)Status:$($t.Reset)      $($status.status)"
         if ($status.next_action) {
-            Write-Host "$($t.Primary)│$($t.Reset) $($t.Muted)Next:$($t.Reset)        $($status.next_action)"
+            Write-Host "$($t.Primary)|$($t.Reset) $($t.Muted)Next:$($t.Reset)        $($status.next_action)"
         }
-        Write-Host "$($t.Primary)│$($t.Reset) $($t.Muted)Updated:$($t.Reset)     $ageStr"
-        Write-Host "$($t.Primary)│$($t.Reset) $($t.Muted)Whisper Idx:$($t.Reset) $($status.last_whisper_index)"
-        Write-Host "$($t.Primary)╰────────────────────────────────────────╯$($t.Reset)"
+        Write-Host "$($t.Primary)|$($t.Reset) $($t.Muted)Updated:$($t.Reset)     $ageStr"
+        Write-Host "$($t.Primary)|$($t.Reset) $($t.Muted)Whisper Idx:$($t.Reset) $($status.last_whisper_index)"
         Write-Host ""
     } catch {
-        Write-Host "$($t.Error)✗$($t.Reset) Failed to read status: $_"
+        Write-Host "$($t.Error)x$($t.Reset) Failed to read status: $_"
     }
 }
 
@@ -134,20 +148,21 @@ function Watch-SteeringStatus {
 
 function Get-RunningSessions {
     Write-Host ""
-    Write-Host "$($t.Primary)Running Sessions$($t.Reset)"
-    Write-Host "$($t.Muted)────────────────────────────────────────$($t.Reset)"
+    Write-Host "$($t.Primary)Running Processes$($t.Reset)"
+    Write-Host "$($t.Muted)----------------------------------------$($t.Reset)"
 
-    if (Test-Path $runningSignal) {
-        try {
-            $signal = Get-Content $runningSignal -Raw | ConvertFrom-Json
-            Write-Host "$($t.Success)●$($t.Reset) $($signal.session_id)"
-            Write-Host "  $($t.Muted)Type:$($t.Reset) $($signal.session_type)"
-            Write-Host "  $($t.Muted)Started:$($t.Reset) $($signal.started_at)"
-        } catch {
-            Write-Host "$($t.Warning)⚠$($t.Reset) Could not parse running.signal"
+    $procs = Get-RunningProcesses
+    if ($procs.Count -gt 0) {
+        foreach ($proc in $procs) {
+            Write-Host "$($t.Success)o$($t.Reset) $($proc.id) [$($proc.type)]"
+            Write-Host "  $($t.Muted)Model:$($t.Reset) $($proc.model)"
+            Write-Host "  $($t.Muted)Started:$($t.Reset) $($proc.started_at)"
+            if ($proc.heartbeat_status) {
+                Write-Host "  $($t.Muted)Status:$($t.Reset) $($proc.heartbeat_status)"
+            }
         }
     } else {
-        Write-Host "$($t.Muted)No running sessions detected$($t.Reset)"
+        Write-Host "$($t.Muted)No running processes detected$($t.Reset)"
     }
     Write-Host ""
 }
@@ -160,63 +175,74 @@ function Send-Abort {
 
     Send-Whisper -SessionId $SessionId -Message "ABORT: Commit any work in progress and exit gracefully." -Priority "abort"
     Write-Host ""
-    Write-Host "$($t.Warning)⚠$($t.Reset) Abort signal sent. Session should commit WIP and exit."
+    Write-Host "$($t.Warning)!$($t.Reset) Abort signal sent. Session should commit WIP and exit."
 }
 
 function Get-WhisperHistory {
     Write-Host ""
     Write-Host "$($t.Primary)Whisper History$($t.Reset)"
-    Write-Host "$($t.Muted)────────────────────────────────────────$($t.Reset)"
+    Write-Host "$($t.Muted)----------------------------------------$($t.Reset)"
 
-    if (-not (Test-Path $whisperFile)) {
+    if (-not (Test-Path $processesDir)) {
         Write-Host "$($t.Muted)No whispers recorded yet.$($t.Reset)"
         return
     }
 
-    $lines = Get-Content $whisperFile -Encoding utf8
-    $index = 0
-    foreach ($line in $lines) {
-        if ($line.Trim()) {
-            $index++
-            try {
-                $whisper = $line | ConvertFrom-Json
-                $ts = [DateTime]::Parse($whisper.timestamp).ToLocalTime().ToString("HH:mm:ss")
-                $priorityColor = switch ($whisper.priority) {
-                    'urgent' { $t.Warning }
-                    'abort' { $t.Error }
-                    default { $t.Muted }
+    $whisperFiles = Get-ChildItem -Path $processesDir -Filter "*.whisper.jsonl" -File -ErrorAction SilentlyContinue
+    if ($whisperFiles.Count -eq 0) {
+        Write-Host "$($t.Muted)No whispers recorded yet.$($t.Reset)"
+        return
+    }
+
+    foreach ($wf in $whisperFiles) {
+        $procId = $wf.BaseName -replace '\.whisper$', ''
+        Write-Host "$($t.Primary)Process: $procId$($t.Reset)"
+        $lines = Get-Content $wf.FullName -Encoding utf8
+        $index = 0
+        foreach ($line in $lines) {
+            if ($line.Trim()) {
+                $index++
+                try {
+                    $whisper = $line | ConvertFrom-Json
+                    $ts = [DateTime]::Parse($whisper.timestamp).ToLocalTime().ToString("HH:mm:ss")
+                    $priorityColor = switch ($whisper.priority) {
+                        'urgent' { $t.Warning }
+                        'abort' { $t.Error }
+                        default { $t.Muted }
+                    }
+                    Write-Host "$($t.Muted)[$index]$($t.Reset) $ts $priorityColor[$($whisper.priority)]$($t.Reset)"
+                    Write-Host "     $($whisper.instruction)"
+                } catch {
+                    Write-Host "$($t.Muted)[$index]$($t.Reset) $($t.Error)(malformed)$($t.Reset)"
                 }
-                Write-Host "$($t.Muted)[$index]$($t.Reset) $ts $priorityColor[$($whisper.priority)]$($t.Reset) → $($whisper.instance_id)"
-                Write-Host "     $($whisper.instruction)"
-            } catch {
-                Write-Host "$($t.Muted)[$index]$($t.Reset) $($t.Error)(malformed)$($t.Reset)"
             }
         }
+        Write-Host ""
     }
-    Write-Host ""
 }
 
 # Main command dispatch
 switch ($Command) {
     'whisper' {
         if (-not $SessionId) {
-            # Try to get session from running.signal
-            if (Test-Path $runningSignal) {
-                try {
-                    $signal = Get-Content $runningSignal -Raw | ConvertFrom-Json
-                    $SessionId = $signal.session_id
-                    Write-Host "$($t.Muted)Using session from running.signal: $SessionId$($t.Reset)"
-                } catch {
-                    Write-Host "$($t.Error)✗$($t.Reset) -SessionId required (no running session detected)"
-                    exit 1
+            # Try to find a running process to target
+            $procs = Get-RunningProcesses
+            if ($procs.Count -eq 1) {
+                $SessionId = $procs[0].id
+                Write-Host "$($t.Muted)Using running process: $SessionId$($t.Reset)"
+            } elseif ($procs.Count -gt 1) {
+                Write-Host "$($t.Error)x$($t.Reset) Multiple processes running. Specify -SessionId:"
+                foreach ($p in $procs) {
+                    Write-Host "  $($p.id) [$($p.type)]"
                 }
+                exit 1
             } else {
-                Write-Host "$($t.Error)✗$($t.Reset) -SessionId required (no running session detected)"
+                Write-Host "$($t.Error)x$($t.Reset) -SessionId required (no running processes detected)"
                 exit 1
             }
         }
         if (-not $Message) {
-            Write-Host "$($t.Error)✗$($t.Reset) -Message required"
+            Write-Host "$($t.Error)x$($t.Reset) -Message required"
             exit 1
         }
         Send-Whisper -SessionId $SessionId -Message $Message -Priority $Priority
@@ -232,18 +258,19 @@ switch ($Command) {
     }
     'abort' {
         if (-not $SessionId) {
-            # Try to get session from running.signal
-            if (Test-Path $runningSignal) {
-                try {
-                    $signal = Get-Content $runningSignal -Raw | ConvertFrom-Json
-                    $SessionId = $signal.session_id
-                    Write-Host "$($t.Muted)Using session from running.signal: $SessionId$($t.Reset)"
-                } catch {
-                    Write-Host "$($t.Error)✗$($t.Reset) -SessionId required (no running session detected)"
-                    exit 1
+            # Try to find a running process to target
+            $procs = Get-RunningProcesses
+            if ($procs.Count -eq 1) {
+                $SessionId = $procs[0].id
+                Write-Host "$($t.Muted)Using running process: $SessionId$($t.Reset)"
+            } elseif ($procs.Count -gt 1) {
+                Write-Host "$($t.Error)x$($t.Reset) Multiple processes running. Specify -SessionId:"
+                foreach ($p in $procs) {
+                    Write-Host "  $($p.id) [$($p.type)]"
                 }
+                exit 1
             } else {
-                Write-Host "$($t.Error)✗$($t.Reset) -SessionId required (no running session detected)"
+                Write-Host "$($t.Error)x$($t.Reset) -SessionId required (no running processes detected)"
                 exit 1
             }
         }

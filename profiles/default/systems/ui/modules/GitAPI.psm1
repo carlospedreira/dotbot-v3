@@ -109,7 +109,7 @@ function Start-GitCommitAndPush {
     $botRoot = $script:Config.BotRoot
 
     $launcherPath = Join-Path $botRoot "systems\runtime\launch-process.ps1"
-    $launchArgs = @("-NoExit", "-File", "`"$launcherPath`"", "-Type", "commit", "-Model", "Sonnet", "-Description", "`"Commit and push changes`"")
+    $launchArgs = @("-File", "`"$launcherPath`"", "-Type", "commit", "-Model", "Sonnet", "-Description", "`"Commit and push changes`"")
     $proc = Start-Process pwsh -ArgumentList $launchArgs -WindowStyle Normal -PassThru
 
     return @{

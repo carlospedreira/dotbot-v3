@@ -69,38 +69,24 @@ function Set-ControlSignal {
             $pauseSignal = Join-Path $controlDir "pause.signal"
             if (Test-Path $pauseSignal) { Remove-Item $pauseSignal -Force }
 
-            # Remove all stop signals to cancel a pending stop
-            $stopSignal = Join-Path $controlDir "stop.signal"
-            $stopAnalysisSignal = Join-Path $controlDir "stop-analysis.signal"
-            $stopExecutionSignal = Join-Path $controlDir "stop-execution.signal"
-            if (Test-Path $stopSignal) { Remove-Item $stopSignal -Force }
-            if (Test-Path $stopAnalysisSignal) { Remove-Item $stopAnalysisSignal -Force }
-            if (Test-Path $stopExecutionSignal) { Remove-Item $stopExecutionSignal -Force }
+            # Remove per-process .stop files to cancel pending stops
+            if (Test-Path $processesDir) {
+                Get-ChildItem -Path $processesDir -Filter "*.stop" -File -ErrorAction SilentlyContinue |
+                    ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
+            }
         }
         "stop" {
             # Remove pause signal if exists
             $pauseSignal = Join-Path $controlDir "pause.signal"
             if (Test-Path $pauseSignal) { Remove-Item $pauseSignal -Force }
 
-            # Create loop-specific stop signals for legacy loops
-            $signalContent = @{
-                action = $Action
-                timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-            } | ConvertTo-Json
-
-            $stopAnalysisSignal = Join-Path $controlDir "stop-analysis.signal"
-            $signalContent | Set-Content -Path $stopAnalysisSignal -Force
-
-            $stopExecutionSignal = Join-Path $controlDir "stop-execution.signal"
-            $signalContent | Set-Content -Path $stopExecutionSignal -Force
-
-            # Also create stop files for all running processes in registry
+            # Create stop files for all running/starting processes in registry
             if (Test-Path $processesDir) {
                 $procFiles = Get-ChildItem -Path $processesDir -Filter "*.json" -File -ErrorAction SilentlyContinue
                 foreach ($pf in $procFiles) {
                     try {
                         $proc = Get-Content $pf.FullName -Raw | ConvertFrom-Json
-                        if ($proc.status -eq 'running') {
+                        if ($proc.status -in @('running', 'starting')) {
                             $stopFile = Join-Path $processesDir "$($proc.id).stop"
                             "stop" | Set-Content -Path $stopFile -Force
                         }
@@ -136,7 +122,7 @@ function Set-ControlSignal {
 
             # Launch analysis process if mode is "analysis" or "both"
             if ($Mode -in @("analysis", "both")) {
-                $args = @("-NoExit", "-File", "`"$launcherPath`"", "-Type", "analysis", "-Continue", "-Model", $analysisModel)
+                $args = @("-File", "`"$launcherPath`"", "-Type", "analysis", "-Continue", "-Model", $analysisModel)
                 if ($showDebug) { $args += "-ShowDebug" }
                 if ($showVerbose) { $args += "-ShowVerbose" }
                 Start-Process pwsh -ArgumentList $args -WindowStyle Normal
@@ -146,7 +132,7 @@ function Set-ControlSignal {
 
             # Launch execution process if mode is "execution" or "both"
             if ($Mode -in @("execution", "both")) {
-                $args = @("-NoExit", "-File", "`"$launcherPath`"", "-Type", "execution", "-Continue", "-Model", $executionModel)
+                $args = @("-File", "`"$launcherPath`"", "-Type", "execution", "-Continue", "-Model", $executionModel)
                 if ($showDebug) { $args += "-ShowDebug" }
                 if ($showVerbose) { $args += "-ShowVerbose" }
                 Start-Process pwsh -ArgumentList $args -WindowStyle Normal
@@ -167,12 +153,28 @@ function Set-ControlSignal {
             }
         }
         "reset" {
-            # Clear all control signals
-            $signalFiles = @("running.signal", "stop.signal", "stop-analysis.signal", "stop-execution.signal", "pause.signal", "resume.signal", "analysing.signal")
-            foreach ($signal in $signalFiles) {
-                $signalPath = Join-Path $controlDir $signal
-                if (Test-Path $signalPath) { Remove-Item $signalPath -Force }
+            # Clean up per-process .stop files
+            if (Test-Path $processesDir) {
+                Get-ChildItem -Path $processesDir -Filter "*.stop" -File -ErrorAction SilentlyContinue |
+                    ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
+
+                # Set all running/starting process registry entries to stopped
+                $procFiles = Get-ChildItem -Path $processesDir -Filter "*.json" -File -ErrorAction SilentlyContinue
+                foreach ($pf in $procFiles) {
+                    try {
+                        $proc = Get-Content $pf.FullName -Raw | ConvertFrom-Json
+                        if ($proc.status -in @('running', 'starting')) {
+                            $proc.status = 'stopped'
+                            $proc | Add-Member -NotePropertyName 'failed_at' -NotePropertyValue ((Get-Date).ToUniversalTime().ToString("o")) -Force
+                            $proc | ConvertTo-Json -Depth 10 | Set-Content -Path $pf.FullName -Force -Encoding utf8NoBOM
+                        }
+                    } catch {}
+                }
             }
+
+            # Clear remaining control signals (pause only — legacy signals removed)
+            $pauseSignal = Join-Path $controlDir "pause.signal"
+            if (Test-Path $pauseSignal) { Remove-Item $pauseSignal -Force }
 
             # Clear session lock
             $lockFile = Join-Path $botRoot "workspace\sessions\runs\session.lock"
@@ -204,39 +206,46 @@ function Send-Whisper {
         [string]$Message,
         [string]$Priority = "normal"
     )
-    $controlDir = $script:Config.ControlDir
+    $processesDir = $script:Config.ProcessesDir
 
-    # Get signal file for this instance type
-    $signalFile = if ($InstanceType -eq "analysis") {
-        Join-Path $controlDir "analysing.signal"
-    } else {
-        Join-Path $controlDir "running.signal"
+    # Find running processes of the given type from the process registry
+    $targetProcs = @()
+    if (Test-Path $processesDir) {
+        $procFiles = Get-ChildItem -Path $processesDir -Filter "*.json" -File -ErrorAction SilentlyContinue
+        foreach ($pf in $procFiles) {
+            try {
+                $proc = Get-Content $pf.FullName -Raw | ConvertFrom-Json
+                if ($proc.status -eq 'running' -and $proc.type -eq $InstanceType) {
+                    $targetProcs += $proc
+                }
+            } catch {}
+        }
     }
 
-    if (-not (Test-Path $signalFile)) {
+    if ($targetProcs.Count -eq 0) {
         return @{ success = $false; error = "No $InstanceType instance running" }
     }
 
-    $signal = Get-Content $signalFile -Raw | ConvertFrom-Json
+    # Send whisper to each matching process
+    $sentTo = @()
+    foreach ($proc in $targetProcs) {
+        $whisperFile = Join-Path $processesDir "$($proc.id).whisper.jsonl"
+        $whisper = @{
+            instruction = $Message
+            priority = $Priority
+            timestamp = (Get-Date).ToUniversalTime().ToString("o")
+        } | ConvertTo-Json -Compress
 
-    # Append whisper with instance targeting
-    $whisperFile = Join-Path $controlDir "whisper.jsonl"
-    $whisper = @{
-        instance_id = $signal.session_id
-        instance_type = $InstanceType
-        instruction = $Message
-        priority = $Priority
-        timestamp = (Get-Date).ToUniversalTime().ToString("o")
-    } | ConvertTo-Json -Compress
+        Add-Content -Path $whisperFile -Value $whisper -Encoding utf8NoBOM
+        $sentTo += $proc.id
+    }
 
-    Add-Content -Path $whisperFile -Value $whisper -Encoding utf8NoBOM
-    Write-Status "Whisper sent to $InstanceType instance" -Type Success
+    Write-Status "Whisper sent to $($sentTo.Count) $InstanceType process(es)" -Type Success
 
     return @{
         success = $true
-        session_id = $signal.session_id
         instance_type = $InstanceType
-        instance_id = $signal.instance_id
+        sent_to = $sentTo
     }
 }
 

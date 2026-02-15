@@ -332,7 +332,7 @@ function Start-RoadmapPlanning {
 
     # Launch via process manager
     $launcherPath = Join-Path $botRoot "systems\runtime\launch-process.ps1"
-    $launchArgs = @("-NoExit", "-File", "`"$launcherPath`"", "-Type", "planning", "-Model", "Sonnet", "-Description", "`"Plan project roadmap`"")
+    $launchArgs = @("-File", "`"$launcherPath`"", "-Type", "planning", "-Model", "Sonnet", "-Description", "`"Plan project roadmap`"")
     Start-Process pwsh -ArgumentList $launchArgs -WindowStyle Normal | Out-Null
     Write-Status "Roadmap planning launched as tracked process" -Type Info
 

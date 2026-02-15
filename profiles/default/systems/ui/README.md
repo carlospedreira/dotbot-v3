@@ -5,9 +5,9 @@ A minimal, dependency-free PowerShell web server for monitoring and controlling 
 ## Features
 
 - **CP/M-inspired terminal aesthetic** with Axiome Design amber accents
-- **Real-time monitoring** via auto-polling (5-second intervals)
-- **Task queue visualization** (TODO/In-Progress/Done)
-- **Control signals** (Start/Stop/Pause/Resume) via file-based communication
+- **Real-time monitoring** via auto-polling (3-5 second intervals)
+- **Task queue visualization** (TODO/Analysing/Analysed/In-Progress/Done)
+- **Process management** - launch, stop, kill, and whisper to tracked processes
 - **Localhost-only** - no authentication needed
 - **Zero dependencies** - pure PowerShell + vanilla HTML/CSS/JS
 
@@ -15,131 +15,104 @@ A minimal, dependency-free PowerShell web server for monitoring and controlling 
 
 ```powershell
 # Start the web server
-cd .bot\ui
-.\server.ps1
+cd .bot
+.\go.ps1
 
-# Open in browser
-# http://localhost:8686
+# Or start directly
+cd .bot\systems\ui
+pwsh .\server.ps1
 ```
 
-The server will run on port 8686 by default.
+The server runs on port 8686 by default.
 
 ## Architecture
 
-### Hybrid Approach
-- **Read-only monitoring**: Web UI reads `.bot` folder state directly from JSON files
-- **Control signals**: UI sends commands via `.bot\.control\*.signal` files
-- **Auto-polling**: Browser polls `/api/state` every 5 seconds for updates
+### Process Registry
+All processes are tracked via JSON files in `.bot/.control/processes/`:
+- `proc-{id}.json` - Process state (status, PID, heartbeat, etc.)
+- `proc-{id}.activity.jsonl` - Activity log stream
+- `proc-{id}.whisper.jsonl` - Operator whisper messages
+- `proc-{id}.stop` - Stop signal file (presence triggers graceful stop)
 
 ### File Structure
 
 ```
-.bot\
-├── ui\
-│   ├── server.ps1          # PowerShell HTTP server
-│   ├── static\
-│   │   ├── index.html      # Main UI
-│   │   ├── style.css       # Terminal-inspired styling
-│   │   └── app.js          # Polling & control logic
-│   └── README.md
-├── .control\               # Control signal directory (auto-created)
-│   ├── start.signal
-│   ├── stop.signal
-│   ├── pause.signal
-│   └── resume.signal
-├── tasks\
-│   ├── todo\
-│   ├── in-progress\
-│   └── done\
-└── sessions\
+.bot/
+├── systems/
+│   ├── ui/
+│   │   ├── server.ps1           # PowerShell HTTP server
+│   │   ├── modules/             # Server-side API modules
+│   │   │   ├── ProcessAPI.psm1  # Process CRUD & lifecycle
+│   │   │   ├── ControlAPI.psm1  # Start/stop/reset actions
+│   │   │   ├── StateBuilder.psm1# Overview tab state
+│   │   │   └── ...
+│   │   └── static/              # Frontend (HTML/CSS/JS)
+│   └── runtime/
+│       └── launch-process.ps1   # Unified process launcher
+├── .control/
+│   ├── processes/               # Process registry
+│   │   ├── proc-a1b2c3.json
+│   │   ├── proc-a1b2c3.activity.jsonl
+│   │   └── proc-a1b2c3.whisper.jsonl
+│   └── activity.jsonl           # Global activity log
+└── workspace/
+    └── tasks/
+        ├── todo/
+        ├── analysing/
+        ├── analysed/
+        ├── in-progress/
+        └── done/
 ```
 
 ## API Endpoints
 
 ### `GET /api/state`
-Returns current .bot state as JSON:
+Returns current .bot state (Overview tab).
+
+### `GET /api/processes`
+Returns all tracked processes with status.
+
+### `POST /api/process/launch`
+Launch a new process:
 ```json
 {
-  "timestamp": "2026-01-14T18:00:00Z",
-  "tasks": {
-    "todo": 10,
-    "in_progress": 1,
-    "done": 42,
-    "current": { /* current task details */ },
-    "upcoming": [ /* next 10 tasks */ ],
-    "recent_completed": [ /* last 10 completed */ ]
-  },
-  "session": {
-    "session_id": "abc123...",
-    "status": "running",
-    "started_at": "2026-01-14T17:00:00Z",
-    "tasks_completed": 5,
-    "tasks_skipped": 0,
-    "consecutive_failures": 0
-  },
-  "control": {
-    "pause": false,
-    "stop": false,
-    "resume": false
-  }
+  "type": "analysis",
+  "continue": true,
+  "model": "Opus"
+}
+```
+
+### `POST /api/process/{id}/stop`
+Send graceful stop signal to a process.
+
+### `POST /api/process/{id}/kill`
+Kill a process immediately (terminates PID).
+
+### `POST /api/process/{id}/whisper`
+Send a whisper message to a running process:
+```json
+{
+  "message": "Focus on error handling",
+  "priority": "normal"
 }
 ```
 
 ### `POST /api/control`
-Send control signal:
+Send control signal (start/stop/pause/resume/reset):
 ```json
 {
-  "action": "pause"  // or "start", "stop", "resume"
+  "action": "stop",
+  "mode": "both"
 }
 ```
 
-Response:
-```json
-{
-  "success": true,
-  "action": "pause",
-  "message": "Signal sent: pause"
-}
-```
+## Process Lifecycle
 
-## Control Flow
-
-1. **Web UI** → Sends control action to `/api/control`
-2. **Server** → Creates `.bot\.control\{action}.signal` file
-3. **Autonomous loop** → Checks for signal files periodically (your implementation)
-4. **Autonomous loop** → Acts on signal and removes file when processed
-
-### Implementing Signal Handling
-
-Add signal checking to your `run-autonomous-loop.ps1`:
-
-```powershell
-# At the start of your main loop
-$controlDir = Join-Path $PSScriptRoot "..\.control"
-
-# Check for control signals
-$stopSignal = Join-Path $controlDir "stop.signal"
-$pauseSignal = Join-Path $controlDir "pause.signal"
-
-if (Test-Path $stopSignal) {
-    Write-Host "Stop signal received" -ForegroundColor Yellow
-    Remove-Item $stopSignal -Force
-    break
-}
-
-if (Test-Path $pauseSignal) {
-    Write-Host "Pause signal received - waiting..." -ForegroundColor Yellow
-    Remove-Item $pauseSignal -Force
-    
-    # Wait for resume signal
-    $resumeSignal = Join-Path $controlDir "resume.signal"
-    while (-not (Test-Path $resumeSignal)) {
-        Start-Sleep -Seconds 2
-    }
-    Remove-Item $resumeSignal -Force
-    Write-Host "Resume signal received" -ForegroundColor Green
-}
-```
+1. **Launch** - `launch-process.ps1` creates a `proc-{id}.json` with `status: starting`
+2. **Running** - Status transitions to `running`, heartbeats update the JSON
+3. **Stop** - A `.stop` file is created; the process checks for it between tasks
+4. **Completion** - Status becomes `completed`, window auto-closes after 5s countdown
+5. **Crash detection** - Dead PIDs are detected within one poll cycle (~3s) and marked as `stopped` with an error
 
 ## Design System
 
@@ -162,31 +135,6 @@ Typography: Consolas/Courier New monospace
 .\server.ps1 -Port 3000
 ```
 
-### Adjust Polling Interval
-
-Edit `static\app.js`:
-```javascript
-const POLL_INTERVAL = 3000; // 3 seconds instead of 5
-```
-
-### Add New Sections
-
-The UI is designed to evolve into a multi-tab view. To add sections:
-
-1. Add HTML section in `index.html`
-2. Style in `style.css`
-3. Add update function in `app.js` → `updateUI()`
-
-## Future Evolution
-
-Planned enhancements (path to multi-view dashboard):
-
-- **Tab navigation** (Overview | Tasks | Session | History)
-- **Session history viewer** (past sessions from `.bot\sessions\`)
-- **Real-time logs** (stream from autonomous loop)
-- **Task filtering** (by category, priority)
-- **Statistics/charts** (completion rates, time per task)
-
 ## Troubleshooting
 
 ### Server won't start
@@ -194,12 +142,8 @@ Planned enhancements (path to multi-view dashboard):
 - Try a different port: `.\server.ps1 -Port 8080`
 
 ### UI shows "No active session"
-- Ensure `run-autonomous-loop.ps1` is running
-- Check if `.bot\.dotbot-state.json` exists
-
-### Control buttons don't work
-- Verify `.bot\.control\` directory exists (auto-created by server)
-- Implement signal handling in your autonomous loop
+- Launch a process from the PROCESSES tab
+- Or use the Start button on the Overview tab
 
 ### Browser shows stale data
 - Check browser console for fetch errors

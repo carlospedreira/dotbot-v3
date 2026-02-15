@@ -312,66 +312,22 @@ function Get-BotState {
         }
     }
 
-    # Read instance info from signal files (legacy) AND process registry (new)
+    # Read instance info from process registry only
     $instances = @{
         analysis = $null
         execution = $null
     }
+    $isAnalysisRunning = $false
+    $isActuallyRunning = $false
 
-    # Check legacy signal files for backward compat
-    $analysisSignal = Join-Path $controlDir "analysing.signal"
-    $isAnalysisRunning = Test-Path $analysisSignal
-    if ($isAnalysisRunning) {
-        try {
-            $sig = Get-Content $analysisSignal -Raw | ConvertFrom-Json
-            $isAlive = $true
-            if ($sig.pid) {
-                try { $isAlive = $null -ne (Get-Process -Id $sig.pid -ErrorAction SilentlyContinue) }
-                catch { $isAlive = $false }
-            }
-            $instances.analysis = @{
-                instance_id = $sig.instance_id
-                pid = $sig.pid
-                started_at = $sig.started_at
-                last_heartbeat = $sig.last_heartbeat
-                status = $sig.status
-                next_action = $sig.next_action
-                alive = $isAlive
-            }
-        } catch {}
-    }
-
-    $runningSignal = Join-Path $controlDir "running.signal"
-    $isActuallyRunning = Test-Path $runningSignal
-    if ($isActuallyRunning) {
-        try {
-            $sig = Get-Content $runningSignal -Raw | ConvertFrom-Json
-            $isAlive = $true
-            if ($sig.pid) {
-                try { $isAlive = $null -ne (Get-Process -Id $sig.pid -ErrorAction SilentlyContinue) }
-                catch { $isAlive = $false }
-            }
-            $instances.execution = @{
-                instance_id = $sig.instance_id
-                pid = $sig.pid
-                started_at = $sig.started_at
-                last_heartbeat = $sig.last_heartbeat
-                status = $sig.status
-                next_action = $sig.next_action
-                alive = $isAlive
-            }
-        } catch {}
-    }
-
-    # Also check process registry for running processes
+    # Check process registry for running processes
     $runningProcesses = @()
     if (Test-Path $processesDir) {
         $procFiles = Get-ChildItem -Path $processesDir -Filter "*.json" -File -ErrorAction SilentlyContinue
         foreach ($pf in $procFiles) {
             try {
                 $proc = Get-Content $pf.FullName -Raw | ConvertFrom-Json
-                if ($proc.status -eq 'running' -or $proc.status -eq 'starting') {
-                    $runningProcesses += $proc
+                if ($proc.status -in @('running', 'starting')) {
 
                     $isAlive = $true
                     if ($proc.pid) {
@@ -379,7 +335,26 @@ function Get-BotState {
                         catch { $isAlive = $true }
                     }
 
-                    if ($proc.type -eq 'analysis' -and (-not $instances.analysis -or $instances.analysis.alive -ne $true)) {
+                    # Mark dead PIDs as stopped and persist the change
+                    if (-not $isAlive) {
+                        $proc.status = 'stopped'
+                        $deadNow = [DateTime]::UtcNow.ToString("o")
+                        if (-not $proc.failed_at) {
+                            $proc | Add-Member -NotePropertyName 'failed_at' -NotePropertyValue $deadNow -Force
+                        }
+                        $proc | Add-Member -NotePropertyName 'error' -NotePropertyValue "Process terminated unexpectedly" -Force
+                        try {
+                            $proc | ConvertTo-Json -Depth 10 | Set-Content -Path $pf.FullName -Force -Encoding utf8NoBOM
+                            $actFile = Join-Path $processesDir "$($proc.id).activity.jsonl"
+                            $event = @{ timestamp = $deadNow; type = "text"; message = "Process terminated unexpectedly (PID $($proc.pid) no longer alive)" } | ConvertTo-Json -Compress
+                            Add-Content -Path $actFile -Value $event -ErrorAction SilentlyContinue
+                        } catch {}
+                        continue  # Skip adding to instances — it's dead
+                    }
+
+                    $runningProcesses += $proc
+
+                    if ($proc.type -eq 'analysis' -and -not $instances.analysis) {
                         $instances.analysis = @{
                             instance_id = $proc.id
                             pid = $proc.pid
@@ -391,7 +366,7 @@ function Get-BotState {
                         }
                         $isAnalysisRunning = $true
                     }
-                    if ($proc.type -eq 'execution' -and (-not $instances.execution -or $instances.execution.alive -ne $true)) {
+                    if ($proc.type -eq 'execution' -and -not $instances.execution) {
                         $instances.execution = @{
                             instance_id = $proc.id
                             pid = $proc.pid
@@ -411,16 +386,18 @@ function Get-BotState {
     # Track combined loop state
     $analysisAlive = ($null -ne $instances.analysis) -and ($instances.analysis.alive -eq $true)
     $executionAlive = ($null -ne $instances.execution) -and ($instances.execution.alive -eq $true)
-    $anyLoopRunning = $isAnalysisRunning -or $isActuallyRunning -or ($runningProcesses.Count -gt 0)
-    $anyLoopAlive = $analysisAlive -or $executionAlive -or ($runningProcesses.Count -gt 0)
+    $anyLoopRunning = $runningProcesses.Count -gt 0
+    $anyLoopAlive = $analysisAlive -or $executionAlive
 
-    # Check control signals
+    # Check control signals — derive stop from per-process .stop files
+    $anyStopPending = $false
+    if (Test-Path $processesDir) {
+        $anyStopPending = @(Get-ChildItem -Path $processesDir -Filter "*.stop" -File -ErrorAction SilentlyContinue).Count -gt 0
+    }
     $controlSignals = @{
         pause = Test-Path (Join-Path $controlDir "pause.signal")
-        stop = (Test-Path (Join-Path $controlDir "stop.signal")) -or
-               (Test-Path (Join-Path $controlDir "stop-analysis.signal")) -or
-               (Test-Path (Join-Path $controlDir "stop-execution.signal"))
-        resume = Test-Path (Join-Path $controlDir "resume.signal")
+        stop = $anyStopPending
+        resume = $false
         running = $isActuallyRunning
     }
 

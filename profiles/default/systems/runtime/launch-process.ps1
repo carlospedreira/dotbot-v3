@@ -185,6 +185,18 @@ function Test-ProcessStopSignal {
     Test-Path $stopFile
 }
 
+# --- Crash Trap ---
+# Catch unexpected termination and persist process state before exit
+trap {
+    if ($procId -and $processData -and $processData.status -in @('running', 'starting')) {
+        $processData.status = 'stopped'
+        $processData.failed_at = (Get-Date).ToUniversalTime().ToString("o")
+        $processData.error = "Unexpected termination: $($_.Exception.Message)"
+        try { Write-ProcessFile -Id $procId -Data $processData } catch {}
+        try { Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Process terminated unexpectedly: $($_.Exception.Message)" } catch {}
+    }
+}
+
 # --- Initialize Process ---
 $procId = if ($ProcessId) { $ProcessId } else { New-ProcessId }
 $sessionId = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH-mm-ssZ")
@@ -270,6 +282,64 @@ if ($Type -in @('analysis', 'execution')) {
     . "$PSScriptRoot\modules\task-reset.ps1"
     $tasksBaseDir = Join-Path $botRoot "workspace\tasks"
 
+    # Get-NextTodoTask: checks analysing/ for resumed tasks (answered questions), then todo/ for new tasks
+    function Get-NextTodoTask {
+        param([switch]$Verbose)
+
+        # First priority: check for analysing tasks that came back from needs-input
+        $index = Get-TaskIndex
+        $resumedTasks = @($index.Analysing.Values) | Sort-Object priority
+        foreach ($candidate in $resumedTasks) {
+            if ($candidate.file_path -and (Test-Path $candidate.file_path)) {
+                try {
+                    $content = Get-Content -Path $candidate.file_path -Raw | ConvertFrom-Json
+                    if ($content.questions_resolved -and $content.questions_resolved.Count -gt 0 -and -not $content.pending_question) {
+                        Write-Status "Found resumed task (question answered): $($candidate.name)" -Type Info
+                        $taskObj = @{
+                            id = $content.id
+                            name = $content.name
+                            status = 'analysing'
+                            priority = [int]$content.priority
+                            effort = $content.effort
+                            category = $content.category
+                        }
+                        if ($Verbose.IsPresent) {
+                            $taskObj.description = $content.description
+                            $taskObj.dependencies = $content.dependencies
+                            $taskObj.acceptance_criteria = $content.acceptance_criteria
+                            $taskObj.steps = $content.steps
+                            $taskObj.applicable_agents = $content.applicable_agents
+                            $taskObj.applicable_standards = $content.applicable_standards
+                            $taskObj.file_path = $candidate.file_path
+                            $taskObj.questions_resolved = $content.questions_resolved
+                            $taskObj.claude_session_id = $content.claude_session_id
+                            $taskObj.needs_interview = $content.needs_interview
+                        }
+                        return @{
+                            success = $true
+                            task = $taskObj
+                            message = "Resumed task (question answered): $($content.name)"
+                        }
+                    }
+                } catch {
+                    Write-Warning "Failed to read analysing task: $($candidate.file_path) - $_"
+                }
+            }
+        }
+
+        # Second priority: get next todo task
+        $result = Invoke-TaskGetNext -Arguments @{ prefer_analysed = $false; verbose = $Verbose.IsPresent }
+        if ($result.task -and $result.task.status -eq 'todo') {
+            return $result
+        }
+
+        return @{
+            success = $true
+            task = $null
+            message = "No tasks available for analysis."
+        }
+    }
+
     # Recover orphaned analysing tasks (both types benefit from this)
     Reset-AnalysingTasks -TasksBaseDir $tasksBaseDir -ProcessesDir $processesDir | Out-Null
 
@@ -316,12 +386,8 @@ if ($Type -in @('analysis', 'execution')) {
             Write-Status "Fetching next task..." -Type Process
             if ($Type -eq 'analysis') {
                 Reset-TaskIndex
-                # For analysis: get todo tasks only
-                $taskResult = Invoke-TaskGetNext -Arguments @{ prefer_analysed = $false; verbose = $true }
-                # Only accept todo tasks for analysis
-                if ($taskResult.task -and $taskResult.task.status -ne 'todo') {
-                    $taskResult = @{ success = $true; task = $null; message = "No todo tasks for analysis" }
-                }
+                # For analysis: check resumed tasks (answered questions) first, then todo
+                $taskResult = Get-NextTodoTask -Verbose
             } else {
                 # For execution: prefer analysed, then todo
                 $taskResult = Invoke-TaskGetNext -Arguments @{ verbose = $true }
@@ -351,8 +417,7 @@ if ($Type -in @('analysis', 'execution')) {
                         if (Test-ProcessStopSignal -Id $procId) { break }
                         Reset-TaskIndex
                         if ($Type -eq 'analysis') {
-                            $taskResult = Invoke-TaskGetNext -Arguments @{ prefer_analysed = $false; verbose = $true }
-                            if ($taskResult.task -and $taskResult.task.status -ne 'todo') { $taskResult = @{ success = $true; task = $null } }
+                            $taskResult = Get-NextTodoTask -Verbose
                         } else {
                             $taskResult = Invoke-TaskGetNext -Arguments @{ verbose = $true }
                         }
@@ -439,7 +504,7 @@ $prompt
 - **Process ID:** $procId
 - **Instance Type:** execution
 
-Use the Process ID when calling `steering_heartbeat` (pass it as `process_id`). Also pass `instance_type: "execution"` for backward compatibility.
+Use the Process ID when calling `steering_heartbeat` (pass it as `process_id`).
 
 ## Completion Goal
 
@@ -467,15 +532,28 @@ Work on this task autonomously. When complete, ensure you call task_mark_done vi
                 $branchForPrompt = if ($branchName) { $branchName } else { "main" }
                 $prompt = $prompt -replace '\{\{BRANCH_NAME\}\}', $branchForPrompt
 
+                # Build resolved questions context for resumed tasks
+                $isResumedTask = $task.status -eq 'analysing'
+                $resolvedQuestionsContext = ""
+                if ($isResumedTask -and $task.questions_resolved) {
+                    $resolvedQuestionsContext = "`n## Previously Resolved Questions`n`n"
+                    $resolvedQuestionsContext += "This task was previously paused for human input. The following questions have been answered:`n`n"
+                    foreach ($q in $task.questions_resolved) {
+                        $resolvedQuestionsContext += "**Q:** $($q.question)`n"
+                        $resolvedQuestionsContext += "**A:** $($q.answer)`n`n"
+                    }
+                    $resolvedQuestionsContext += "Use these answers to guide your analysis. The task is already in ``analysing`` status - do NOT call ``task_mark_analysing`` again.`n"
+                }
+
                 $fullPrompt = @"
 $prompt
-
+$resolvedQuestionsContext
 ## Process Context
 
 - **Process ID:** $procId
 - **Instance Type:** analysis
 
-Use the Process ID when calling `steering_heartbeat` (pass it as `process_id`). Also pass `instance_type: "analysis"` for backward compatibility.
+Use the Process ID when calling `steering_heartbeat` (pass it as `process_id`).
 
 ## Completion Goal
 
@@ -975,5 +1053,10 @@ $env:DOTBOT_CURRENT_PHASE = $null
 Write-Host ""
 Write-Status "Process $procId finished with status: $($processData.status)" -Type Info
 
-# Return process ID on stdout for programmatic consumption
-Write-Output $procId
+# 5-second countdown before window closes
+Write-Host ""
+for ($i = 5; $i -ge 1; $i--) {
+    Write-Host "`r  Window closing in ${i}s..." -NoNewline
+    Start-Sleep -Seconds 1
+}
+Write-Host ""

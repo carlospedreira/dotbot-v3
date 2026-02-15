@@ -124,8 +124,8 @@ function renderProcessList(processes) {
         html += `<div class="process-group-header">${typeLabels[type] || type}</div>`;
 
         for (const proc of groups[type]) {
-            const statusClass = getProcessStatusClass(proc.status);
-            const statusIcon = getProcessStatusIcon(proc.status);
+            const statusClass = getProcessStatusClass(proc.status, proc);
+            const statusIcon = getProcessStatusIcon(proc.status, proc);
             const timeAgo = getTimeAgo(proc.started_at);
             const displayName = proc.task_name || proc.description || proc.id;
             const isExpanded = expandedProcessId === proc.id;
@@ -148,7 +148,8 @@ function renderProcessList(processes) {
             html += `    <span class="process-id">${proc.id}</span>`;
             html += `    <span class="process-name">${escapeHtml(displayName)}</span>`;
             html += `    <span class="process-time">${timeAgo}</span>`;
-            html += `    <span class="process-status-label">${proc.status}${ttlHtml}</span>`;
+            const displayStatus = isProcessCrashed(proc) ? 'crashed' : proc.status;
+            html += `    <span class="process-status-label">${displayStatus}${ttlHtml}</span>`;
 
             if (isRunning) {
                 html += `    <div class="process-actions">`;
@@ -428,7 +429,14 @@ function updateLaunchBarOptions() {
 
 // --- Helpers ---
 
-function getProcessStatusClass(status) {
+function isProcessCrashed(proc) {
+    // A process is "crashed" if it went to stopped without a user-initiated stop,
+    // detected by having error set or failed_at without completed_at
+    return proc.status === 'stopped' && proc.error && !proc.completed_at;
+}
+
+function getProcessStatusClass(status, proc) {
+    if (proc && isProcessCrashed(proc)) return 'status-failed';
     switch (status) {
         case 'running':
         case 'starting': return 'status-running';
@@ -439,7 +447,8 @@ function getProcessStatusClass(status) {
     }
 }
 
-function getProcessStatusIcon(status) {
+function getProcessStatusIcon(status, proc) {
+    if (proc && isProcessCrashed(proc)) return '<span class="led error"></span>';
     switch (status) {
         case 'running':
         case 'starting': return '<span class="led active"></span>';
