@@ -228,6 +228,9 @@ if ($Profile -and $Profile.Count -gt 0) {
             $destPath = Join-Path $BotDir $relativePath
             $destDir = Split-Path $destPath -Parent
             
+            # Skip profile-init.ps1 (runs at init time, not copied to .bot/)
+            if ($relativePath -eq "profile-init.ps1") { return }
+
             # Handle config.json merging for hooks/verify
             if ($relativePath -eq "hooks\verify\config.json") {
                 $baseConfigPath = Join-Path $BotDir "hooks\verify\config.json"
@@ -257,6 +260,13 @@ if ($Profile -and $Profile.Count -gt 0) {
         }
         
         Write-Success "Installed profile: $profileName"
+
+        # Run profile init script if present
+        $profileInitScript = Join-Path $profileDir "profile-init.ps1"
+        if (Test-Path $profileInitScript) {
+            Write-Status "Running $profileName init script"
+            & $profileInitScript
+        }
     }
 }
 
