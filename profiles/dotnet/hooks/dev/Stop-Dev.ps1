@@ -1,5 +1,5 @@
 # Stop-Dev.ps1
-# Stops the Lintilla dev environment
+# Stops the dev environment
 
 param(
     [switch]$Quiet
@@ -9,11 +9,13 @@ param(
 Import-Module "$PSScriptRoot/DevLayout.psm1" -Force -DisableNameChecking
 
 $repoRoot = Invoke-InProjectRoot
+$projectName = Get-ProjectName
+$sessionName = $projectName.ToLower()
 
 if (-not $Quiet) {
     Write-Host ""
-    Write-Host "Stopping Lintilla Development Environment" -ForegroundColor White
-    Write-Host "=========================================" -ForegroundColor White
+    Write-Host "Stopping $projectName Development Environment" -ForegroundColor White
+    Write-Host ("=" * "Stopping $projectName Development Environment".Length) -ForegroundColor White
     Write-Host ""
 }
 
@@ -21,10 +23,10 @@ if (-not $Quiet) {
 $layoutConfigPath = Join-Path $PSScriptRoot "layout.json"
 if (Test-Path $layoutConfigPath) {
     $layoutConfig = Get-Content $layoutConfigPath -Raw | ConvertFrom-Json
-    if ($layoutConfig.enabled -and $layoutConfig.sessionName) {
-        $layoutResult = Close-DevLayout -SessionName $layoutConfig.sessionName -Quiet:$Quiet
+    if ($layoutConfig.enabled) {
+        $layoutResult = Close-DevLayout -SessionName $sessionName -Quiet:$Quiet
         if (-not $Quiet -and $layoutResult.status -eq "closed") {
-            Write-Status "Closed layout session: $($layoutConfig.sessionName)" -Type Success
+            Write-Status "Closed layout session: $sessionName" -Type Success
         }
     }
 }
@@ -70,7 +72,7 @@ if (Test-Path $pidFile) {
 
 if (-not $Quiet) {
     Write-Host ""
-    Write-Status "Lintilla stopped" -Type Success
+    Write-Status "$projectName stopped" -Type Success
     Write-Host ""
 }
 

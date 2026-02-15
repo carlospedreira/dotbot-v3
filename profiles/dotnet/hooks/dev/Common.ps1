@@ -61,3 +61,43 @@ function Write-Status {
     
     Write-Host "$prefix $Message" -ForegroundColor $color
 }
+
+function Get-ProjectName {
+    $root = git rev-parse --show-toplevel 2>$null
+    if ($root) { return (Split-Path $root -Leaf) }
+    return "project"
+}
+
+function Find-ApiProject {
+    <#
+    .SYNOPSIS
+        Auto-detect the API .csproj file under src/.
+    .OUTPUTS
+        Relative path from repo root, or $null if not found.
+    #>
+    param([string]$RepoRoot)
+    $src = Join-Path $RepoRoot "src"
+    if (Test-Path $src) {
+        $found = Get-ChildItem -Path $src -Filter "*.csproj" -Recurse -File |
+            Where-Object { $_.Name -match 'Api\.csproj$' } |
+            Select-Object -First 1
+        if ($found) {
+            return $found.FullName.Substring($RepoRoot.Length).TrimStart('\', '/')
+        }
+    }
+    return $null
+}
+
+function Get-GitHubRepo {
+    <#
+    .SYNOPSIS
+        Derive GitHub owner/repo from git remote origin.
+    .OUTPUTS
+        String like "owner/repo", or $null.
+    #>
+    $remote = git remote get-url origin 2>$null
+    if ($remote -match 'github\.com[:/](.+?)(?:\.git)?$') {
+        return $matches[1]
+    }
+    return $null
+}

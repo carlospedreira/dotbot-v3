@@ -1,12 +1,7 @@
 {
   "enabled": true,
-  "sessionName": "lintilla",
   "monitor": 0,
-"layout": "1L-1R",
-  "terminals": [
-    ". 'C:\\Users\\andre\\repos\\Lintilla\\.bot\\hooks\\dev\\Common.ps1'; Load-EnvFile -Path 'C:\\Users\\andre\\repos\\Lintilla\\.env.local' -Export | Out-Null; Set-Location 'C:\\Users\\andre\\repos\\Lintilla'; dotnet watch --project src/Lintilla.Api/Lintilla.Api.csproj"
-  ],
-  "urls": [
-    "http://localhost:5232/scalar/v1"
-  ]
+  "layout": "1L-1R",
+  "port": 5000,
+  "openUrl": "/swagger"
 }
