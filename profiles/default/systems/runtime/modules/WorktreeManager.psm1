@@ -277,11 +277,16 @@ function Complete-TaskWorktree {
             if ($LASTEXITCODE -ne 0) { throw "Failed to checkout $baseBranch branch" }
         }
 
+        # Remove junctions BEFORE commit/rebase so git sees real tracked files
+        Remove-Junctions -WorktreePath $worktreePath
+
+        # Restore tracked files that were replaced by the tasks junction
+        git -C $worktreePath checkout -- .bot/workspace/tasks 2>$null
+
         # Auto-commit any uncommitted work left by Claude CLI
-        # Exclude junction targets that point to shared main-repo directories
         $worktreeStatus = git -C $worktreePath status --porcelain 2>$null
         if ($worktreeStatus) {
-            git -C $worktreePath add -A -- ':!.bot/workspace/tasks' ':!.bot/.control' 2>$null
+            git -C $worktreePath add -A 2>$null
             git -C $worktreePath commit --quiet -m "chore: auto-commit uncommitted work" 2>$null
         }
 
@@ -325,9 +330,6 @@ function Complete-TaskWorktree {
         }
 
         $mergeCommit = git -C $ProjectRoot rev-parse HEAD 2>$null
-
-        # Remove junctions before worktree removal to prevent following into shared dirs
-        Remove-Junctions -WorktreePath $worktreePath
 
         # Remove worktree and branch
         git -C $ProjectRoot worktree remove $worktreePath --force 2>$null
