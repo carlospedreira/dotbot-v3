@@ -387,7 +387,7 @@ function renderKickstartQuestionsItem(item) {
                 ${questions.map((q, idx) => `
                     ${idx > 0 ? '<div class="question-divider"></div>' : ''}
                     <div class="kickstart-question" data-question-id="${escapeHtml(q.id)}">
-                        <div class="action-question-text">${escapeHtml(q.question)}</div>
+                        <div class="action-question-text"><span class="question-number">Q${idx + 1}.</span> ${escapeHtml(q.question)}</div>
                         ${q.context ? `<div class="action-question-context">${escapeHtml(q.context)}</div>` : ''}
                         <div class="answer-options" data-multi-select="false">
                             ${(q.options || []).map(opt => `
@@ -402,12 +402,18 @@ function renderKickstartQuestionsItem(item) {
                                 </div>
                             `).join('')}
                         </div>
+                        <div class="kickstart-question-freetext">
+                            <textarea class="kickstart-freetext-input" placeholder="Or type a custom answer..."></textarea>
+                        </div>
+                        <div class="kickstart-question-submit">
+                            <button class="ctrl-btn-sm primary submit-single-kickstart">Submit Q${idx + 1}</button>
+                        </div>
                     </div>
                 `).join('')}
 
                 <div class="action-submit">
                     <button class="ctrl-btn skip-interview">Skip & Continue</button>
-                    <button class="ctrl-btn primary submit-interview">Submit Answers</button>
+                    <button class="ctrl-btn primary submit-interview">Submit All</button>
                 </div>
             </div>
         </div>
@@ -535,7 +541,27 @@ function attachActionHandlers(container) {
                 opt.classList.remove('selected');
             });
             option.classList.add('selected');
+            // Clear free text when an option is selected
+            const freetext = questionEl.querySelector('.kickstart-freetext-input');
+            if (freetext) freetext.value = '';
         });
+    });
+
+    // Kickstart interview: clear option selection when typing free text
+    container.querySelectorAll('.kickstart-freetext-input').forEach(textarea => {
+        textarea.addEventListener('input', () => {
+            if (textarea.value.trim()) {
+                const questionEl = textarea.closest('.kickstart-question');
+                if (questionEl) {
+                    questionEl.querySelectorAll('.answer-option').forEach(opt => opt.classList.remove('selected'));
+                }
+            }
+        });
+    });
+
+    // Kickstart interview: per-question submit
+    container.querySelectorAll('.submit-single-kickstart').forEach(btn => {
+        btn.addEventListener('click', () => handleSingleKickstartAnswer(btn));
     });
 
     // Submit interview answers
@@ -641,13 +667,112 @@ async function submitGitCommit() {
  * @param {HTMLElement} btn - Button element
  * @param {boolean} skipped - Whether the user is skipping
  */
+/**
+ * Handle individual kickstart question submission from the slideout
+ * Marks the question as answered and submits all answered-so-far to the API
+ * @param {HTMLElement} btn - The per-question submit button
+ */
+async function handleSingleKickstartAnswer(btn) {
+    const questionEl = btn.closest('.kickstart-question');
+    const actionItem = btn.closest('.action-item');
+    const processId = actionItem?.dataset.processId;
+    if (!questionEl || !processId) return;
+
+    const questionId = questionEl.dataset.questionId;
+    const selectedOpt = questionEl.querySelector('.answer-option.selected');
+    const freetext = questionEl.querySelector('.kickstart-freetext-input')?.value?.trim() || '';
+    const questionText = questionEl.querySelector('.action-question-text')?.textContent || '';
+
+    if (!selectedOpt && !freetext) {
+        showToast('Please select an option or type a custom answer', 'warning');
+        return;
+    }
+
+    // Build answer text
+    let answerText;
+    if (freetext) {
+        answerText = freetext;
+    } else {
+        const key = selectedOpt.dataset.key;
+        const label = selectedOpt.querySelector('.answer-label')?.textContent || key;
+        answerText = `${key}: ${label}`;
+    }
+
+    // Mark question as answered visually
+    questionEl.classList.add('answered');
+    btn.disabled = true;
+    btn.textContent = '✓';
+
+    // Collect all answered questions (including this one) and submit
+    const allQuestions = actionItem.querySelectorAll('.kickstart-question');
+    const answers = [];
+
+    allQuestions.forEach(qEl => {
+        const qId = qEl.dataset.questionId;
+        const qText = qEl.querySelector('.action-question-text')?.textContent || '';
+
+        if (qEl === questionEl) {
+            answers.push({ question_id: qId, question: qText, answer: answerText });
+        } else if (qEl.classList.contains('answered')) {
+            // Reconstruct previously answered
+            const prevOpt = qEl.querySelector('.answer-option.selected');
+            const prevFreetext = qEl.querySelector('.kickstart-freetext-input')?.value?.trim() || '';
+            if (prevFreetext) {
+                answers.push({ question_id: qId, question: qText, answer: prevFreetext });
+            } else if (prevOpt) {
+                const k = prevOpt.dataset.key;
+                const l = prevOpt.querySelector('.answer-label')?.textContent || k;
+                answers.push({ question_id: qId, question: qText, answer: `${k}: ${l}` });
+            }
+        }
+    });
+
+    // Check if all questions are now answered
+    const allAnswered = actionItem.querySelectorAll('.kickstart-question:not(.answered)').length === 0;
+
+    if (allAnswered) {
+        // All done — submit to API
+        try {
+            const response = await fetch(`${API_BASE}/api/process/answer`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ process_id: processId, answers, skipped: false })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                actionItem.remove();
+                const remaining = document.querySelectorAll('.action-item').length;
+                updateActionWidget(remaining);
+                if (remaining === 0) {
+                    document.getElementById('slideout-content').innerHTML =
+                        '<div class="empty-state">No pending actions</div>';
+                }
+                showToast('Interview answers submitted', 'success');
+                if (typeof pollState === 'function') pollState();
+            } else {
+                showToast('Failed to submit answers: ' + (result.error || 'Unknown error'), 'error');
+                questionEl.classList.remove('answered');
+                btn.disabled = false;
+                btn.textContent = `Submit Q${Array.from(allQuestions).indexOf(questionEl) + 1}`;
+            }
+        } catch (error) {
+            console.error('Error submitting interview answers:', error);
+            showToast('Error submitting answers', 'error');
+            questionEl.classList.remove('answered');
+            btn.disabled = false;
+            btn.textContent = `Submit Q${Array.from(allQuestions).indexOf(questionEl) + 1}`;
+        }
+    }
+}
+
 async function handleInterviewSubmit(btn, skipped) {
     const actionItem = btn.closest('.action-item');
     const processId = actionItem?.dataset.processId;
     if (!processId) return;
 
     if (!skipped) {
-        // Validate all questions have answers
+        // Validate all questions have answers (option or free text)
         const questionEls = actionItem.querySelectorAll('.kickstart-question');
         const answers = [];
         let allAnswered = true;
@@ -655,10 +780,17 @@ async function handleInterviewSubmit(btn, skipped) {
         questionEls.forEach(qEl => {
             const questionId = qEl.dataset.questionId;
             const selectedOpt = qEl.querySelector('.answer-option.selected');
+            const freetext = qEl.querySelector('.kickstart-freetext-input')?.value?.trim() || '';
             const questionText = qEl.querySelector('.action-question-text')?.textContent || '';
 
-            if (!selectedOpt) {
+            if (!selectedOpt && !freetext) {
                 allAnswered = false;
+            } else if (freetext) {
+                answers.push({
+                    question_id: questionId,
+                    question: questionText,
+                    answer: freetext
+                });
             } else {
                 const key = selectedOpt.dataset.key;
                 const label = selectedOpt.querySelector('.answer-label')?.textContent || key;

@@ -204,7 +204,7 @@ function renderProcessList(processes) {
                     questions.forEach((q, idx) => {
                         if (idx > 0) html += '<div class="question-divider"></div>';
                         html += `<div class="interview-question" data-question-id="${escapeHtml(q.id)}">`;
-                        html += `  <div class="interview-question-text">${escapeHtml(q.question)}</div>`;
+                        html += `  <div class="interview-question-text"><span class="question-number">Q${idx + 1}.</span> ${escapeHtml(q.question)}</div>`;
                         if (q.context) {
                             html += `  <div class="interview-question-context">${escapeHtml(q.context)}</div>`;
                         }
@@ -222,12 +222,18 @@ function renderProcessList(processes) {
                             html += `</div>`;
                         });
                         html += `  </div>`;
+                        html += `  <div class="interview-freetext">`;
+                        html += `    <textarea class="interview-freetext-input" placeholder="Or type a custom answer..." oninput="handleInterviewFreetextInput(this)"></textarea>`;
+                        html += `  </div>`;
+                        html += `  <div class="interview-question-submit">`;
+                        html += `    <button class="ctrl-btn-sm primary" onclick="submitSingleInterviewFromProcess('${proc.id}', '${escapeHtml(q.id)}', this)">Submit Q${idx + 1}</button>`;
+                        html += `  </div>`;
                         html += `</div>`;
                     });
 
                     html += `<div class="process-interview-actions">`;
                     html += `  <button class="ctrl-btn" onclick="submitInterviewFromProcess('${proc.id}', true)">Skip & Continue</button>`;
-                    html += `  <button class="ctrl-btn primary" onclick="submitInterviewFromProcess('${proc.id}', false)">Submit Answers</button>`;
+                    html += `  <button class="ctrl-btn primary" onclick="submitInterviewFromProcess('${proc.id}', false)">Submit All</button>`;
                     html += `</div>`;
                     html += `</div>`;
                 }
@@ -567,6 +573,57 @@ function selectInterviewOption(element) {
         opt.classList.remove('selected');
     });
     element.classList.add('selected');
+    // Clear free text when an option is selected
+    const freetext = questionEl.querySelector('.interview-freetext-input');
+    if (freetext) freetext.value = '';
+}
+
+/**
+ * Clear option selection when typing free text in process interview
+ * @param {HTMLTextAreaElement} textarea - The free text input
+ */
+function handleInterviewFreetextInput(textarea) {
+    if (textarea.value.trim()) {
+        const questionEl = textarea.closest('.interview-question');
+        if (questionEl) {
+            questionEl.querySelectorAll('.interview-option').forEach(opt => opt.classList.remove('selected'));
+        }
+    }
+}
+
+/**
+ * Submit a single interview question from the Process tab
+ * Marks the question as answered; when all are done, submits to API
+ * @param {string} processId - Process ID
+ * @param {string} questionId - Question ID
+ * @param {HTMLElement} btn - The per-question submit button
+ */
+async function submitSingleInterviewFromProcess(processId, questionId, btn) {
+    const container = document.querySelector(`.process-interview[data-process-id="${processId}"]`);
+    if (!container) return;
+
+    const questionEl = container.querySelector(`.interview-question[data-question-id="${questionId}"]`);
+    if (!questionEl) return;
+
+    const selectedOpt = questionEl.querySelector('.interview-option.selected');
+    const freetext = questionEl.querySelector('.interview-freetext-input')?.value?.trim() || '';
+
+    if (!selectedOpt && !freetext) {
+        showToast('Please select an option or type a custom answer', 'warning');
+        return;
+    }
+
+    // Mark question as answered visually
+    questionEl.classList.add('answered');
+    btn.disabled = true;
+    btn.textContent = '✓';
+
+    // Check if all questions are now answered
+    const unanswered = container.querySelectorAll('.interview-question:not(.answered)');
+    if (unanswered.length === 0) {
+        // All done — submit to API
+        submitInterviewFromProcess(processId, false);
+    }
 }
 
 /**
@@ -579,7 +636,7 @@ async function submitInterviewFromProcess(processId, skipped) {
     if (!container) return;
 
     if (!skipped) {
-        // Collect answers from all questions
+        // Collect answers from all questions (option or free text)
         const questionEls = container.querySelectorAll('.interview-question');
         const answers = [];
         let allAnswered = true;
@@ -587,10 +644,17 @@ async function submitInterviewFromProcess(processId, skipped) {
         questionEls.forEach(qEl => {
             const questionId = qEl.dataset.questionId;
             const selectedOpt = qEl.querySelector('.interview-option.selected');
+            const freetext = qEl.querySelector('.interview-freetext-input')?.value?.trim() || '';
             const questionText = qEl.querySelector('.interview-question-text')?.textContent || '';
 
-            if (!selectedOpt) {
+            if (!selectedOpt && !freetext) {
                 allAnswered = false;
+            } else if (freetext) {
+                answers.push({
+                    question_id: questionId,
+                    question: questionText,
+                    answer: freetext
+                });
             } else {
                 const key = selectedOpt.dataset.key;
                 const label = selectedOpt.querySelector('.interview-option-label')?.textContent || key;

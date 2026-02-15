@@ -169,19 +169,20 @@ function Start-ProductKickstart {
         $savedFiles += $filePath
     }
 
-    # Launch kickstart as tracked process (inline, matching Start-ProductAnalyse pattern)
+    # Launch kickstart as tracked process
+    # Write prompt to a file and use a wrapper script to avoid Start-Process quoting issues
     $launcherPath = Join-Path $botRoot "systems\runtime\launch-process.ps1"
-    $escapedPrompt = $UserPrompt -replace '"', '\"'
-    $launchArgs = @(
-        "-File", "`"$launcherPath`"",
-        "-Type", "kickstart",
-        "-Prompt", "`"$escapedPrompt`"",
-        "-Description", "`"Kickstart: project setup`""
-    )
-    if ($NeedsInterview) {
-        $launchArgs += "-NeedsInterview"
-    }
-    $proc = Start-Process pwsh -ArgumentList $launchArgs -WindowStyle Normal -PassThru
+    $promptFile = Join-Path $briefingDir "kickstart-prompt.txt"
+    $UserPrompt | Set-Content -Path $promptFile -Encoding UTF8 -NoNewline
+
+    $wrapperPath = Join-Path $briefingDir "kickstart-launcher.ps1"
+    $interviewLine = if ($NeedsInterview) { " -NeedsInterview" } else { "" }
+    @"
+`$prompt = Get-Content -LiteralPath '$promptFile' -Raw
+& '$launcherPath' -Type kickstart -Prompt `$prompt -Description 'Kickstart: project setup'$interviewLine
+"@ | Set-Content -Path $wrapperPath -Encoding UTF8
+
+    $proc = Start-Process pwsh -ArgumentList "-NoProfile", "-File", $wrapperPath -WindowStyle Normal -PassThru
 
     # Find process_id by PID
     Start-Sleep -Milliseconds 500

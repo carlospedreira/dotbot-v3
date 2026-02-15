@@ -569,6 +569,40 @@
     margin: 10px 0;
 }
 
+.interview-question.answered {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.interview-freetext {
+    margin-top: 6px;
+}
+
+.interview-freetext-input {
+    width: 100%;
+    padding: 6px 8px;
+    background: var(--bg-black-overlay-heavy);
+    border: 1px solid var(--primary-12);
+    border-radius: 3px;
+    color: var(--color-primary);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    resize: vertical;
+    min-height: 32px;
+    max-height: 100px;
+}
+
+.interview-freetext-input:focus {
+    outline: none;
+    border-color: var(--color-secondary);
+}
+
+.interview-question-submit {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 4px;
+}
+
 .process-interview-actions {
     display: flex;
     justify-content: flex-end;

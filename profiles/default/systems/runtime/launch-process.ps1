@@ -955,7 +955,7 @@ Review all context above. Decide whether to write clarification-questions.json (
                         break
                     }
 
-                    Write-Status "Round $interviewRound: $($questions.Count) question(s) — waiting for user" -Type Info
+                    Write-Status "Round ${interviewRound}: $($questions.Count) question(s) — waiting for user" -Type Info
 
                     # Set process to needs-input
                     $processData.status = 'needs-input'
