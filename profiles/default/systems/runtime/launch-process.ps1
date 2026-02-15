@@ -51,7 +51,8 @@ param(
     [switch]$ShowVerbose,
     [int]$MaxTasks = 0,
     [string]$Description,
-    [string]$ProcessId
+    [string]$ProcessId,
+    [switch]$NeedsInterview
 )
 
 # --- Configuration ---
@@ -832,6 +833,185 @@ elseif ($Type -eq 'kickstart') {
     $productDir = Join-Path $botRoot "workspace\product"
 
     try {
+        # ===== Phase 0: Interview loop (if requested) =====
+        if ($NeedsInterview) {
+            $processData.heartbeat_status = "Phase 0: Interviewing for requirements"
+            Write-ProcessFile -Id $procId -Data $processData
+            Write-ProcessActivity -Id $procId -ActivityType "init" -Message "Phase 0 — interviewing for requirements..."
+            Write-Header "Phase 0: Interview"
+
+            # Load interview prompt template
+            $interviewWorkflowPath = Join-Path $botRoot "prompts\workflows\00-kickstart-interview.md"
+            $interviewWorkflow = ""
+            if (Test-Path $interviewWorkflowPath) {
+                $interviewWorkflow = Get-Content $interviewWorkflowPath -Raw
+            }
+
+            # Check for briefing files
+            $briefingDir = Join-Path $productDir "briefing"
+            $interviewFileRefs = ""
+            if (Test-Path $briefingDir) {
+                $briefingFiles = Get-ChildItem -Path $briefingDir -File
+                if ($briefingFiles.Count -gt 0) {
+                    $interviewFileRefs = "`n`nBriefing files have been saved to the briefing/ directory. Read and use these for context:`n"
+                    foreach ($bf in $briefingFiles) {
+                        $interviewFileRefs += "- $($bf.FullName)`n"
+                    }
+                }
+            }
+
+            $interviewRound = 0
+            $allQandA = @()
+            $questionsPath = Join-Path $productDir "clarification-questions.json"
+            $summaryPath = Join-Path $productDir "interview-summary.md"
+
+            # Use Opus for interview quality
+            $interviewModel = $modelMap['Opus']
+
+            do {
+                $interviewRound++
+
+                # Build previous Q&A context
+                $previousContext = ""
+                if ($allQandA.Count -gt 0) {
+                    $previousContext = "`n`n## Previous Interview Rounds`n"
+                    foreach ($round in $allQandA) {
+                        $previousContext += "`n### Round $($round.round)`n"
+                        foreach ($qa in $round.pairs) {
+                            $previousContext += "**Q:** $($qa.question)`n**A:** $($qa.answer)`n`n"
+                        }
+                    }
+                }
+
+                # Clean up any previous round's files
+                if (Test-Path $questionsPath) { Remove-Item $questionsPath -Force }
+                if (Test-Path $summaryPath) { Remove-Item $summaryPath -Force }
+
+                $interviewPrompt = @"
+$interviewWorkflow
+
+## User's Project Description
+
+$Prompt
+$interviewFileRefs
+$previousContext
+
+## Instructions
+
+Review all context above. Decide whether to write clarification-questions.json (more questions needed) or interview-summary.md (all clear). Write exactly one file to .bot/workspace/product/.
+"@
+
+                Write-Status "Interview round $interviewRound..." -Type Process
+                Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Interview round $interviewRound"
+
+                $interviewSessionId = [System.Guid]::NewGuid().ToString()
+                $streamArgs = @{
+                    Prompt = $interviewPrompt
+                    Model = $interviewModel
+                    SessionId = $interviewSessionId
+                    PersistSession = $false
+                }
+                if ($ShowDebug) { $streamArgs['ShowDebugJson'] = $true }
+                if ($ShowVerbose) { $streamArgs['ShowVerbose'] = $true }
+
+                Invoke-ClaudeStream @streamArgs
+
+                # Check what Opus wrote
+                if (Test-Path $summaryPath) {
+                    Write-Status "Interview complete — summary written" -Type Complete
+                    Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Interview complete after $interviewRound round(s)"
+                    break
+                }
+
+                if (Test-Path $questionsPath) {
+                    try {
+                        $questionsRaw = Get-Content $questionsPath -Raw
+                        $questionsData = $questionsRaw | ConvertFrom-Json
+                        $questions = $questionsData.questions
+                    } catch {
+                        Write-Status "Failed to parse questions JSON: $($_.Exception.Message)" -Type Warn
+                        break
+                    }
+
+                    Write-Status "Round $interviewRound: $($questions.Count) question(s) — waiting for user" -Type Info
+
+                    # Set process to needs-input
+                    $processData.status = 'needs-input'
+                    $processData.pending_questions = $questionsData
+                    $processData.interview_round = $interviewRound
+                    $processData.heartbeat_status = "Waiting for interview answers (round $interviewRound)"
+                    Write-ProcessFile -Id $procId -Data $processData
+                    Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Waiting for user answers (round $interviewRound, $($questions.Count) questions)"
+
+                    # Poll for answers file
+                    $answersPath = Join-Path $productDir "clarification-answers.json"
+                    if (Test-Path $answersPath) { Remove-Item $answersPath -Force }
+
+                    while (-not (Test-Path $answersPath)) {
+                        if (Test-ProcessStopSignal -Id $procId) {
+                            Write-Status "Stop signal received during interview" -Type Error
+                            $processData.status = 'stopped'
+                            $processData.failed_at = (Get-Date).ToUniversalTime().ToString("o")
+                            $processData.pending_questions = $null
+                            Write-ProcessFile -Id $procId -Data $processData
+                            throw "Process stopped by user during interview"
+                        }
+                        Start-Sleep -Seconds 2
+                    }
+
+                    # Read answers
+                    try {
+                        $answersRaw = Get-Content $answersPath -Raw
+                        $answersData = $answersRaw | ConvertFrom-Json
+                    } catch {
+                        Write-Status "Failed to parse answers JSON: $($_.Exception.Message)" -Type Warn
+                        break
+                    }
+
+                    # Check if user skipped
+                    if ($answersData.skipped -eq $true) {
+                        Write-Status "User skipped interview" -Type Info
+                        Write-ProcessActivity -Id $procId -ActivityType "text" -Message "User skipped interview at round $interviewRound"
+                        # Clean up
+                        Remove-Item $questionsPath -Force -ErrorAction SilentlyContinue
+                        Remove-Item $answersPath -Force -ErrorAction SilentlyContinue
+                        break
+                    }
+
+                    # Accumulate Q&A for next round
+                    $allQandA += @{
+                        round = $interviewRound
+                        pairs = @($answersData.answers)
+                    }
+
+                    Write-Status "Answers received for round $interviewRound" -Type Success
+                    Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Received answers for round $interviewRound"
+
+                    # Clean up for next iteration
+                    Remove-Item $questionsPath -Force -ErrorAction SilentlyContinue
+                    Remove-Item $answersPath -Force -ErrorAction SilentlyContinue
+
+                    # Reset process status
+                    $processData.status = 'running'
+                    $processData.pending_questions = $null
+                    $processData.interview_round = $null
+                    $processData.heartbeat_status = "Phase 0: Processing interview answers"
+                    Write-ProcessFile -Id $procId -Data $processData
+                } else {
+                    # Neither file written — something went wrong, proceed without
+                    Write-Status "Interview round produced no output — proceeding" -Type Warn
+                    Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Interview round $interviewRound produced no output — skipping"
+                    break
+                }
+            } while ($true)
+
+            # Ensure status is running for Phase 1
+            $processData.status = 'running'
+            $processData.pending_questions = $null
+            $processData.interview_round = $null
+            Write-ProcessFile -Id $procId -Data $processData
+        }
+
         # ===== Phase 1: Create product documents =====
         $processData.heartbeat_status = "Phase 1: Creating product documents"
         Write-ProcessFile -Id $procId -Data $processData
@@ -857,6 +1037,18 @@ elseif ($Type -eq 'kickstart') {
             }
         }
 
+        # Check for interview summary from Phase 0
+        $interviewContext = ""
+        $interviewSummaryPath = Join-Path $productDir "interview-summary.md"
+        if (Test-Path $interviewSummaryPath) {
+            $interviewContext = @"
+
+## Interview Summary
+
+An interview-summary.md file exists in .bot/workspace/product/ containing the user's clarified requirements with both verbatim answers and expanded interpretation. **Read this file** and use it to guide your decisions — it reflects the user's confirmed preferences for platform, architecture, technology, domain model, and other key directions.
+"@
+        }
+
         $phase1Prompt = @"
 You are a product planning assistant for the dotbot autonomous development system.
 
@@ -868,16 +1060,18 @@ $workflowContent
 User's project description:
 $Prompt
 $fileRefs
+$interviewContext
 
 Instructions:
 1. Read any briefing files listed above and any existing project files (README.md, etc.) for additional context
-2. Create these product documents directly by writing files to .bot/workspace/product/:
+2. If an interview-summary.md file exists in .bot/workspace/product/, read it carefully — it contains clarified requirements from the user
+3. Create these product documents directly by writing files to .bot/workspace/product/:
    - mission.md - What the product is, core principles, goals. MUST start with a section titled "Executive Summary" as the first heading.
    - tech-stack.md - Technologies, versions, infrastructure decisions
    - entity-model.md - Data model, entities, relationships. Include a Mermaid.js erDiagram block showing entities and their relationships visually.
-3. Do NOT create tasks, ask questions, or use task management tools. Just create the documents directly.
-4. Write comprehensive, well-structured markdown documents based on what you know from the user's description and any attached files.
-5. Make reasonable inferences where details are missing - the user can refine later.
+4. Do NOT create tasks, ask questions, or use task management tools. Just create the documents directly.
+5. Write comprehensive, well-structured markdown documents based on what you know from the user's description and any attached files.
+6. Make reasonable inferences where details are missing - the user can refine later.
 
 IMPORTANT: The mission.md file MUST begin with an "Executive Summary" section (## Executive Summary) as the very first content after the title. This is required for the UI to detect that product planning is complete.
 "@

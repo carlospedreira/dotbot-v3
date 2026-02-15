@@ -266,10 +266,12 @@ function renderActionItems(container, items) {
             return renderQuestionItem(item);
         } else if (item.type === 'split') {
             return renderSplitItem(item);
+        } else if (item.type === 'kickstart-questions') {
+            return renderKickstartQuestionsItem(item);
         }
         return '';
     }).join('');
-    
+
     // Attach event handlers
     attachActionHandlers(container);
 }
@@ -358,6 +360,54 @@ function renderSplitItem(item) {
                 <div class="action-submit">
                     <button class="ctrl-btn reject-split">Reject</button>
                     <button class="ctrl-btn primary approve-split">Approve Split</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Render a kickstart interview questions item (all questions in one card)
+ * @param {Object} item - Kickstart questions item
+ * @returns {string} HTML string
+ */
+function renderKickstartQuestionsItem(item) {
+    const questionsData = item.questions || {};
+    const questions = questionsData.questions || [];
+    const round = item.interview_round || 1;
+    const roundLabel = round > 1 ? ` (Round ${round})` : '';
+
+    return `
+        <div class="action-item" data-process-id="${escapeHtml(item.process_id)}" data-type="kickstart-questions">
+            <div class="action-item-header">
+                <span class="action-item-type kickstart">Kickstart Interview${escapeHtml(roundLabel)}</span>
+                <span class="action-item-task">${escapeHtml(item.description || 'Project Setup')}</span>
+            </div>
+            <div class="action-item-body">
+                ${questions.map((q, idx) => `
+                    ${idx > 0 ? '<div class="question-divider"></div>' : ''}
+                    <div class="kickstart-question" data-question-id="${escapeHtml(q.id)}">
+                        <div class="action-question-text">${escapeHtml(q.question)}</div>
+                        ${q.context ? `<div class="action-question-context">${escapeHtml(q.context)}</div>` : ''}
+                        <div class="answer-options" data-multi-select="false">
+                            ${(q.options || []).map(opt => `
+                                <div class="answer-option${opt.key === q.recommendation ? ' recommended' : ''}"
+                                     data-key="${escapeHtml(opt.key)}"
+                                     data-question-key="${escapeHtml(q.id)}">
+                                    <span class="answer-key">${escapeHtml(opt.key)}</span>
+                                    <div class="answer-content">
+                                        <div class="answer-label">${escapeHtml(opt.label)}</div>
+                                        ${opt.rationale ? `<div class="answer-rationale">${escapeHtml(opt.rationale)}</div>` : ''}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `).join('')}
+
+                <div class="action-submit">
+                    <button class="ctrl-btn skip-interview">Skip & Continue</button>
+                    <button class="ctrl-btn primary submit-interview">Submit Answers</button>
                 </div>
             </div>
         </div>
@@ -473,6 +523,30 @@ function attachActionHandlers(container) {
     container.querySelectorAll('.reject-split').forEach(btn => {
         btn.addEventListener('click', () => handleSplitAction(btn, false));
     });
+
+    // Kickstart interview: per-question option selection
+    container.querySelectorAll('.kickstart-question .answer-option').forEach(option => {
+        option.addEventListener('click', () => {
+            const questionEl = option.closest('.kickstart-question');
+            if (!questionEl) return;
+
+            // Single-select within each question
+            questionEl.querySelectorAll('.answer-option').forEach(opt => {
+                opt.classList.remove('selected');
+            });
+            option.classList.add('selected');
+        });
+    });
+
+    // Submit interview answers
+    container.querySelectorAll('.submit-interview').forEach(btn => {
+        btn.addEventListener('click', () => handleInterviewSubmit(btn, false));
+    });
+
+    // Skip interview
+    container.querySelectorAll('.skip-interview').forEach(btn => {
+        btn.addEventListener('click', () => handleInterviewSubmit(btn, true));
+    });
 }
 
 /**
@@ -560,6 +634,124 @@ async function submitGitCommit() {
     // Note: No finally block that auto-re-enables. Button stays disabled until:
     // 1. Git status polling detects repo is clean (updateGitCommitButton resets state)
     // 2. An error occurred (handled in catch blocks above)
+}
+
+/**
+ * Handle interview answer submission or skip
+ * @param {HTMLElement} btn - Button element
+ * @param {boolean} skipped - Whether the user is skipping
+ */
+async function handleInterviewSubmit(btn, skipped) {
+    const actionItem = btn.closest('.action-item');
+    const processId = actionItem?.dataset.processId;
+    if (!processId) return;
+
+    if (!skipped) {
+        // Validate all questions have answers
+        const questionEls = actionItem.querySelectorAll('.kickstart-question');
+        const answers = [];
+        let allAnswered = true;
+
+        questionEls.forEach(qEl => {
+            const questionId = qEl.dataset.questionId;
+            const selectedOpt = qEl.querySelector('.answer-option.selected');
+            const questionText = qEl.querySelector('.action-question-text')?.textContent || '';
+
+            if (!selectedOpt) {
+                allAnswered = false;
+            } else {
+                const key = selectedOpt.dataset.key;
+                const label = selectedOpt.querySelector('.answer-label')?.textContent || key;
+                answers.push({
+                    question_id: questionId,
+                    question: questionText,
+                    answer: `${key}: ${label}`
+                });
+            }
+        });
+
+        if (!allAnswered) {
+            showToast('Please answer all questions before submitting', 'warning');
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Submitting...';
+
+        try {
+            const response = await fetch(`${API_BASE}/api/process/answer`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    process_id: processId,
+                    answers: answers,
+                    skipped: false
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                actionItem.remove();
+                const remaining = document.querySelectorAll('.action-item').length;
+                updateActionWidget(remaining);
+                if (remaining === 0) {
+                    document.getElementById('slideout-content').innerHTML =
+                        '<div class="empty-state">No pending actions</div>';
+                }
+                showToast('Interview answers submitted', 'success');
+                if (typeof pollState === 'function') pollState();
+            } else {
+                showToast('Failed to submit answers: ' + (result.error || 'Unknown error'), 'error');
+                btn.disabled = false;
+                btn.textContent = 'Submit Answers';
+            }
+        } catch (error) {
+            console.error('Error submitting interview answers:', error);
+            showToast('Error submitting answers', 'error');
+            btn.disabled = false;
+            btn.textContent = 'Submit Answers';
+        }
+    } else {
+        // Skip
+        btn.disabled = true;
+        btn.textContent = 'Skipping...';
+
+        try {
+            const response = await fetch(`${API_BASE}/api/process/answer`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    process_id: processId,
+                    answers: [],
+                    skipped: true
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                actionItem.remove();
+                const remaining = document.querySelectorAll('.action-item').length;
+                updateActionWidget(remaining);
+                if (remaining === 0) {
+                    document.getElementById('slideout-content').innerHTML =
+                        '<div class="empty-state">No pending actions</div>';
+                }
+                showToast('Interview skipped — proceeding with kickstart', 'info');
+                if (typeof pollState === 'function') pollState();
+            } else {
+                showToast('Failed to skip: ' + (result.error || 'Unknown error'), 'error');
+                btn.disabled = false;
+                btn.textContent = 'Skip & Continue';
+            }
+        } catch (error) {
+            console.error('Error skipping interview:', error);
+            showToast('Error skipping interview', 'error');
+            btn.disabled = false;
+            btn.textContent = 'Skip & Continue';
+        }
+    }
 }
 
 async function handleSplitAction(btn, approved) {

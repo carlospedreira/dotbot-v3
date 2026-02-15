@@ -596,7 +596,7 @@ try {
                                 $statusCode = 400
                                 $content = @{ success = $false; error = "Missing required 'prompt' field" } | ConvertTo-Json -Compress
                             } else {
-                                $result = Start-ProductKickstart -UserPrompt $body.prompt -Files @($body.files)
+                                $result = Start-ProductKickstart -UserPrompt $body.prompt -Files @($body.files) -NeedsInterview ($body.needs_interview -eq $true)
                                 if ($result._statusCode) { $statusCode = $result._statusCode; $result.Remove('_statusCode') }
                                 $content = $result | ConvertTo-Json -Compress
                             }
@@ -800,6 +800,47 @@ try {
                     if ($method -eq "POST") {
                         $contentType = "application/json; charset=utf-8"
                         $content = Stop-AllManagedProcesses | ConvertTo-Json -Compress
+                    } else {
+                        $statusCode = 405
+                        $content = "Method not allowed"
+                    }
+                    break
+                }
+
+                "/api/process/answer" {
+                    if ($method -eq "POST") {
+                        $contentType = "application/json; charset=utf-8"
+                        try {
+                            $reader = New-Object System.IO.StreamReader($request.InputStream)
+                            $body = $reader.ReadToEnd() | ConvertFrom-Json
+                            $reader.Close()
+
+                            if (-not $body.process_id) {
+                                $statusCode = 400
+                                $content = @{ success = $false; error = "Missing required 'process_id' field" } | ConvertTo-Json -Compress
+                            } else {
+                                # Find the process to get its product dir
+                                $procFile = Join-Path $processesDir "$($body.process_id).json"
+                                if (-not (Test-Path $procFile)) {
+                                    $statusCode = 404
+                                    $content = @{ success = $false; error = "Process not found: $($body.process_id)" } | ConvertTo-Json -Compress
+                                } else {
+                                    # Write answers file that the interview loop is polling for
+                                    $answersData = @{
+                                        skipped = ($body.skipped -eq $true)
+                                        answers = @($body.answers)
+                                        submitted_at = (Get-Date).ToUniversalTime().ToString("o")
+                                    }
+                                    $productDir = Join-Path $botRoot "workspace\product"
+                                    $answersPath = Join-Path $productDir "clarification-answers.json"
+                                    $answersData | ConvertTo-Json -Depth 10 | Set-Content -Path $answersPath -Encoding utf8NoBOM
+                                    $content = @{ success = $true } | ConvertTo-Json -Compress
+                                }
+                            }
+                        } catch {
+                            $statusCode = 500
+                            $content = @{ success = $false; error = "Failed to submit answer: $($_.Exception.Message)" } | ConvertTo-Json -Compress
+                        }
                     } else {
                         $statusCode = 405
                         $content = "Method not allowed"

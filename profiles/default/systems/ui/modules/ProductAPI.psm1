@@ -113,7 +113,8 @@ function Get-ProductDocument {
 function Start-ProductKickstart {
     param(
         [Parameter(Mandatory)] [string]$UserPrompt,
-        [array]$Files = @()
+        [array]$Files = @(),
+        [bool]$NeedsInterview = $true
     )
     $botRoot = $script:Config.BotRoot
 
@@ -178,6 +179,9 @@ function Start-ProductKickstart {
         "-Prompt", "`"$escapedPrompt`"",
         "-Description", "`"Kickstart: project setup`""
     )
+    if ($NeedsInterview) {
+        $launchArgs += "-NeedsInterview"
+    }
     Start-Process pwsh -ArgumentList $launchArgs -WindowStyle Normal | Out-Null
     Write-Status "Product kickstart launched as tracked process" -Type Info
 

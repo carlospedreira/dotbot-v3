@@ -759,6 +759,21 @@
     color: var(--color-tertiary);
 }
 
+.action-item-type.kickstart {
+    background: var(--amber-20);
+    color: var(--phosphor-amber);
+}
+
+.question-divider {
+    height: 1px;
+    background: var(--bezel-color);
+    margin: 16px 0;
+}
+
+.kickstart-question {
+    margin-bottom: 8px;
+}
+
 .action-item-task {
     flex: 1;
     font-size: 11px;

@@ -126,6 +126,27 @@ function Get-ActionRequired {
         }
     }
 
+    # Scan processes for kickstart interview questions (needs-input status)
+    $processesDir = Join-Path $botRoot ".control\processes"
+    if (Test-Path $processesDir) {
+        $procFiles = Get-ChildItem -Path $processesDir -Filter "proc-*.json" -File -ErrorAction SilentlyContinue
+        foreach ($pf in $procFiles) {
+            try {
+                $proc = Get-Content $pf.FullName -Raw | ConvertFrom-Json
+                if ($proc.status -eq 'needs-input' -and $proc.pending_questions) {
+                    $actionItems += @{
+                        type = "kickstart-questions"
+                        process_id = $proc.id
+                        description = $proc.description
+                        questions = $proc.pending_questions
+                        interview_round = $proc.interview_round
+                        created_at = $proc.last_heartbeat
+                    }
+                }
+            } catch { }
+        }
+    }
+
     return @{
         success = $true
         items = $actionItems

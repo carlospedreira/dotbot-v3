@@ -322,11 +322,26 @@ function Get-BotState {
 
     # Check process registry for running processes
     $runningProcesses = @()
+    $processNeedsInputCount = 0
     if (Test-Path $processesDir) {
         $procFiles = Get-ChildItem -Path $processesDir -Filter "*.json" -File -ErrorAction SilentlyContinue
         foreach ($pf in $procFiles) {
             try {
                 $proc = Get-Content $pf.FullName -Raw | ConvertFrom-Json
+
+                # Count processes waiting for interview answers
+                if ($proc.status -eq 'needs-input' -and $proc.pending_questions) {
+                    # Verify PID is still alive
+                    $needsInputAlive = $true
+                    if ($proc.pid) {
+                        try { $needsInputAlive = $null -ne (Get-Process -Id $proc.pid -ErrorAction SilentlyContinue) }
+                        catch { $needsInputAlive = $true }
+                    }
+                    if ($needsInputAlive) {
+                        $processNeedsInputCount++
+                    }
+                }
+
                 if ($proc.status -in @('running', 'starting')) {
 
                     $isAlive = $true
@@ -439,7 +454,7 @@ function Get-BotState {
             analysed_list = @($analysedTasksList)
             recent_completed = @($recentCompleted)
             completed_total = if ($doneTasks.Count) { $doneTasks.Count } else { 0 }
-            action_required = $needsInputTasks.Count
+            action_required = $needsInputTasks.Count + $processNeedsInputCount
         }
         session = $sessionInfo
         control = $controlSignals

@@ -207,6 +207,8 @@ function closeKickstartModal() {
         if (textarea) textarea.value = '';
         kickstartFiles = [];
         updateFileList();
+        const interviewCheckbox = document.getElementById('kickstart-interview');
+        if (interviewCheckbox) interviewCheckbox.checked = true;
         if (submitBtn) {
             submitBtn.classList.remove('loading');
             submitBtn.disabled = false;
@@ -308,6 +310,7 @@ async function submitKickstart() {
     const submitBtn = document.getElementById('kickstart-submit');
 
     const prompt = textarea?.value?.trim();
+    const needsInterview = document.getElementById('kickstart-interview')?.checked ?? true;
 
     if (!prompt) {
         showToast('Please describe your project', 'warning');
@@ -326,6 +329,7 @@ async function submitKickstart() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 prompt: prompt,
+                needs_interview: needsInterview,
                 files: kickstartFiles.map(f => ({
                     name: f.name,
                     content: f.content
