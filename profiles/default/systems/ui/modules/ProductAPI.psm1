@@ -169,14 +169,41 @@ function Start-ProductKickstart {
         $savedFiles += $filePath
     }
 
-    # Launch kickstart via ProcessAPI (proper tracking with PID + process_id)
-    $launchResult = Start-ProcessLaunch -Type "kickstart" -Prompt $UserPrompt `
-        -Description "Kickstart: project setup" -NeedsInterview:$NeedsInterview
-    Write-Status "Product kickstart launched as tracked process" -Type Info
+    # Launch kickstart as tracked process (inline, matching Start-ProductAnalyse pattern)
+    $launcherPath = Join-Path $botRoot "systems\runtime\launch-process.ps1"
+    $escapedPrompt = $UserPrompt -replace '"', '\"'
+    $launchArgs = @(
+        "-File", "`"$launcherPath`"",
+        "-Type", "kickstart",
+        "-Prompt", "`"$escapedPrompt`"",
+        "-Description", "`"Kickstart: project setup`""
+    )
+    if ($NeedsInterview) {
+        $launchArgs += "-NeedsInterview"
+    }
+    $proc = Start-Process pwsh -ArgumentList $launchArgs -WindowStyle Normal -PassThru
+
+    # Find process_id by PID
+    Start-Sleep -Milliseconds 500
+    $processesDir = Join-Path $script:Config.ControlDir "processes"
+    $launchedProcId = $null
+    $procFiles = Get-ChildItem -Path $processesDir -Filter "*.json" -File -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending
+    foreach ($pf in $procFiles) {
+        try {
+            $pData = Get-Content $pf.FullName -Raw | ConvertFrom-Json
+            if ($pData.pid -eq $proc.Id) {
+                $launchedProcId = $pData.id
+                break
+            }
+        } catch {}
+    }
+
+    Write-Status "Product kickstart launched (PID: $($proc.Id))" -Type Info
 
     return @{
         success = $true
-        process_id = $launchResult.process_id
+        process_id = $launchedProcId
         message = "Kickstart initiated. Product documents, task groups, and task expansion will run in a tracked process."
     }
 }
