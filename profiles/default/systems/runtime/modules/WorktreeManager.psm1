@@ -286,7 +286,7 @@ function Complete-TaskWorktree {
         # Auto-commit any uncommitted work left by Claude CLI
         $worktreeStatus = git -C $worktreePath status --porcelain 2>$null
         if ($worktreeStatus) {
-            git -C $worktreePath add -A 2>$null
+            git -C $worktreePath add -A -- ':!.bot/workspace/tasks/' 2>$null
             git -C $worktreePath commit --quiet -m "chore: auto-commit uncommitted work" 2>$null
         }
 
@@ -315,6 +315,9 @@ function Complete-TaskWorktree {
             }
         }
 
+        # Discard task state changes from branch — task queue is shared, not branch-specific
+        git -C $ProjectRoot checkout HEAD -- .bot/workspace/tasks/ 2>$null
+
         # Commit if there are staged changes (task may have made no code changes)
         $staged = git -C $ProjectRoot diff --cached --name-only 2>$null
         if ($staged) {
@@ -330,6 +333,11 @@ function Complete-TaskWorktree {
         }
 
         $mergeCommit = git -C $ProjectRoot rev-parse HEAD 2>$null
+
+        # Commit current task state on main — changes accumulate via junctions
+        # but were previously only "accidentally" committed via task branches
+        git -C $ProjectRoot add .bot/workspace/tasks/ 2>$null
+        git -C $ProjectRoot commit --quiet -m "chore: update task state" 2>$null
 
         # Remove worktree and branch
         git -C $ProjectRoot worktree remove $worktreePath --force 2>$null
