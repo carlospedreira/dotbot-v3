@@ -75,6 +75,43 @@ function Initialize-FileWatchers {
         }
     }
 
+    # Watch product docs directory
+    $productDir = Join-Path $BotRoot "workspace\product"
+    if (-not (Test-Path $productDir)) {
+        New-Item -Path $productDir -ItemType Directory -Force | Out-Null
+    }
+
+    try {
+        $productWatcher = New-Object System.IO.FileSystemWatcher
+        $productWatcher.Path = $productDir
+        $productWatcher.Filter = "*.md"
+        $productWatcher.NotifyFilter = [System.IO.NotifyFilters]::LastWrite -bor
+                                       [System.IO.NotifyFilters]::FileName -bor
+                                       [System.IO.NotifyFilters]::CreationTime
+        $productWatcher.InternalBufferSize = 32768
+        $productWatcher.EnableRaisingEvents = $true
+
+        Register-ObjectEvent -InputObject $productWatcher -EventName Changed -Action {
+            $script:WatcherState.LastChanges['product'] = [DateTime]::UtcNow
+            $script:WatcherState.StateCache = $null
+        } | Out-Null
+
+        Register-ObjectEvent -InputObject $productWatcher -EventName Created -Action {
+            $script:WatcherState.LastChanges['product'] = [DateTime]::UtcNow
+            $script:WatcherState.StateCache = $null
+        } | Out-Null
+
+        Register-ObjectEvent -InputObject $productWatcher -EventName Deleted -Action {
+            $script:WatcherState.LastChanges['product'] = [DateTime]::UtcNow
+            $script:WatcherState.StateCache = $null
+        } | Out-Null
+
+        $script:WatcherState.Watchers[$productDir] = $productWatcher
+        Write-Verbose "[FileWatcher] Watching product directory: $productDir"
+    } catch {
+        Write-Warning "[FileWatcher] Failed to create product watcher: $_"
+    }
+
     # Watch session state file
     $sessionsDir = Join-Path $BotRoot "workspace\sessions\runs"
     if (-not (Test-Path $sessionsDir)) {
@@ -157,6 +194,7 @@ function Initialize-FileWatchers {
     $script:WatcherState.LastChanges['session'] = [DateTime]::UtcNow
     $script:WatcherState.LastChanges['control'] = [DateTime]::UtcNow
     $script:WatcherState.LastChanges['activity'] = [DateTime]::UtcNow
+    $script:WatcherState.LastChanges['product'] = [DateTime]::UtcNow
 
     $script:WatcherState.Initialized = $true
     Write-Verbose "[FileWatcher] Initialization complete"

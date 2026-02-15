@@ -470,6 +470,7 @@ function Get-BotState {
         }
         instances = $instances
         steering = $steeringStatus
+        product_docs = @(Get-ChildItem -Path (Join-Path $botRoot "workspace\product") -Filter "*.md" -ErrorAction SilentlyContinue).Count
     }
 
     # Cache the result

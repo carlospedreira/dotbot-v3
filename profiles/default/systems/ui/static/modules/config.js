@@ -24,6 +24,7 @@ let projectName = 'unknown';
 let projectRoot = 'unknown';
 let executiveSummary = null;
 let hasExistingCode = false;
+let lastProductDocCount = -1;
 let materialIcons = null;
 let activityScope = null;
 let activityPosition = 0;  // Start from beginning on page load

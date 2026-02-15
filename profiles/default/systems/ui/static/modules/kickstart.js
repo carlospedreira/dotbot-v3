@@ -373,14 +373,18 @@ async function submitKickstart() {
 }
 
 /**
- * Start polling for product doc appearance after kickstart
- * Polls /api/product/list every 5s; when docs appear, transitions UI
+ * Start polling for kickstart/analyse process completion.
+ * The main 3-second state poll (ui-updates.js) handles refreshing the sidebar
+ * as product docs appear via product_docs count tracking. This polling just
+ * monitors whether the background process is still running so we can finalize
+ * the in-progress CTA and show completion toasts.
  */
 function startKickstartPolling() {
     if (kickstartPolling) clearInterval(kickstartPolling);
 
     let attempts = 0;
-    const maxAttempts = 60; // 5 minutes at 5s intervals
+    const maxAttempts = 120; // 10 minutes at 5s intervals
+    let docsAppeared = false;
 
     kickstartPolling = setInterval(async () => {
         attempts++;
@@ -388,46 +392,52 @@ function startKickstartPolling() {
             clearInterval(kickstartPolling);
             kickstartPolling = null;
             kickstartInProgress = false;
+            isNewProject = false;
+            if (typeof updateExecutiveSummary === 'function') updateExecutiveSummary();
             return;
         }
 
         try {
-            const response = await fetch(`${API_BASE}/api/product/list`);
-            if (!response.ok) return;
+            // Check if the background process is still running
+            let processStillRunning = false;
+            if (kickstartProcessId) {
+                const procResp = await fetch(`${API_BASE}/api/processes`);
+                if (procResp.ok) {
+                    const procData = await procResp.json();
+                    const procs = procData.processes || [];
+                    processStillRunning = procs.some(
+                        p => p.id === kickstartProcessId && (p.status === 'running' || p.status === 'starting')
+                    );
+                }
+            }
 
-            const data = await response.json();
-            const docs = data.docs || [];
+            // Check if docs have appeared (for toast messaging)
+            if (!docsAppeared) {
+                const response = await fetch(`${API_BASE}/api/product/list`);
+                if (response.ok) {
+                    const data = await response.json();
+                    const docs = data.docs || [];
+                    if (docs.length > 0) {
+                        docsAppeared = true;
+                        isNewProject = false;
+                    }
+                }
+            }
 
-            if (docs.length > 0) {
-                // Docs appeared! Transition UI
+            // Process finished — finalize
+            if (!processStillRunning && (docsAppeared || attempts > 5)) {
                 clearInterval(kickstartPolling);
                 kickstartPolling = null;
-                isNewProject = false;
                 kickstartInProgress = false;
+                isNewProject = false;
 
-                // Clear sidebar loaded flag so it re-fetches
-                const navContainer = document.getElementById('product-file-nav');
-                if (navContainer) delete navContainer.dataset.loaded;
+                if (typeof updateExecutiveSummary === 'function') updateExecutiveSummary();
 
-                // Refresh product nav
-                if (typeof updateProductFileNav === 'function') {
-                    updateProductFileNav();
-                }
-
-                // Re-fetch executive summary
-                if (typeof initProjectName === 'function') {
-                    initProjectName();
-                }
-
-                // Analyse only creates product docs (no roadmap/tasks)
                 if (analyseInProgress) {
                     analyseInProgress = false;
                     showToast('Product documents created from your codebase!', 'success');
-                } else {
+                } else if (docsAppeared) {
                     showToast('Product documents created! Now planning roadmap...', 'success');
-
-                    // Roadmap planning is chained server-side in the same background job.
-                    // Start polling for tasks to appear.
                     startRoadmapPolling();
                 }
             }

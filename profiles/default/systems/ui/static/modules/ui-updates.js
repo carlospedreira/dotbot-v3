@@ -30,6 +30,15 @@ function updateUI(state) {
         updateTaskSummary(state.tasks);
     }
 
+    // Refresh product file nav when doc count changes
+    if (state.product_docs !== undefined && state.product_docs !== lastProductDocCount) {
+        lastProductDocCount = state.product_docs;
+        const navContainer = document.getElementById('product-file-nav');
+        if (navContainer) delete navContainer.dataset.loaded;
+        if (typeof updateProductFileNav === 'function') updateProductFileNav();
+        if (typeof initProjectName === 'function') initProjectName();
+    }
+
     // Update active processes widget on Overview tab
     updateActiveProcessesWidget();
 
