@@ -33,6 +33,13 @@ $script:NoiseDirectories = @(
 
 # --- Internal Helpers ---
 
+function Get-BaseBranch {
+    param([string]$ProjectRoot)
+    $branch = git -C $ProjectRoot symbolic-ref --short HEAD 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $branch) { $branch = 'main' }
+    return $branch
+}
+
 function Initialize-WorktreeMap {
     param([string]$BotRoot)
     $controlDir = Join-Path $BotRoot ".control"
@@ -152,8 +159,9 @@ function New-TaskWorktree {
     }
 
     try {
-        # Create branch from main and check it out in the worktree
-        $output = git -C $ProjectRoot worktree add -b $branchName $worktreePath main 2>&1
+        # Create branch from the repo's current branch and check it out in the worktree
+        $baseBranch = Get-BaseBranch -ProjectRoot $ProjectRoot
+        $output = git -C $ProjectRoot worktree add -b $branchName $worktreePath $baseBranch 2>&1
         if ($LASTEXITCODE -ne 0) {
             # Branch may already exist from an interrupted run — try without -b
             $output = git -C $ProjectRoot worktree add $worktreePath $branchName 2>&1
@@ -249,15 +257,16 @@ function Complete-TaskWorktree {
     $shortId = $TaskId.Substring(0, [Math]::Min(8, $TaskId.Length))
 
     try {
-        # Ensure main repo is on main branch
+        # Ensure main repo is on its base branch
+        $baseBranch = Get-BaseBranch -ProjectRoot $ProjectRoot
         $currentBranch = git -C $ProjectRoot rev-parse --abbrev-ref HEAD 2>$null
-        if ($currentBranch -ne 'main') {
-            git -C $ProjectRoot checkout main 2>&1 | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw "Failed to checkout main branch" }
+        if ($currentBranch -ne $baseBranch) {
+            git -C $ProjectRoot checkout $baseBranch 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Failed to checkout $baseBranch branch" }
         }
 
-        # Rebase task branch onto main (brings task commits up to date)
-        $rebaseOutput = git -C $worktreePath rebase main 2>&1
+        # Rebase task branch onto base branch (brings task commits up to date)
+        $rebaseOutput = git -C $worktreePath rebase $baseBranch 2>&1
         if ($LASTEXITCODE -ne 0) {
             git -C $worktreePath rebase --abort 2>$null
             $conflictLines = @($rebaseOutput | ForEach-Object { "$_" } | Where-Object { $_ -match 'CONFLICT|error|fatal' })
@@ -311,7 +320,7 @@ function Complete-TaskWorktree {
         return @{
             success        = $true
             merge_commit   = $mergeCommit
-            message        = "Squash-merged to main and cleaned up"
+            message        = "Squash-merged to $baseBranch and cleaned up"
             conflict_files = @()
         }
     } catch {
