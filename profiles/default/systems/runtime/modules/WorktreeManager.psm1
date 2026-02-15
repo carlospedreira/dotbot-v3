@@ -277,6 +277,14 @@ function Complete-TaskWorktree {
             if ($LASTEXITCODE -ne 0) { throw "Failed to checkout $baseBranch branch" }
         }
 
+        # Auto-commit any uncommitted work left by Claude CLI
+        # Exclude junction targets that point to shared main-repo directories
+        $worktreeStatus = git -C $worktreePath status --porcelain 2>$null
+        if ($worktreeStatus) {
+            git -C $worktreePath add -A -- ':!.bot/workspace/tasks' ':!.bot/.control' 2>$null
+            git -C $worktreePath commit --quiet -m "chore: auto-commit uncommitted work" 2>$null
+        }
+
         # Rebase task branch onto base branch (brings task commits up to date)
         $rebaseOutput = git -C $worktreePath rebase $baseBranch 2>&1
         if ($LASTEXITCODE -ne 0) {

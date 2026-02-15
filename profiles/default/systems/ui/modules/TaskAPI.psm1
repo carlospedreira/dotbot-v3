@@ -21,9 +21,10 @@ function Initialize-TaskAPI {
     $script:Config.BotRoot = $BotRoot
     $script:Config.ProjectRoot = $ProjectRoot
 
-    # Dot-source MCP tools needed by this module
-    . "$BotRoot\systems\mcp\tools\task-answer-question\script.ps1"
-    . "$BotRoot\systems\mcp\tools\task-approve-split\script.ps1"
+    # Save MCP tool script paths for on-demand dot-sourcing at call sites
+    # (dot-sourcing inside a function scopes the definitions to that function only)
+    $script:TaskAnswerQuestionScript = "$BotRoot\systems\mcp\tools\task-answer-question\script.ps1"
+    $script:TaskApproveSplitScript = "$BotRoot\systems\mcp\tools\task-approve-split\script.ps1"
 }
 
 function Get-TaskPlan {
@@ -166,6 +167,7 @@ function Submit-TaskAnswer {
         $Answer = $CustomText
     }
 
+    . $script:TaskAnswerQuestionScript
     $result = Invoke-TaskAnswerQuestion -Arguments @{
         task_id = $TaskId
         answer = $Answer
@@ -181,6 +183,7 @@ function Submit-SplitApproval {
         [Parameter(Mandatory)] [bool]$Approved
     )
 
+    . $script:TaskApproveSplitScript
     $result = Invoke-TaskApproveSplit -Arguments @{
         task_id = $TaskId
         approved = $Approved
