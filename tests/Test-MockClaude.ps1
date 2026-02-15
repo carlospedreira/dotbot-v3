@@ -42,10 +42,12 @@ $originalPath = $env:PATH
 $testsDir = $PSScriptRoot
 $env:PATH = "$testsDir$([System.IO.Path]::PathSeparator)$env:PATH"
 
-# Ensure unix shim is executable
+# Ensure unix shim is executable and has LF line endings (macOS rejects CRLF shebangs)
 if (-not $IsWindows) {
     $unixShim = Join-Path $testsDir "claude"
     if (Test-Path $unixShim) {
+        $content = [System.IO.File]::ReadAllText($unixShim) -replace "`r`n", "`n"
+        [System.IO.File]::WriteAllText($unixShim, $content)
         & chmod +x $unixShim 2>$null
     }
 }

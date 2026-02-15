@@ -1,0 +1,2 @@
+# Force LF for unix shell shims (macOS rejects CRLF shebangs)
+tests/claude text eol=lf
