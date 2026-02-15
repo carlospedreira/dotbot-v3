@@ -175,7 +175,19 @@ function groupListItems(html, placeholderType, listTag) {
             result.push(convertedLine);
         } else {
             if (inList) {
-                // Close the list
+                // Look ahead past blank lines to see if another list item follows
+                let nextNonEmpty = null;
+                for (let j = i + 1; j < lines.length; j++) {
+                    if (lines[j].trim() !== '') {
+                        nextNonEmpty = lines[j];
+                        break;
+                    }
+                }
+                if (nextNonEmpty && nextNonEmpty.includes(startMarker) && nextNonEmpty.includes(endMarker)) {
+                    // Another list item follows — keep the list open, skip the blank line
+                    continue;
+                }
+                // Non-list content follows — close the list
                 result.push(`</${listTag}>`);
                 inList = false;
             }
