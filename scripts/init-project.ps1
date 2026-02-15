@@ -343,6 +343,22 @@ gitleaks git --pre-commit --staged
 }
 
 # ---------------------------------------------------------------------------
+# Create initial commit so worktrees can branch from it later
+# ---------------------------------------------------------------------------
+$hasCommits = git -C $ProjectDir rev-parse HEAD 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  Creating initial commit..." -ForegroundColor DarkGray
+    git -C $ProjectDir add .bot/ 2>$null
+    if (Test-Path (Join-Path $ProjectDir ".mcp.json")) {
+        git -C $ProjectDir add .mcp.json 2>$null
+    }
+    git -C $ProjectDir commit --quiet -m "chore: initialize dotbot" 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Success "Initial commit created"
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Show completion message
 # ---------------------------------------------------------------------------
 Write-Host ""

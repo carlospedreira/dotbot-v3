@@ -535,8 +535,9 @@ Work on this task autonomously. When complete, ensure you call task_mark_done vi
                 $prompt = $prompt -replace '\{\{TASK_PRIORITY\}\}', $task.priority
                 $prompt = $prompt -replace '\{\{TASK_EFFORT\}\}', $task.effort
                 $prompt = $prompt -replace '\{\{TASK_DESCRIPTION\}\}', $task.description
-                $needsInterview = if ("$($task.needs_interview)" -eq 'true') { 'true' } else { 'false' }
-                $prompt = $prompt -replace '\{\{NEEDS_INTERVIEW\}\}', $needsInterview
+                $niValue = if ("$($task.needs_interview)" -eq 'true') { 'true' } else { 'false' }
+                Write-Status "needs_interview raw=$($task.needs_interview) resolved=$niValue" -Type Info
+                $prompt = $prompt -replace '\{\{NEEDS_INTERVIEW\}\}', $niValue
                 $acceptanceCriteria = if ($task.acceptance_criteria) { ($task.acceptance_criteria | ForEach-Object { "- $_" }) -join "`n" } else { "No specific acceptance criteria defined." }
                 $prompt = $prompt -replace '\{\{ACCEPTANCE_CRITERIA\}\}', $acceptanceCriteria
                 $steps = if ($task.steps) { ($task.steps | ForEach-Object { "- $_" }) -join "`n" } else { "No specific steps defined." }
@@ -1135,6 +1136,16 @@ IMPORTANT: The mission.md file MUST begin with an "Executive Summary" section (#
 
         Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Phase 1 complete — product documents created"
 
+        # Checkpoint: commit product documents
+        Write-Status "Committing phase 1 artifacts..." -Type Info
+        git -C $projectRoot add .bot/workspace/product/ 2>$null
+        git -C $projectRoot commit --quiet -m "chore(kickstart): phase 1 — product documents" 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Phase 1 checkpoint committed"
+        } else {
+            Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Phase 1 checkpoint: nothing to commit"
+        }
+
         # ===== Phase 2a: Generate task groups =====
         $processData.heartbeat_status = "Phase 2a: Planning task groups"
         Write-ProcessFile -Id $procId -Data $processData
@@ -1344,6 +1355,16 @@ Do NOT read or follow 03-plan-roadmap.md or 04-new-tasks.md — those are for ot
             Write-Status "Warning: could not generate roadmap overview: $($_.Exception.Message)" -Type Warning
         }
 
+        # Checkpoint: commit task groups + roadmap
+        Write-Status "Committing phase 2a artifacts..." -Type Info
+        git -C $projectRoot add .bot/workspace/product/ 2>$null
+        git -C $projectRoot commit --quiet -m "chore(kickstart): phase 2a — task groups and roadmap" 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Phase 2a checkpoint committed"
+        } else {
+            Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Phase 2a checkpoint: nothing to commit"
+        }
+
         # ===== Phase 2b: Expand task groups =====
         $processData.heartbeat_status = "Phase 2b: Expanding task groups into tasks"
         Write-ProcessFile -Id $procId -Data $processData
@@ -1354,6 +1375,16 @@ Do NOT read or follow 03-plan-roadmap.md or 04-new-tasks.md — those are for ot
         & $expandScript -BotRoot $botRoot -Model $claudeModelName -ProcessId $procId
 
         Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Phase 2b complete — all task groups expanded"
+
+        # Checkpoint: commit expanded tasks
+        Write-Status "Committing phase 2b artifacts..." -Type Info
+        git -C $projectRoot add .bot/workspace/tasks/ 2>$null
+        git -C $projectRoot commit --quiet -m "chore(kickstart): phase 2b — expanded task roadmap" 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Phase 2b checkpoint committed"
+        } else {
+            Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Phase 2b checkpoint: nothing to commit"
+        }
 
         # Done
         $processData.status = 'completed'
