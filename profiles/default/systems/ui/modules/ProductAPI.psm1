@@ -187,6 +187,35 @@ function Start-ProductKickstart {
     }
 }
 
+function Start-ProductAnalyse {
+    param(
+        [string]$UserPrompt = "",
+        [ValidateSet('Opus', 'Sonnet', 'Haiku')]
+        [string]$Model = "Sonnet"
+    )
+    $botRoot = $script:Config.BotRoot
+
+    # Launch analyse as a tracked process via launch-process.ps1
+    $launcherPath = Join-Path $botRoot "systems\runtime\launch-process.ps1"
+    $launchArgs = @(
+        "-File", "`"$launcherPath`"",
+        "-Type", "analyse",
+        "-Model", $Model,
+        "-Description", "`"Analyse: existing project`""
+    )
+    if ($UserPrompt) {
+        $escapedPrompt = $UserPrompt -replace '"', '\"'
+        $launchArgs += @("-Prompt", "`"$escapedPrompt`"")
+    }
+    Start-Process pwsh -ArgumentList $launchArgs -WindowStyle Normal | Out-Null
+    Write-Status "Product analyse launched as tracked process" -Type Info
+
+    return @{
+        success = $true
+        message = "Analyse initiated. Product documents will be generated from your existing codebase."
+    }
+}
+
 function Start-RoadmapPlanning {
     $botRoot = $script:Config.BotRoot
 
@@ -226,5 +255,6 @@ Export-ModuleMember -Function @(
     'Get-ProductList',
     'Get-ProductDocument',
     'Start-ProductKickstart',
+    'Start-ProductAnalyse',
     'Start-RoadmapPlanning'
 )

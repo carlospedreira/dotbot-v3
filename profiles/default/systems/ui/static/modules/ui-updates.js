@@ -617,6 +617,7 @@ async function initProjectName() {
             projectName = info.project_name || 'unknown';
             projectRoot = info.full_path || 'unknown';
             executiveSummary = info.executive_summary || null;
+            hasExistingCode = info.has_existing_code || false;
         }
     } catch (error) {
         console.warn('Could not fetch project info:', error);

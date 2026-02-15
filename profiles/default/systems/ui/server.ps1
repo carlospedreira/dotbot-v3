@@ -255,11 +255,22 @@ try {
                         }
                     }
 
+                    # Detect existing code via git history
+                    $hasExistingCode = $false
+                    try {
+                        $gitLog = git -C $projectRoot log --oneline 2>$null
+                        if ($gitLog) {
+                            $commitCount = @($gitLog).Count
+                            $hasExistingCode = $commitCount -gt 1
+                        }
+                    } catch {}
+
                     $content = @{
                         project_name = $projectName
                         project_root = $projectRoot
                         full_path = $projectRoot
                         executive_summary = $executiveSummary
+                        has_existing_code = $hasExistingCode
                     } | ConvertTo-Json -Compress
                     break
                 }
@@ -574,6 +585,28 @@ try {
                     break
                 }
 
+                "/api/product/analyse" {
+                    if ($method -eq "POST") {
+                        $contentType = "application/json; charset=utf-8"
+                        try {
+                            $reader = New-Object System.IO.StreamReader($request.InputStream)
+                            $body = $reader.ReadToEnd() | ConvertFrom-Json
+                            $reader.Close()
+
+                            $result = Start-ProductAnalyse -UserPrompt $body.prompt -Model $(if ($body.model) { $body.model } else { "Sonnet" })
+                            if ($result._statusCode) { $statusCode = $result._statusCode; $result.Remove('_statusCode') }
+                            $content = $result | ConvertTo-Json -Compress
+                        } catch {
+                            $statusCode = 500
+                            $content = @{ success = $false; error = "Failed to analyse project: $($_.Exception.Message)" } | ConvertTo-Json -Compress
+                        }
+                    } else {
+                        $statusCode = 405
+                        $content = "Method not allowed"
+                    }
+                    break
+                }
+
                 "/api/product/plan-roadmap" {
                     $contentType = "application/json; charset=utf-8"
                     if ($method -eq "POST") {
@@ -592,7 +625,7 @@ try {
                     break
                 }
 
-                { $_ -like "/api/product/*" -and $_ -ne "/api/product/list" } {
+                { $_ -like "/api/product/*" -and $_ -ne "/api/product/list" -and $_ -ne "/api/product/analyse" } {
                     $contentType = "application/json; charset=utf-8"
                     $docName = $url -replace "^/api/product/", ""
                     $result = Get-ProductDocument -Name $docName

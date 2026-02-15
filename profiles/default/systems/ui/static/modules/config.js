@@ -23,6 +23,7 @@ let sessionTimerSessionId = null;   // Track session ID to detect new sessions
 let projectName = 'unknown';
 let projectRoot = 'unknown';
 let executiveSummary = null;
+let hasExistingCode = false;
 let materialIcons = null;
 let activityScope = null;
 let activityPosition = 0;  // Start from beginning on page load

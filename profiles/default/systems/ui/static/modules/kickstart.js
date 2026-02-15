@@ -6,6 +6,7 @@
 // State
 let isNewProject = false;
 let kickstartInProgress = false;
+let analyseInProgress = false;
 let kickstartFiles = [];       // { name, size, content (base64) }
 let kickstartPolling = null;   // interval ID for doc appearance detection
 let roadmapPolling = null;     // interval ID for task creation detection
@@ -53,7 +54,7 @@ async function initKickstart() {
         updateExecutiveSummary();
     }
 
-    // Bind modal handlers
+    // Bind kickstart modal handlers
     const modal = document.getElementById('kickstart-modal');
     const closeBtn = document.getElementById('kickstart-modal-close');
     const cancelBtn = document.getElementById('kickstart-cancel');
@@ -77,6 +78,28 @@ async function initKickstart() {
         if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
             e.preventDefault();
             submitKickstart();
+        }
+    });
+
+    // Bind analyse modal handlers
+    const analyseModal = document.getElementById('analyse-modal');
+    const analyseCloseBtn = document.getElementById('analyse-modal-close');
+    const analyseCancelBtn = document.getElementById('analyse-cancel');
+    const analyseSubmitBtn = document.getElementById('analyse-submit');
+    const analyseTextarea = document.getElementById('analyse-prompt');
+
+    analyseCloseBtn?.addEventListener('click', closeAnalyseModal);
+    analyseCancelBtn?.addEventListener('click', closeAnalyseModal);
+    analyseModal?.addEventListener('click', (e) => {
+        if (e.target === analyseModal) closeAnalyseModal();
+    });
+
+    analyseSubmitBtn?.addEventListener('click', submitAnalyse);
+
+    analyseTextarea?.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+            e.preventDefault();
+            submitAnalyse();
         }
     });
 
@@ -114,31 +137,48 @@ async function initKickstart() {
 
 /**
  * Render kickstart CTA into a container element
+ * Shows "KICKSTART PROJECT" for greenfield or "ANALYSE PROJECT" for existing code
  * @param {HTMLElement} container - Container to render into
  */
 function renderKickstartCTA(container) {
     if (kickstartInProgress) {
+        const label = hasExistingCode ? 'Analyse In Progress' : 'Kickstart In Progress';
+        const desc = hasExistingCode
+            ? 'Scanning your codebase and creating product documents. Check the Processes tab for details.'
+            : 'Creating product documents, task groups, and roadmap. Check the Processes tab for details.';
         container.innerHTML = `
             <div class="kickstart-cta in-progress">
                 <div class="kickstart-glyph">◈</div>
-                <div class="kickstart-title">Kickstart In Progress</div>
-                <div class="kickstart-description">
-                    Creating product documents, task groups, and roadmap. Check the Processes tab for details.
-                </div>
+                <div class="kickstart-title">${label}</div>
+                <div class="kickstart-description">${desc}</div>
             </div>
         `;
         return;
     }
-    container.innerHTML = `
-        <div class="kickstart-cta">
-            <div class="kickstart-glyph">◈</div>
-            <div class="kickstart-title">New Project</div>
-            <div class="kickstart-description">
-                Describe your project and let Claude create your foundational product documents — mission, tech stack, and entity model.
+
+    if (hasExistingCode) {
+        container.innerHTML = `
+            <div class="kickstart-cta">
+                <div class="kickstart-glyph">◈</div>
+                <div class="kickstart-title">Existing Project</div>
+                <div class="kickstart-description">
+                    Let Claude scan your codebase and generate foundational product documents — mission, tech stack, and entity model.
+                </div>
+                <button class="kickstart-btn" onclick="openAnalyseModal()">ANALYSE PROJECT</button>
             </div>
-            <button class="kickstart-btn" onclick="openKickstartModal()">KICKSTART PROJECT</button>
-        </div>
-    `;
+        `;
+    } else {
+        container.innerHTML = `
+            <div class="kickstart-cta">
+                <div class="kickstart-glyph">◈</div>
+                <div class="kickstart-title">New Project</div>
+                <div class="kickstart-description">
+                    Describe your project and let Claude create your foundational product documents — mission, tech stack, and entity model.
+                </div>
+                <button class="kickstart-btn" onclick="openKickstartModal()">KICKSTART PROJECT</button>
+            </div>
+        `;
+    }
 }
 
 /**
@@ -373,16 +413,111 @@ function startKickstartPolling() {
                     initProjectName();
                 }
 
-                showToast('Product documents created! Now planning roadmap...', 'success');
+                // Analyse only creates product docs (no roadmap/tasks)
+                if (analyseInProgress) {
+                    analyseInProgress = false;
+                    showToast('Product documents created from your codebase!', 'success');
+                } else {
+                    showToast('Product documents created! Now planning roadmap...', 'success');
 
-                // Roadmap planning is chained server-side in the same background job.
-                // Start polling for tasks to appear.
-                startRoadmapPolling();
+                    // Roadmap planning is chained server-side in the same background job.
+                    // Start polling for tasks to appear.
+                    startRoadmapPolling();
+                }
             }
         } catch (error) {
             // Silently continue polling
         }
     }, 5000);
+}
+
+/**
+ * Open the analyse modal
+ */
+function openAnalyseModal() {
+    const modal = document.getElementById('analyse-modal');
+    const textarea = document.getElementById('analyse-prompt');
+
+    if (modal) {
+        modal.classList.add('visible');
+        setTimeout(() => textarea?.focus(), 100);
+    }
+}
+
+/**
+ * Close the analyse modal and reset form
+ */
+function closeAnalyseModal() {
+    const modal = document.getElementById('analyse-modal');
+    const textarea = document.getElementById('analyse-prompt');
+    const submitBtn = document.getElementById('analyse-submit');
+
+    if (modal) {
+        modal.classList.remove('visible');
+        if (textarea) textarea.value = '';
+        if (submitBtn) {
+            submitBtn.classList.remove('loading');
+            submitBtn.disabled = false;
+        }
+    }
+}
+
+/**
+ * Submit the analyse request to the backend
+ */
+async function submitAnalyse() {
+    const textarea = document.getElementById('analyse-prompt');
+    const modelSelect = document.getElementById('analyse-model');
+    const submitBtn = document.getElementById('analyse-submit');
+
+    const prompt = textarea?.value?.trim() || '';
+    const model = modelSelect?.value || 'Sonnet';
+
+    // Set loading state
+    if (submitBtn) {
+        submitBtn.classList.add('loading');
+        submitBtn.disabled = true;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/api/product/analyse`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt, model })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            closeAnalyseModal();
+            kickstartInProgress = true;
+            analyseInProgress = true;
+
+            // Re-render CTAs to show in-progress state
+            if (typeof updateExecutiveSummary === 'function') updateExecutiveSummary();
+            const navContainer = document.getElementById('product-file-nav');
+            if (navContainer) {
+                delete navContainer.dataset.loaded;
+                if (typeof updateProductFileNav === 'function') updateProductFileNav();
+            }
+
+            showToast('Analyse initiated! Claude is scanning your codebase...', 'success', 8000);
+            startKickstartPolling();
+        } else {
+            showToast('Failed to analyse: ' + (result.error || 'Unknown error'), 'error');
+            if (submitBtn) {
+                submitBtn.classList.remove('loading');
+                submitBtn.disabled = false;
+            }
+        }
+    } catch (error) {
+        console.error('Error starting analyse:', error);
+        showToast('Error starting analyse: ' + error.message, 'error');
+        if (submitBtn) {
+            submitBtn.classList.remove('loading');
+            submitBtn.disabled = false;
+        }
+    }
 }
 
 /**

@@ -98,20 +98,33 @@ async function updateProductFileNav() {
 
         if (docs.length === 0) {
             if (typeof kickstartInProgress !== 'undefined' && kickstartInProgress) {
+                const desc = (typeof analyseInProgress !== 'undefined' && analyseInProgress)
+                    ? 'Analysing codebase — creating product documents...'
+                    : 'Kickstart in progress — creating product documents...';
                 container.innerHTML = `
                     <div class="kickstart-sidebar-cta in-progress">
                         <div class="kickstart-glyph">◈</div>
-                        <div class="kickstart-description">Kickstart in progress — creating product documents...</div>
+                        <div class="kickstart-description">${desc}</div>
                     </div>
                 `;
             } else if (typeof isNewProject !== 'undefined' && isNewProject) {
-                container.innerHTML = `
-                    <div class="kickstart-sidebar-cta">
-                        <div class="kickstart-glyph">◈</div>
-                        <div class="kickstart-description">No product docs yet. Kickstart your project to create them.</div>
-                        <button class="kickstart-btn" onclick="openKickstartModal()">KICKSTART</button>
-                    </div>
-                `;
+                if (typeof hasExistingCode !== 'undefined' && hasExistingCode) {
+                    container.innerHTML = `
+                        <div class="kickstart-sidebar-cta">
+                            <div class="kickstart-glyph">◈</div>
+                            <div class="kickstart-description">Existing code detected. Analyse your project to create product docs.</div>
+                            <button class="kickstart-btn" onclick="openAnalyseModal()">ANALYSE</button>
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = `
+                        <div class="kickstart-sidebar-cta">
+                            <div class="kickstart-glyph">◈</div>
+                            <div class="kickstart-description">No product docs yet. Kickstart your project to create them.</div>
+                            <button class="kickstart-btn" onclick="openKickstartModal()">KICKSTART</button>
+                        </div>
+                    `;
+                }
             } else {
                 container.innerHTML = '<div class="empty-state">No product docs</div>';
             }
