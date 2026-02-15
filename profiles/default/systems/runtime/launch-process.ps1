@@ -535,8 +535,7 @@ Work on this task autonomously. When complete, ensure you call task_mark_done vi
                 $prompt = $prompt -replace '\{\{TASK_PRIORITY\}\}', $task.priority
                 $prompt = $prompt -replace '\{\{TASK_EFFORT\}\}', $task.effort
                 $prompt = $prompt -replace '\{\{TASK_DESCRIPTION\}\}', $task.description
-                $rawNi = $task.needs_interview
-                $needsInterview = if ($rawNi -eq $true -or $rawNi -eq 'true') { 'true' } else { 'false' }
+                $needsInterview = if ("$($task.needs_interview)" -eq 'true') { 'true' } else { 'false' }
                 $prompt = $prompt -replace '\{\{NEEDS_INTERVIEW\}\}', $needsInterview
                 $acceptanceCriteria = if ($task.acceptance_criteria) { ($task.acceptance_criteria | ForEach-Object { "- $_" }) -join "`n" } else { "No specific acceptance criteria defined." }
                 $prompt = $prompt -replace '\{\{ACCEPTANCE_CRITERIA\}\}', $acceptanceCriteria

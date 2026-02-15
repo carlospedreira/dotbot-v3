@@ -35,9 +35,18 @@ $script:NoiseDirectories = @(
 
 function Get-BaseBranch {
     param([string]$ProjectRoot)
+    # Try current HEAD branch
     $branch = git -C $ProjectRoot symbolic-ref --short HEAD 2>$null
-    if ($LASTEXITCODE -ne 0 -or -not $branch) { $branch = 'main' }
-    return $branch
+    if ($LASTEXITCODE -eq 0 -and $branch) {
+        git -C $ProjectRoot rev-parse --verify $branch 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) { return $branch }
+    }
+    # Fallback: try common defaults
+    foreach ($candidate in @('main', 'master')) {
+        git -C $ProjectRoot rev-parse --verify $candidate 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) { return $candidate }
+    }
+    return $null
 }
 
 function Initialize-WorktreeMap {
@@ -161,6 +170,9 @@ function New-TaskWorktree {
     try {
         # Create branch from the repo's current branch and check it out in the worktree
         $baseBranch = Get-BaseBranch -ProjectRoot $ProjectRoot
+        if (-not $baseBranch) {
+            throw "Cannot create worktree: repository has no commits. Make an initial commit first."
+        }
         $output = git -C $ProjectRoot worktree add -b $branchName $worktreePath $baseBranch 2>&1
         if ($LASTEXITCODE -ne 0) {
             # Branch may already exist from an interrupted run — try without -b
