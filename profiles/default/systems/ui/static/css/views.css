@@ -795,6 +795,39 @@
     fill: var(--bg-black-overlay) !important;
 }
 
+/* ER diagram specific overrides */
+.mermaid-rendered .entityBox {
+    fill: var(--bg-screen) !important;
+    stroke: var(--color-secondary) !important;
+}
+
+.mermaid-rendered .attributeBoxOdd,
+.mermaid-rendered .attributeBoxEven {
+    fill: var(--bg-screen) !important;
+    stroke: var(--color-secondary) !important;
+}
+
+.mermaid-rendered .relationshipLabelBox {
+    fill: var(--bg-screen) !important;
+}
+
+.mermaid-rendered .relationshipLine {
+    stroke: var(--color-primary) !important;
+}
+
+.mermaid-rendered .entityLabel {
+    fill: var(--color-primary-dim) !important;
+}
+
+.mermaid-rendered .entityTitleText {
+    fill: var(--color-primary) !important;
+}
+
+/* Fix hardcoded white fills on ER relationship markers */
+.mermaid-rendered marker circle {
+    fill: var(--bg-screen) !important;
+}
+
 .mermaid-fallback {
     padding: 14px 16px;
     overflow-x: auto;

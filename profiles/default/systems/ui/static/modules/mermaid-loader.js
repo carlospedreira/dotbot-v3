@@ -112,6 +112,8 @@ function initMermaidConfig() {
             entityBorder: primaryColor,
             entityBkg: bgColor,
             entityTextColor: textColor,
+            attributeBackgroundColorOdd: bgColor,
+            attributeBackgroundColorEven: bgColor,
             relationColor: lineColor,
             relationLabelBackground: bgColor,
             relationLabelColor: textColor,
