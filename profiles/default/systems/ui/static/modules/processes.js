@@ -8,32 +8,13 @@ let processesData = [];
 let processPollingTimer = null;
 let expandedProcessId = null;
 let processOutputPositions = {};  // Track output position per process
+let processOutputCache = {};      // Cache events per process to avoid flash on re-render
 
 /**
  * Initialize the Processes tab
  */
 function initProcesses() {
-    // Launch bar event listeners
-    const launchBtn = document.getElementById('process-launch-btn');
-    if (launchBtn) {
-        launchBtn.addEventListener('click', handleProcessLaunch);
-    }
-
-    // Type selector changes available options
-    const typeSelect = document.getElementById('process-type-select');
-    if (typeSelect) {
-        typeSelect.addEventListener('change', updateLaunchBarOptions);
-    }
-
-    // Quick launch buttons in sidebar
-    const quickAnalysis = document.getElementById('quick-launch-analysis');
-    if (quickAnalysis) {
-        quickAnalysis.addEventListener('click', () => quickLaunch('analysis'));
-    }
-    const quickExecution = document.getElementById('quick-launch-execution');
-    if (quickExecution) {
-        quickExecution.addEventListener('click', () => quickLaunch('execution'));
-    }
+    // No-op — process list is rendered via polling
 }
 
 /**
@@ -65,6 +46,16 @@ async function pollProcesses() {
         if (!response.ok) return;
         const data = await response.json();
         processesData = data.processes || [];
+
+        // Prune cache entries for processes no longer in the list
+        const activeIds = new Set(processesData.map(p => p.id));
+        for (const id in processOutputCache) {
+            if (!activeIds.has(id)) {
+                delete processOutputCache[id];
+                delete processOutputPositions[id];
+            }
+        }
+
         renderProcessList(processesData);
         updateProcessSidebar(processesData);
 
@@ -265,6 +256,15 @@ function renderProcessList(processes) {
     }
 
     container.innerHTML = html;
+
+    // Hydrate output from cache immediately to avoid "Loading output..." flash
+    if (expandedProcessId && processOutputCache[expandedProcessId]?.length) {
+        const outputEl = document.getElementById(`process-output-${expandedProcessId}`);
+        if (outputEl) {
+            outputEl.innerHTML = renderOutputHtml(processOutputCache[expandedProcessId]);
+            outputEl.scrollTop = outputEl.scrollHeight;
+        }
+    }
 }
 
 /**
@@ -275,15 +275,33 @@ function toggleProcessExpand(processId) {
         expandedProcessId = null;
     } else {
         expandedProcessId = processId;
-        // Reset output position for fresh load
-        processOutputPositions[processId] = 0;
     }
     renderProcessList(processesData);
 
-    // If expanded, load output immediately
+    // If expanded and no cache yet, fetch from scratch; otherwise poll for new events only
     if (expandedProcessId) {
+        if (!processOutputCache[expandedProcessId]?.length) {
+            processOutputPositions[processId] = 0;
+        }
         pollProcessOutput(expandedProcessId);
     }
+}
+
+/**
+ * Render event array to HTML string
+ */
+function renderOutputHtml(events) {
+    let html = '';
+    for (const evt of events) {
+        const ts = evt.timestamp ? new Date(evt.timestamp).toLocaleTimeString() : '';
+        const typeClass = evt.type === 'rate_limit' ? 'warning' : (evt.type === 'text' ? 'text' : 'tool');
+        html += `<div class="process-output-line ${typeClass}">`;
+        html += `  <span class="output-time">${ts}</span>`;
+        html += `  <span class="output-type">${escapeHtml(evt.type || '')}</span>`;
+        html += `  <span class="output-msg">${escapeHtml(evt.message || '')}</span>`;
+        html += `</div>`;
+    }
+    return html;
 }
 
 /**
@@ -304,79 +322,22 @@ async function pollProcessOutput(processId) {
         if (!outputEl) return;
 
         if (data.events && data.events.length > 0) {
-            let html = '';
-            for (const evt of data.events) {
-                const ts = evt.timestamp ? new Date(evt.timestamp).toLocaleTimeString() : '';
-                const typeClass = evt.type === 'rate_limit' ? 'warning' : (evt.type === 'text' ? 'text' : 'tool');
-                html += `<div class="process-output-line ${typeClass}">`;
-                html += `  <span class="output-time">${ts}</span>`;
-                html += `  <span class="output-type">${escapeHtml(evt.type || '')}</span>`;
-                html += `  <span class="output-msg">${escapeHtml(evt.message || '')}</span>`;
-                html += `</div>`;
-            }
-            outputEl.innerHTML = html;
-            // Auto-scroll to bottom
+            // Append new events to cache
+            if (!processOutputCache[processId]) processOutputCache[processId] = [];
+            processOutputCache[processId].push(...data.events);
+
+            // Clear empty-state / loading placeholder before appending
+            const placeholder = outputEl.querySelector('.loading-state, .empty-state');
+            if (placeholder) outputEl.innerHTML = '';
+
+            // Append only new events to the DOM
+            outputEl.insertAdjacentHTML('beforeend', renderOutputHtml(data.events));
             outputEl.scrollTop = outputEl.scrollHeight;
-        } else if (position === 0) {
+        } else if (position === 0 && !processOutputCache[processId]?.length) {
             outputEl.innerHTML = '<div class="empty-state">No output yet</div>';
         }
     } catch (error) {
         console.error('Process output poll error:', error);
-    }
-}
-
-/**
- * Launch a new process from the launch bar
- */
-async function handleProcessLaunch() {
-    const typeSelect = document.getElementById('process-type-select');
-    const continueCheck = document.getElementById('process-continue-check');
-    const modelSelect = document.getElementById('process-model-select');
-
-    const type = typeSelect?.value;
-    if (!type) return;
-
-    const body = { type };
-    if (continueCheck?.checked) body.continue = true;
-    if (modelSelect?.value) body.model = modelSelect.value;
-
-    // For prompt-based types, check for prompt input
-    const promptInput = document.getElementById('process-prompt-input');
-    if (promptInput && promptInput.value.trim()) {
-        body.prompt = promptInput.value.trim();
-    }
-
-    try {
-        const launchBtn = document.getElementById('process-launch-btn');
-        if (launchBtn) {
-            launchBtn.disabled = true;
-            launchBtn.textContent = 'Launching...';
-        }
-
-        const response = await fetch(`${API_BASE}/api/process/launch`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-
-        const data = await response.json();
-        if (data.success) {
-            showToast(`Process ${data.process_id} launched`, 'success');
-            // Clear prompt input
-            if (promptInput) promptInput.value = '';
-            // Refresh list immediately
-            pollProcesses();
-        } else {
-            showToast(`Launch failed: ${data.error || 'Unknown error'}`, 'error');
-        }
-    } catch (error) {
-        showToast(`Launch error: ${error.message}`, 'error');
-    } finally {
-        const launchBtn = document.getElementById('process-launch-btn');
-        if (launchBtn) {
-            launchBtn.disabled = false;
-            launchBtn.textContent = 'LAUNCH';
-        }
     }
 }
 
@@ -469,25 +430,6 @@ async function sendProcessWhisper(processId) {
     }
 }
 
-/**
- * Update launch bar options based on selected type
- */
-function updateLaunchBarOptions() {
-    const typeSelect = document.getElementById('process-type-select');
-    const continueGroup = document.getElementById('process-continue-group');
-    const promptGroup = document.getElementById('process-prompt-group');
-
-    const type = typeSelect?.value;
-    const isTaskBased = type === 'analysis' || type === 'execution';
-
-    if (continueGroup) {
-        continueGroup.style.display = isTaskBased ? '' : 'none';
-    }
-    if (promptGroup) {
-        promptGroup.style.display = isTaskBased ? 'none' : '';
-    }
-}
-
 // --- Helpers ---
 
 function isProcessCrashed(proc) {
@@ -537,28 +479,6 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
-}
-
-/**
- * Quick launch a process from sidebar buttons
- */
-async function quickLaunch(type) {
-    try {
-        const response = await fetch(`${API_BASE}/api/process/launch`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type, continue: true })
-        });
-        const data = await response.json();
-        if (data.success) {
-            showToast(`${type} process launched: ${data.process_id}`, 'success');
-            pollProcesses();
-        } else {
-            showToast(`Launch failed: ${data.error || 'Unknown error'}`, 'error');
-        }
-    } catch (error) {
-        showToast(`Launch error: ${error.message}`, 'error');
-    }
 }
 
 /**

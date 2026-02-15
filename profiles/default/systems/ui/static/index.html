@@ -319,17 +319,6 @@
                             </div>
                         </div>
                     </div>
-                    <div class="sidebar-section">
-                        <div class="sidebar-header">
-                            <span class="sidebar-title">◈ Quick Launch</span>
-                        </div>
-                        <div class="sidebar-content">
-                            <div style="display: flex; flex-direction: column; gap: 6px;">
-                                <button class="ctrl-btn primary" id="quick-launch-analysis" style="width: 100%; font-size: 10px;">Launch Analysis</button>
-                                <button class="ctrl-btn primary" id="quick-launch-execution" style="width: 100%; font-size: 10px;">Launch Execution</button>
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
                 <!-- Workflow Context: Dynamic Prompts Directories -->
@@ -589,41 +578,6 @@
 
                     <!-- Processes Tab -->
                     <div class="tab-pane" id="tab-processes">
-                        <!-- Launch Bar -->
-                        <div class="process-launch-bar">
-                            <div class="process-launch-group">
-                                <label>Type</label>
-                                <select id="process-type-select">
-                                    <option value="analysis">Analysis</option>
-                                    <option value="execution">Execution</option>
-                                    <option value="kickstart">Kickstart</option>
-                                    <option value="analyse">Analyse</option>
-                                    <option value="planning">Planning</option>
-                                    <option value="commit">Commit</option>
-                                    <option value="task-creation">Task Creation</option>
-                                </select>
-                            </div>
-                            <div class="process-launch-group" id="process-continue-group">
-                                <label>
-                                    <input type="checkbox" id="process-continue-check"> Continue
-                                </label>
-                            </div>
-                            <div class="process-launch-group">
-                                <label>Model</label>
-                                <select id="process-model-select">
-                                    <option value="">Default</option>
-                                    <option value="Opus">Opus</option>
-                                    <option value="Sonnet">Sonnet</option>
-                                    <option value="Haiku">Haiku</option>
-                                </select>
-                            </div>
-                            <div class="process-launch-group" id="process-prompt-group" style="display: none; flex: 1;">
-                                <label>Prompt</label>
-                                <input type="text" id="process-prompt-input" class="process-prompt-input" placeholder="Optional prompt context...">
-                            </div>
-                            <button class="ctrl-btn primary" id="process-launch-btn">LAUNCH</button>
-                        </div>
-
                         <!-- Process List -->
                         <div id="process-list">
                             <div class="empty-state">No processes</div>
