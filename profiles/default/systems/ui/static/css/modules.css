@@ -90,6 +90,24 @@
     box-shadow: 0 4px 16px var(--secondary-glow);
 }
 
+/* Kickstart in-progress state */
+.kickstart-cta.in-progress .kickstart-glyph,
+.kickstart-sidebar-cta.in-progress .kickstart-glyph {
+    color: var(--color-info);
+    text-shadow: 0 0 20px rgb(var(--color-info-rgb) / 0.5);
+    animation: kickstartWorking 1.5s ease-in-out infinite;
+}
+
+@keyframes kickstartWorking {
+    0%, 100% { opacity: 0.4; transform: scale(1) rotate(0deg); }
+    50% { opacity: 1; transform: scale(1.05) rotate(180deg); }
+}
+
+.kickstart-cta.in-progress .kickstart-title,
+.kickstart-sidebar-cta.in-progress .kickstart-description {
+    color: var(--color-info);
+}
+
 /* Sidebar kickstart CTA (smaller) */
 .kickstart-sidebar-cta {
     display: flex;

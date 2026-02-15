@@ -97,7 +97,14 @@ async function updateProductFileNav() {
         const docs = data.docs || [];
 
         if (docs.length === 0) {
-            if (typeof isNewProject !== 'undefined' && isNewProject) {
+            if (typeof kickstartInProgress !== 'undefined' && kickstartInProgress) {
+                container.innerHTML = `
+                    <div class="kickstart-sidebar-cta in-progress">
+                        <div class="kickstart-glyph">◈</div>
+                        <div class="kickstart-description">Kickstart in progress — creating product documents...</div>
+                    </div>
+                `;
+            } else if (typeof isNewProject !== 'undefined' && isNewProject) {
                 container.innerHTML = `
                     <div class="kickstart-sidebar-cta">
                         <div class="kickstart-glyph">◈</div>

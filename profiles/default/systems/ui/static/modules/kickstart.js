@@ -5,6 +5,7 @@
 
 // State
 let isNewProject = false;
+let kickstartInProgress = false;
 let kickstartFiles = [];       // { name, size, content (base64) }
 let kickstartPolling = null;   // interval ID for doc appearance detection
 let roadmapPolling = null;     // interval ID for task creation detection
@@ -116,6 +117,18 @@ async function initKickstart() {
  * @param {HTMLElement} container - Container to render into
  */
 function renderKickstartCTA(container) {
+    if (kickstartInProgress) {
+        container.innerHTML = `
+            <div class="kickstart-cta in-progress">
+                <div class="kickstart-glyph">◈</div>
+                <div class="kickstart-title">Kickstart In Progress</div>
+                <div class="kickstart-description">
+                    Creating product documents, task groups, and roadmap. Check the Processes tab for details.
+                </div>
+            </div>
+        `;
+        return;
+    }
     container.innerHTML = `
         <div class="kickstart-cta">
             <div class="kickstart-glyph">◈</div>
@@ -284,6 +297,16 @@ async function submitKickstart() {
 
         if (result.success) {
             closeKickstartModal();
+            kickstartInProgress = true;
+
+            // Re-render CTAs to show in-progress state
+            if (typeof updateExecutiveSummary === 'function') updateExecutiveSummary();
+            const navContainer = document.getElementById('product-file-nav');
+            if (navContainer) {
+                delete navContainer.dataset.loaded;
+                if (typeof updateProductFileNav === 'function') updateProductFileNav();
+            }
+
             showToast('Kickstart initiated! Claude is creating your product documents...', 'success', 8000);
             startKickstartPolling();
         } else {
@@ -318,6 +341,7 @@ function startKickstartPolling() {
         if (attempts > maxAttempts) {
             clearInterval(kickstartPolling);
             kickstartPolling = null;
+            kickstartInProgress = false;
             return;
         }
 
@@ -333,6 +357,7 @@ function startKickstartPolling() {
                 clearInterval(kickstartPolling);
                 kickstartPolling = null;
                 isNewProject = false;
+                kickstartInProgress = false;
 
                 // Clear sidebar loaded flag so it re-fetches
                 const navContainer = document.getElementById('product-file-nav');

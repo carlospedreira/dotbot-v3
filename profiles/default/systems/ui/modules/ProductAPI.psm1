@@ -168,143 +168,22 @@ function Start-ProductKickstart {
         $savedFiles += $filePath
     }
 
-    # Read workflow content
-    $workflowPath = Join-Path $botRoot "prompts\workflows\01-plan-product.md"
-    $workflowContent = if (Test-Path $workflowPath) {
-        Get-Content -Path $workflowPath -Raw
-    } else {
-        "Create mission.md, tech-stack.md, and entity-model.md product documents."
-    }
-
-    # Build file references for the prompt
-    $fileRefs = ""
-    if ($savedFiles.Count -gt 0) {
-        $fileRefs = "`n`nBriefing files have been saved to the briefing/ directory. Read and use these for context:`n"
-        foreach ($sf in $savedFiles) {
-            $fileRefs += "- $sf`n"
-        }
-    }
-
-    # Compose system prompt
-    $systemPrompt = @"
-You are a product planning assistant for the dotbot autonomous development system.
-
-Your task is to create the foundational product documents for a new project based on the user's description.
-
-Follow this workflow for guidance on document structure:
-$workflowContent
-
-User's project description:
-$UserPrompt
-$fileRefs
-
-Instructions:
-1. Read any briefing files listed above and any existing project files (README.md, etc.) for additional context
-2. Create these product documents directly by writing files to .bot/workspace/product/:
-   - mission.md - What the product is, core principles, goals. MUST start with a section titled "Executive Summary" as the first heading.
-   - tech-stack.md - Technologies, versions, infrastructure decisions
-   - entity-model.md - Data model, entities, relationships. Include a Mermaid.js erDiagram block showing entities and their relationships visually.
-3. Do NOT create tasks, ask questions, or use task management tools. Just create the documents directly.
-4. Write comprehensive, well-structured markdown documents based on what you know from the user's description and any attached files.
-5. Make reasonable inferences where details are missing - the user can refine later.
-
-IMPORTANT: The mission.md file MUST begin with an "Executive Summary" section (## Executive Summary) as the very first content after the title. This is required for the UI to detect that product planning is complete.
-"@
-
-    # Build roadmap prompt for phase 2 (chained after doc creation)
-    $roadmapPrompt = @"
-You are a roadmap planning assistant for dotbot.
-
-Instructions:
-1. Read the workflow file at .bot/prompts/workflows/03-plan-roadmap.md — this is your primary guide
-2. Read .bot/prompts/workflows/04-new-tasks.md for task schema reference
-3. Read ALL product docs in .bot/workspace/product/ (mission.md, tech-stack.md, entity-model.md, and any others present)
-4. Follow the workflow to generate a comprehensive task roadmap
-5. Create tasks via the task_create_bulk MCP tool (the dotbot MCP server provides this)
-6. Generate roadmap-overview.md and save it to .bot/workspace/product/roadmap-overview.md
-7. Do NOT ask interactive questions — work autonomously
-8. Do NOT create change requests — this is initial roadmap generation
-"@
-
-    # Run Claude CLI in background — Phase 1: create docs, Phase 2: plan roadmap
-    $claudeCliModule = Join-Path $botRoot "systems\runtime\ClaudeCLI\ClaudeCLI.psm1"
-
-    $scriptBlock = {
-        param($claudeModule, $kickstartPrompt, $roadmapPrompt, $botRoot)
-        $diagLog = Join-Path $botRoot ".control\kickstart-diag.log"
-
-        # Direct activity log writer (bypasses Write-ActivityLog's $PSScriptRoot issue in Start-Job)
-        function Write-Activity($type, $msg) {
-            $logPath = Join-Path $botRoot ".control\activity.jsonl"
-            $event = @{
-                timestamp = (Get-Date).ToUniversalTime().ToString("o")
-                type      = $type
-                message   = $msg
-                task_id   = $null
-                phase     = $null
-            } | ConvertTo-Json -Compress
-            $maxRetries = 3
-            for ($r = 0; $r -lt $maxRetries; $r++) {
-                try {
-                    $fs = [System.IO.FileStream]::new(
-                        $logPath,
-                        [System.IO.FileMode]::Append,
-                        [System.IO.FileAccess]::Write,
-                        [System.IO.FileShare]::ReadWrite
-                    )
-                    $sw = [System.IO.StreamWriter]::new($fs, [System.Text.Encoding]::UTF8)
-                    $sw.WriteLine($event)
-                    $sw.Close()
-                    $fs.Close()
-                    break
-                } catch {
-                    if ($r -lt ($maxRetries - 1)) {
-                        Start-Sleep -Milliseconds (50 * ($r + 1))
-                    }
-                }
-            }
-        }
-
-        try {
-            Set-Location (Split-Path -Parent $botRoot)
-            Import-Module $claudeModule -Force
-
-            # Phase 1: Create product documents
-            Write-Activity "init" "kickstart — creating product documents..."
-            "$(Get-Date -Format o) [PHASE1] Creating product docs..." | Add-Content -Path $diagLog
-            Invoke-ClaudeStream -Prompt $kickstartPrompt -Model Sonnet
-            "$(Get-Date -Format o) [PHASE1] Complete" | Add-Content -Path $diagLog
-
-            # Phase 2: If docs were created, plan roadmap
-            $productDir = Join-Path $botRoot "workspace\product"
-            $hasDocs = (Test-Path (Join-Path $productDir "mission.md")) -and
-                       (Test-Path (Join-Path $productDir "tech-stack.md")) -and
-                       (Test-Path (Join-Path $productDir "entity-model.md"))
-
-            if ($hasDocs) {
-                Write-Activity "text" "Product documents created. Starting roadmap planning..."
-                Write-Activity "init" "roadmap — reading workflows and generating tasks..."
-                "$(Get-Date -Format o) [PHASE2] Docs exist. Starting roadmap planning..." | Add-Content -Path $diagLog
-                Invoke-ClaudeStream -Prompt $roadmapPrompt -Model Sonnet
-                Write-Activity "text" "Roadmap complete! Tasks created."
-                "$(Get-Date -Format o) [PHASE2] Complete" | Add-Content -Path $diagLog
-            } else {
-                Write-Activity "text" "Product docs not found — roadmap skipped."
-                "$(Get-Date -Format o) [PHASE2] Skipped — product docs not found after phase 1" | Add-Content -Path $diagLog
-            }
-        } catch {
-            Write-Activity "error" "Kickstart error: $($_.Exception.Message)"
-            "$(Get-Date -Format o) [ERROR] $($_.Exception.Message)`n$($_.ScriptStackTrace)" | Add-Content -Path $diagLog
-        }
-    }
-
-    # Launch as tracked process (keep Start-Job for two-phase chaining)
-    Start-Job -ScriptBlock $scriptBlock -ArgumentList $claudeCliModule, $systemPrompt, $roadmapPrompt, $botRoot | Out-Null
-    Write-Status "Product kickstart initiated via Claude CLI (with roadmap chaining)" -Type Info
+    # Launch kickstart as a tracked process via launch-process.ps1
+    $launcherPath = Join-Path $botRoot "systems\runtime\launch-process.ps1"
+    $escapedPrompt = $UserPrompt -replace '"', '\"'
+    $launchArgs = @(
+        "-File", "`"$launcherPath`"",
+        "-Type", "kickstart",
+        "-Model", "Sonnet",
+        "-Prompt", "`"$escapedPrompt`"",
+        "-Description", "`"Kickstart: project setup`""
+    )
+    Start-Process pwsh -ArgumentList $launchArgs -WindowStyle Normal | Out-Null
+    Write-Status "Product kickstart launched as tracked process" -Type Info
 
     return @{
         success = $true
-        message = "Kickstart initiated. Claude will create product documents, then plan the roadmap."
+        message = "Kickstart initiated. Product documents, task groups, and task expansion will run in a tracked process."
     }
 }
 
