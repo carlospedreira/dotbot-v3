@@ -6,7 +6,7 @@
 .DESCRIPTION
     Copies the default .bot structure to the current project directory.
     Optionally installs a profile for tech-specific features.
-    Checks for required dependencies (warn-only).
+    Checks for required dependencies (git is required; others warn-only).
     Creates .mcp.json with dotbot, Context7, and Playwright MCP servers.
     Installs gitleaks pre-commit hook if gitleaks is available.
 
@@ -55,7 +55,7 @@ Write-Host "══════════════════════�
 Write-Host ""
 
 # ---------------------------------------------------------------------------
-# Dependency check (warn-only, never blocks)
+# Dependency check (git required; others warn-only)
 # ---------------------------------------------------------------------------
 Write-Host "  DEPENDENCY CHECK" -ForegroundColor Blue
 Write-Host "  ────────────────────────────────────────────" -ForegroundColor DarkGray
@@ -74,9 +74,9 @@ if ($PSVersionTable.PSVersion.Major -ge 7) {
 if (Get-Command git -ErrorAction SilentlyContinue) {
     Write-Success "Git"
 } else {
-    Write-DotbotWarning "Git is not installed"
+    Write-DotbotError "Git is required but not installed"
     Write-Host "    Download from: https://git-scm.com/downloads" -ForegroundColor Cyan
-    $depWarnings++
+    exit 1
 }
 
 if (Get-Command claude -ErrorAction SilentlyContinue) {
@@ -108,6 +108,14 @@ if ($depWarnings -gt 0) {
     Write-DotbotWarning "$depWarnings missing dependency/dependencies -- continuing anyway"
 }
 Write-Host ""
+
+# Ensure project is a git repository
+$gitDir = Join-Path $ProjectDir ".git"
+if (-not (Test-Path $gitDir)) {
+    Write-Status "No .git directory found -- initializing git repository"
+    & git init $ProjectDir
+    Write-Success "Initialized git repository"
+}
 
 # Check if default exists
 if (-not (Test-Path $DefaultDir)) {
@@ -308,13 +316,10 @@ if (Test-Path $mcpJsonPath) {
 # ---------------------------------------------------------------------------
 # Install gitleaks pre-commit hook
 # ---------------------------------------------------------------------------
-$gitDir = Join-Path $ProjectDir ".git"
 $hooksDir = Join-Path $gitDir "hooks"
 $preCommitPath = Join-Path $hooksDir "pre-commit"
 
-if (-not (Test-Path $gitDir)) {
-    Write-DotbotWarning "No .git directory found -- skipping gitleaks hook"
-} elseif (-not (Get-Command gitleaks -ErrorAction SilentlyContinue)) {
+if (-not (Get-Command gitleaks -ErrorAction SilentlyContinue)) {
     Write-DotbotWarning "gitleaks not installed -- skipping pre-commit hook"
 } elseif (Test-Path $preCommitPath) {
     Write-DotbotWarning "pre-commit hook already exists -- skipping"

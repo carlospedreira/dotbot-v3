@@ -24,10 +24,6 @@ function Initialize-StateBuilder {
     $script:Config.BotRoot = $BotRoot
     $script:Config.ControlDir = $ControlDir
     $script:Config.ProcessesDir = $ProcessesDir
-
-    # Dot-source MCP session tools
-    . "$BotRoot\systems\mcp\tools\session-get-state\script.ps1"
-    . "$BotRoot\systems\mcp\tools\session-get-stats\script.ps1"
 }
 
 function Get-BotState {
@@ -38,6 +34,10 @@ function Get-BotState {
     $botRoot = $script:Config.BotRoot
     $controlDir = $script:Config.ControlDir
     $processesDir = $script:Config.ProcessesDir
+
+    # Dot-source MCP session tools (must be in calling scope, not init scope)
+    . "$botRoot\systems\mcp\tools\session-get-state\script.ps1"
+    . "$botRoot\systems\mcp\tools\session-get-stats\script.ps1"
 
     # Check if we have a valid cache and no changes since last build
     $cacheMaxAge = 2  # seconds
