@@ -80,8 +80,10 @@ try {
             -Message "Resolved to: $resolvedPath (expected path containing 'tests')"
     }
 
-    # Run mock directly and check output
-    $mockOutput = & claude --model test --print --output-format stream-json -- "Hello test" 2>&1
+    # Run mock directly and check output (call mock-claude.ps1 directly for cross-platform reliability;
+    # shim resolution is already validated by the PATH tests above)
+    $mockScript = Join-Path $testsDir "mock-claude.ps1"
+    $mockOutput = & $mockScript --model test --print --output-format stream-json -- "Hello test" 2>&1
     $promptLog = Join-Path $mockLogDir "mock-claude-prompt.log"
     Assert-PathExists -Name "Mock logs prompt to file" -Path $promptLog
 

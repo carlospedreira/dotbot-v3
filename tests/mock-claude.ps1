@@ -44,19 +44,10 @@ foreach ($a in $args) {
 }
 $prompt = $prompt.Trim()
 
-# If no prompt from args, try stdin
-if (-not $prompt) {
-    try {
-        $stdinContent = @()
-        if ([Console]::In.Peek() -ge 0) {
-            while ($null -ne ($line = [Console]::In.ReadLine())) {
-                $stdinContent += $line
-            }
-        }
-        $prompt = ($stdinContent -join "`n").Trim()
-    } catch {
-        # stdin not available
-    }
+# Fallback: if -- was consumed by PowerShell's argument parser,
+# the prompt is the last non-flag argument
+if (-not $prompt -and $args.Count -gt 0) {
+    $prompt = "$($args[-1])"
 }
 
 # Log the received prompt
