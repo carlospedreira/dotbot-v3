@@ -9,28 +9,25 @@
  * @returns {string} Formatted HTML
  */
 function formatCellContent(text) {
-    // First escape HTML, then convert backticks to inline code
-    // We need to handle backticks before escaping
-    let result = '';
-    let i = 0;
-    while (i < text.length) {
-        if (text[i] === '`') {
-            // Find closing backtick
-            const end = text.indexOf('`', i + 1);
-            if (end !== -1) {
-                const code = text.substring(i + 1, end);
-                result += `<code class="inline">${escapeHtml(code)}</code>`;
-                i = end + 1;
-            } else {
-                result += escapeHtml(text[i]);
-                i++;
-            }
-        } else {
-            result += escapeHtml(text[i]);
-            i++;
-        }
-    }
-    return result;
+    // Extract code spans into placeholders, then escape, then apply bold/italic, then restore
+    const codePlaceholders = [];
+    let processed = text.replace(/`([^`]+)`/g, (_, code) => {
+        const idx = codePlaceholders.length;
+        codePlaceholders.push(`<code class="inline">${escapeHtml(code)}</code>`);
+        return `\x00CODE${idx}\x00`;
+    });
+
+    // Escape HTML on the non-code parts
+    processed = escapeHtml(processed);
+
+    // Bold (**text**) then italic (*text*) - non-greedy
+    processed = processed.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    processed = processed.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+    // Restore code placeholders
+    processed = processed.replace(/\x00CODE(\d+)\x00/g, (_, idx) => codePlaceholders[parseInt(idx)]);
+
+    return processed;
 }
 
 /**
@@ -74,7 +71,7 @@ function parseMarkdownTable(tableLines) {
     html += '<thead><tr>';
     headerCells.forEach((cell, i) => {
         const align = alignments[i] || 'left';
-        html += `<th style="text-align: ${align}">${escapeHtml(cell)}</th>`;
+        html += `<th style="text-align: ${align}">${formatCellContent(cell)}</th>`;
     });
     html += '</tr></thead>';
 
@@ -210,7 +207,9 @@ function parseFrontmatter(frontmatter) {
     const lines = frontmatter.split('\n').filter(line => line.trim());
     if (lines.length === 0) return '';
 
-    let html = '<div class="frontmatter"><div class="frontmatter-title">Metadata</div>';
+    let html = '<div class="frontmatter">';
+    html += '<div class="frontmatter-title" onclick="this.parentElement.classList.toggle(\'expanded\')" role="button" tabindex="0">Metadata <span class="frontmatter-toggle">&#9654;</span></div>';
+    html += '<table class="frontmatter-table">';
 
     for (const line of lines) {
         const colonIndex = line.indexOf(':');
@@ -218,18 +217,23 @@ function parseFrontmatter(frontmatter) {
             const key = line.substring(0, colonIndex).trim();
             let value = line.substring(colonIndex + 1).trim();
 
+            // Strip outer quotes from values
+            if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+                value = value.slice(1, -1);
+            }
+
             // Format arrays nicely
             if (value.startsWith('[') && value.endsWith(']')) {
-                const items = value.slice(1, -1).split(',').map(s => s.trim());
-                value = items.map(item => `<span class="frontmatter-tag">${escapeHtml(item)}</span>`).join(' ');
-                html += `<div class="frontmatter-field"><span class="frontmatter-key">${escapeHtml(key)}:</span> <span class="frontmatter-value">${value}</span></div>`;
+                const items = value.slice(1, -1).split(',').map(s => s.trim().replace(/^["']|["']$/g, ''));
+                const tagsHtml = items.map(item => `<span class="frontmatter-tag">${escapeHtml(item)}</span>`).join(' ');
+                html += `<tr><td class="frontmatter-key">${escapeHtml(key)}</td><td class="frontmatter-value">${tagsHtml}</td></tr>`;
             } else {
-                html += `<div class="frontmatter-field"><span class="frontmatter-key">${escapeHtml(key)}:</span> <span class="frontmatter-value">${escapeHtml(value)}</span></div>`;
+                html += `<tr><td class="frontmatter-key">${escapeHtml(key)}</td><td class="frontmatter-value">${escapeHtml(value)}</td></tr>`;
             }
         }
     }
 
-    html += '</div>';
+    html += '</table></div>';
     return html;
 }
 

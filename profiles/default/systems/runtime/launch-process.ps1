@@ -1281,7 +1281,6 @@ Do NOT read or follow 03-plan-roadmap.md or 04-new-tasks.md — those are for ot
                 # Sanitize name for Mermaid (remove special chars)
                 $safeName = $group.name -replace '[:#]', ''
 
-                [void]$roadmap.Add("    section $safeName")
                 [void]$roadmap.Add("    $safeName :$($group.id), $startStr, ${aiDays}d")
             }
 

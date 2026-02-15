@@ -156,7 +156,7 @@ function initMermaidConfig() {
             barHeight: 20,
             barGap: 4,
             topPadding: 50,
-            leftPadding: 75,
+            leftPadding: 175,
             gridLineStartPadding: 35,
             fontSize: 11,
             sectionFontSize: 11

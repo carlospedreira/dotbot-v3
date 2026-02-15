@@ -412,26 +412,72 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--color-secondary);
-    margin-bottom: 10px;
+    margin-bottom: 0;
     padding-bottom: 6px;
     border-bottom: 1px solid var(--secondary-15);
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
-.doc-viewer .frontmatter-field,
-.markdown-content .frontmatter-field {
-    margin: 6px 0;
+.doc-viewer .frontmatter-toggle,
+.markdown-content .frontmatter-toggle {
+    font-size: 8px;
+    transition: transform 0.2s ease;
+    display: inline-block;
+}
+
+.doc-viewer .frontmatter.expanded .frontmatter-toggle,
+.markdown-content .frontmatter.expanded .frontmatter-toggle {
+    transform: rotate(90deg);
+}
+
+.doc-viewer .frontmatter-table,
+.markdown-content .frontmatter-table {
+    display: none;
+    border: none !important;
+    background: transparent !important;
+    border-collapse: collapse;
     font-size: 11px;
+    width: auto;
+    margin-top: 8px;
+}
+
+.doc-viewer .frontmatter.expanded .frontmatter-table,
+.markdown-content .frontmatter.expanded .frontmatter-table {
+    display: table;
+}
+
+.doc-viewer .frontmatter-table tr,
+.markdown-content .frontmatter-table tr {
+    background: transparent !important;
+}
+
+.doc-viewer .frontmatter-table tr:hover,
+.markdown-content .frontmatter-table tr:hover {
+    background: transparent !important;
+}
+
+.doc-viewer .frontmatter-table td,
+.markdown-content .frontmatter-table td {
+    border: none !important;
+    padding: 3px 12px 3px 0;
+    vertical-align: top;
     line-height: 1.5;
 }
 
-.doc-viewer .frontmatter-key,
-.markdown-content .frontmatter-key {
+.doc-viewer .frontmatter-table .frontmatter-key,
+.markdown-content .frontmatter-table .frontmatter-key {
     color: var(--color-secondary);
     font-weight: 600;
+    white-space: nowrap;
+    width: 1%;
 }
 
-.doc-viewer .frontmatter-value,
-.markdown-content .frontmatter-value {
+.doc-viewer .frontmatter-table .frontmatter-value,
+.markdown-content .frontmatter-table .frontmatter-value {
     color: var(--color-primary-dim);
 }
 
