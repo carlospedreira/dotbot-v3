@@ -26,11 +26,11 @@ You are a task planning assistant. Your job is to create detailed, implementable
 
 ## Context from Prerequisite Groups
 
-The following tasks were created by groups that this group depends on. You may reference these task IDs as dependencies where technically justified (e.g., a task that genuinely cannot start until a specific prerequisite task is complete).
+The following tasks were created by groups that this group depends on. You MUST analyze these tasks and set `dependencies` on any task that cannot start without a specific prerequisite completing first.
 
 {{DEPENDENCY_TASKS}}
 
-**Dependency guidance:** Only add cross-group dependencies where there is a real technical dependency (e.g., "implement user entity" must complete before "implement user authentication"). Do NOT add dependencies just because groups are ordered — priority ranges already encode execution order.
+**Dependency guidance:** Add cross-group dependencies where there is a real technical dependency (e.g., "implement user entity" must complete before "implement user authentication"). Do NOT add dependencies just because groups are ordered — priority ranges already encode execution order.
 
 ## Instructions
 
@@ -60,6 +60,16 @@ For each scope item listed above, create 1-3 detailed tasks. Each task should be
 | L | 4-8 hours | Complex feature, multiple components |
 | XL | 1-2 days | Major subsystem (consider splitting further) |
 
+### Step 2.5: Identify Dependencies
+
+Before creating tasks, analyze which tasks depend on others:
+
+1. **Intra-group dependencies** — Tasks within this group that must execute in order. For example, "Implement configuration loading" cannot start before "Create solution and project structure" completes. When you create tasks via `task_create_bulk`, earlier tasks in the batch can be referenced by name in later tasks' `dependencies` array.
+
+2. **Cross-group dependencies** — Check `{{DEPENDENCY_TASKS}}` above. If any task in this group requires output from a prerequisite group's task (e.g., project structure, entity definitions, API host), add that task's ID to `dependencies`.
+
+Set `dependencies` on every task that cannot start without another task completing first. Tasks with no real prerequisites should have `dependencies: []`.
+
 ### Step 3: Create Tasks via MCP
 
 Use `task_create_bulk` to create all tasks for this group. Every task MUST include:
@@ -82,7 +92,7 @@ task_create_bulk({
         "Implementation step 1",
         "Implementation step 2"
       ],
-      dependencies: [],
+      dependencies: ["Create solution and project structure"],  // reference earlier tasks by name
       applicable_standards: [],
       applicable_agents: [],
       human_hours: 8,
@@ -100,6 +110,7 @@ task_create_bulk({
 4. **Use the category hint** as the default category, but override for individual tasks if a different category is more appropriate.
 5. **Do NOT ask questions.** Work autonomously with the information available.
 6. **Do NOT create a roadmap overview.** That is handled separately.
+7. **Set `dependencies` for any task that requires output from another task** (e.g., project structure, entity definitions, API host). Tasks within the same `task_create_bulk` call can reference earlier tasks by name.
 
 ### Task Writing Guidelines
 

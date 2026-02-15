@@ -70,7 +70,13 @@ function Invoke-TaskCreateBulk {
             $category = if ($task.category) { $task.category } else { 'feature' }
             $priority = if ($task.priority) { [int]$task.priority } else { $basePriority + $i }
             $effort = if ($task.effort) { $task.effort } else { 'M' }
-            $dependencies = if ($task.dependencies) { $task.dependencies } else { @() }
+            $dependencies = if ($task.dependencies -is [array]) {
+                $task.dependencies
+            } elseif ($task.dependencies -is [string]) {
+                @($task.dependencies)
+            } else {
+                @()
+            }
             $acceptanceCriteria = if ($task.acceptance_criteria) { $task.acceptance_criteria } else { @() }
             $steps = if ($task.steps) { $task.steps } else { @() }
             $applicableStandards = if ($task.applicable_standards) { $task.applicable_standards } else { @() }
