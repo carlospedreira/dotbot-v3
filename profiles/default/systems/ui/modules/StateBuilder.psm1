@@ -1,0 +1,489 @@
+<#
+.SYNOPSIS
+Bot state builder module
+
+.DESCRIPTION
+Builds the comprehensive bot state object including task counts, session info,
+control signals, instance status, and loop state. Uses FileWatcher for caching
+and MCP session tools for live data.
+Extracted from server.ps1 for modularity.
+#>
+
+$script:Config = @{
+    BotRoot = $null
+    ControlDir = $null
+    ProcessesDir = $null
+}
+
+function Initialize-StateBuilder {
+    param(
+        [Parameter(Mandatory)] [string]$BotRoot,
+        [Parameter(Mandatory)] [string]$ControlDir,
+        [Parameter(Mandatory)] [string]$ProcessesDir
+    )
+    $script:Config.BotRoot = $BotRoot
+    $script:Config.ControlDir = $ControlDir
+    $script:Config.ProcessesDir = $ProcessesDir
+
+    # Dot-source MCP session tools
+    . "$BotRoot\systems\mcp\tools\session-get-state\script.ps1"
+    . "$BotRoot\systems\mcp\tools\session-get-stats\script.ps1"
+}
+
+function Get-BotState {
+    param(
+        [DateTime]$IfModifiedSince = [DateTime]::MinValue
+    )
+
+    $botRoot = $script:Config.BotRoot
+    $controlDir = $script:Config.ControlDir
+    $processesDir = $script:Config.ProcessesDir
+
+    # Check if we have a valid cache and no changes since last build
+    $cacheMaxAge = 2  # seconds
+    $now = [DateTime]::UtcNow
+    $cachedState = Get-CachedState
+    $cacheTime = Get-StateCacheTime
+
+    if ($cachedState -and
+        ($now - $cacheTime).TotalSeconds -lt $cacheMaxAge -and
+        -not (Test-StateChanged -Since $cacheTime)) {
+
+        # Return 304-equivalent marker if client already has this state
+        if ($IfModifiedSince -ge $cacheTime) {
+            return @{ NotModified = $true; CacheTime = $cacheTime }
+        }
+        return $cachedState
+    }
+
+    # Build fresh state
+    $tasksDir = Join-Path $botRoot "workspace\tasks"
+
+    # Count tasks (including new analysis statuses)
+    $todoTasks = @(Get-ChildItem -Path (Join-Path $tasksDir "todo") -Filter "*.json" -ErrorAction SilentlyContinue)
+    $analysingTasks = @(Get-ChildItem -Path (Join-Path $tasksDir "analysing") -Filter "*.json" -ErrorAction SilentlyContinue)
+    $needsInputTasks = @(Get-ChildItem -Path (Join-Path $tasksDir "needs-input") -Filter "*.json" -ErrorAction SilentlyContinue)
+    $analysedTasks = @(Get-ChildItem -Path (Join-Path $tasksDir "analysed") -Filter "*.json" -ErrorAction SilentlyContinue)
+    $splitTasks = @(Get-ChildItem -Path (Join-Path $tasksDir "split") -Filter "*.json" -ErrorAction SilentlyContinue)
+    $inProgressTasks = @(Get-ChildItem -Path (Join-Path $tasksDir "in-progress") -Filter "*.json" -ErrorAction SilentlyContinue)
+    $doneTasks = @(Get-ChildItem -Path (Join-Path $tasksDir "done") -Filter "*.json" -ErrorAction SilentlyContinue)
+    $skippedTasks = @(Get-ChildItem -Path (Join-Path $tasksDir "skipped") -Filter "*.json" -ErrorAction SilentlyContinue)
+    $cancelledTasks = @(Get-ChildItem -Path (Join-Path $tasksDir "cancelled") -Filter "*.json" -ErrorAction SilentlyContinue)
+
+    # Get current task details
+    $currentTask = $null
+    if ($inProgressTasks.Count -gt 0) {
+        $taskContent = Get-Content $inProgressTasks[0].FullName -Raw | ConvertFrom-Json
+        $currentTask = @{
+            id = $taskContent.id
+            name = $taskContent.name
+            description = $taskContent.description
+            category = $taskContent.category
+            priority = $taskContent.priority
+            effort = $taskContent.effort
+            status = $taskContent.status
+            acceptance_criteria = $taskContent.acceptance_criteria
+            steps = $taskContent.steps
+            dependencies = $taskContent.dependencies
+            applicable_agents = $taskContent.applicable_agents
+            applicable_standards = $taskContent.applicable_standards
+            plan_path = $taskContent.plan_path
+            created_at = $taskContent.created_at
+            updated_at = $taskContent.updated_at
+            started_at = $taskContent.started_at
+        }
+    }
+
+    # Get recent completed tasks (last 100 for infinite scroll)
+    $recentCompleted = @()
+    if ($doneTasks.Count -gt 0) {
+        $recentCompleted = $doneTasks |
+            ForEach-Object {
+                try {
+                    $taskContent = Get-Content $_.FullName -Raw -ErrorAction Stop | ConvertFrom-Json
+                    @{
+                        id = $taskContent.id
+                        name = $taskContent.name
+                        description = $taskContent.description
+                        category = $taskContent.category
+                        priority = $taskContent.priority
+                        effort = $taskContent.effort
+                        status = $taskContent.status
+                        acceptance_criteria = $taskContent.acceptance_criteria
+                        steps = $taskContent.steps
+                        dependencies = $taskContent.dependencies
+                        applicable_agents = $taskContent.applicable_agents
+                        applicable_standards = $taskContent.applicable_standards
+                        plan_path = $taskContent.plan_path
+                        created_at = $taskContent.created_at
+                        updated_at = $taskContent.updated_at
+                        started_at = $taskContent.started_at
+                        completed_at = $taskContent.completed_at
+                        commit_sha = $taskContent.commit_sha
+                        commit_subject = $taskContent.commit_subject
+                        files_created = $taskContent.files_created
+                        files_modified = $taskContent.files_modified
+                        files_deleted = $taskContent.files_deleted
+                        commits = $taskContent.commits
+                        activity_log = $taskContent.activity_log
+                        execution_activity_log = $taskContent.execution_activity_log
+                        analysis = $taskContent.analysis
+                        analysis_started_at = $taskContent.analysis_started_at
+                        analysis_completed_at = $taskContent.analysis_completed_at
+                        analysed_by = $taskContent.analysed_by
+                    }
+                } catch {
+                    $null
+                }
+            } | Where-Object { $_ -ne $null } |
+            Sort-Object { if ($_.completed_at) { [DateTime]$_.completed_at } else { [DateTime]::MinValue } } -Descending |
+            Select-Object -First 100
+    }
+
+    # Get analysing tasks list
+    $analysingTasksList = @()
+    if ($analysingTasks.Count -gt 0) {
+        $analysingTasksList = $analysingTasks |
+            ForEach-Object {
+                try {
+                    $taskContent = Get-Content $_.FullName -Raw -ErrorAction Stop | ConvertFrom-Json
+                    @{
+                        id = $taskContent.id
+                        name = $taskContent.name
+                        description = $taskContent.description
+                        category = $taskContent.category
+                        priority = $taskContent.priority
+                        effort = $taskContent.effort
+                        status = $taskContent.status
+                    }
+                } catch { $null }
+            } | Where-Object { $_ -ne $null }
+    }
+
+    # Get needs-input tasks list
+    $needsInputTasksList = @()
+    if ($needsInputTasks.Count -gt 0) {
+        $needsInputTasksList = $needsInputTasks |
+            ForEach-Object {
+                try {
+                    $taskContent = Get-Content $_.FullName -Raw -ErrorAction Stop | ConvertFrom-Json
+                    @{
+                        id = $taskContent.id
+                        name = $taskContent.name
+                        description = $taskContent.description
+                        category = $taskContent.category
+                        priority = $taskContent.priority
+                        effort = $taskContent.effort
+                        status = $taskContent.status
+                        pending_question = $taskContent.pending_question
+                    }
+                } catch { $null }
+            } | Where-Object { $_ -ne $null }
+    }
+
+    # Get analysed tasks list
+    $analysedTasksList = @()
+    if ($analysedTasks.Count -gt 0) {
+        $analysedTasksList = $analysedTasks |
+            ForEach-Object {
+                try {
+                    $taskContent = Get-Content $_.FullName -Raw -ErrorAction Stop | ConvertFrom-Json
+                    [PSCustomObject]@{
+                        id = $taskContent.id
+                        name = $taskContent.name
+                        description = $taskContent.description
+                        category = $taskContent.category
+                        priority = $taskContent.priority
+                        effort = $taskContent.effort
+                        status = $taskContent.status
+                        priority_num = [int]$taskContent.priority
+                    }
+                } catch { $null }
+            } | Where-Object { $_ -ne $null } |
+            Sort-Object priority_num |
+            ForEach-Object {
+                @{
+                    id = $_.id
+                    name = $_.name
+                    description = $_.description
+                    category = $_.category
+                    priority = $_.priority
+                    effort = $_.effort
+                    status = $_.status
+                }
+            }
+    }
+
+    # Get upcoming tasks (up to 100 in priority order for infinite scroll)
+    $upcomingTasks = @()
+    $totalUpcoming = $todoTasks.Count
+    if ($todoTasks.Count -gt 0) {
+        $upcomingTasks = $todoTasks |
+            ForEach-Object {
+                try {
+                    $taskContent = Get-Content $_.FullName -Raw -ErrorAction Stop | ConvertFrom-Json
+                    [PSCustomObject]@{
+                        id = $taskContent.id
+                        name = $taskContent.name
+                        description = $taskContent.description
+                        category = $taskContent.category
+                        priority = $taskContent.priority
+                        effort = $taskContent.effort
+                        status = $taskContent.status
+                        acceptance_criteria = $taskContent.acceptance_criteria
+                        steps = $taskContent.steps
+                        dependencies = $taskContent.dependencies
+                        applicable_agents = $taskContent.applicable_agents
+                        applicable_standards = $taskContent.applicable_standards
+                        plan_path = $taskContent.plan_path
+                        created_at = $taskContent.created_at
+                        updated_at = $taskContent.updated_at
+                        priority_num = [int]$taskContent.priority
+                    }
+                } catch {
+                    $null
+                }
+            } |
+            Where-Object { $_ -ne $null } |
+            Sort-Object priority_num |
+            Select-Object -First 100 |
+            ForEach-Object {
+                @{
+                    id = $_.id
+                    name = $_.name
+                    description = $_.description
+                    category = $_.category
+                    priority = $_.priority
+                    effort = $_.effort
+                    status = $_.status
+                    acceptance_criteria = $_.acceptance_criteria
+                    steps = $_.steps
+                    dependencies = $_.dependencies
+                    applicable_agents = $_.applicable_agents
+                    applicable_standards = $_.applicable_standards
+                    plan_path = $_.plan_path
+                    created_at = $_.created_at
+                    updated_at = $_.updated_at
+                }
+            }
+    }
+
+    # Get session info from MCP tools
+    $sessionInfo = $null
+
+    $stateResult = Invoke-SessionGetState -Arguments @{}
+    if ($stateResult.success) {
+        $statsResult = Invoke-SessionGetStats -Arguments @{}
+
+        if ($statsResult.success) {
+            $sessionInfo = @{
+                session_id = $statsResult.session_id
+                session_type = $statsResult.session_type
+                status = $statsResult.status
+                started_at = $stateResult.state.start_time
+                start_time_raw = $stateResult.state.start_time
+                tasks_completed = $statsResult.tasks_completed
+                tasks_failed = $statsResult.tasks_failed
+                tasks_skipped = $statsResult.tasks_skipped
+                total_processed = $statsResult.total_processed
+                consecutive_failures = $stateResult.state.consecutive_failures
+                runtime_hours = $statsResult.runtime_hours
+                runtime_minutes = $statsResult.runtime_minutes
+                completion_rate = $statsResult.completion_rate
+                failure_rate = $statsResult.failure_rate
+                skip_rate = $statsResult.skip_rate
+                avg_minutes_per_task = $statsResult.avg_minutes_per_task
+                auth_method = $statsResult.auth_method
+                current_task_id = $statsResult.current_task_id
+            }
+        } else {
+            $sessionInfo = @{
+                session_id = $stateResult.state.session_id
+                session_type = $stateResult.state.session_type
+                status = $stateResult.state.status
+                started_at = $stateResult.state.start_time
+                start_time_raw = $stateResult.state.start_time
+                tasks_completed = $stateResult.state.tasks_completed
+                tasks_failed = $stateResult.state.tasks_failed
+                tasks_skipped = $stateResult.state.tasks_skipped
+                consecutive_failures = $stateResult.state.consecutive_failures
+                current_task_id = $stateResult.state.current_task_id
+            }
+        }
+    }
+
+    # Read instance info from signal files (legacy) AND process registry (new)
+    $instances = @{
+        analysis = $null
+        execution = $null
+    }
+
+    # Check legacy signal files for backward compat
+    $analysisSignal = Join-Path $controlDir "analysing.signal"
+    $isAnalysisRunning = Test-Path $analysisSignal
+    if ($isAnalysisRunning) {
+        try {
+            $sig = Get-Content $analysisSignal -Raw | ConvertFrom-Json
+            $isAlive = $true
+            if ($sig.pid) {
+                try { $isAlive = $null -ne (Get-Process -Id $sig.pid -ErrorAction SilentlyContinue) }
+                catch { $isAlive = $false }
+            }
+            $instances.analysis = @{
+                instance_id = $sig.instance_id
+                pid = $sig.pid
+                started_at = $sig.started_at
+                last_heartbeat = $sig.last_heartbeat
+                status = $sig.status
+                next_action = $sig.next_action
+                alive = $isAlive
+            }
+        } catch {}
+    }
+
+    $runningSignal = Join-Path $controlDir "running.signal"
+    $isActuallyRunning = Test-Path $runningSignal
+    if ($isActuallyRunning) {
+        try {
+            $sig = Get-Content $runningSignal -Raw | ConvertFrom-Json
+            $isAlive = $true
+            if ($sig.pid) {
+                try { $isAlive = $null -ne (Get-Process -Id $sig.pid -ErrorAction SilentlyContinue) }
+                catch { $isAlive = $false }
+            }
+            $instances.execution = @{
+                instance_id = $sig.instance_id
+                pid = $sig.pid
+                started_at = $sig.started_at
+                last_heartbeat = $sig.last_heartbeat
+                status = $sig.status
+                next_action = $sig.next_action
+                alive = $isAlive
+            }
+        } catch {}
+    }
+
+    # Also check process registry for running processes
+    $runningProcesses = @()
+    if (Test-Path $processesDir) {
+        $procFiles = Get-ChildItem -Path $processesDir -Filter "*.json" -File -ErrorAction SilentlyContinue
+        foreach ($pf in $procFiles) {
+            try {
+                $proc = Get-Content $pf.FullName -Raw | ConvertFrom-Json
+                if ($proc.status -eq 'running' -or $proc.status -eq 'starting') {
+                    $runningProcesses += $proc
+
+                    $isAlive = $true
+                    if ($proc.pid) {
+                        try { $isAlive = $null -ne (Get-Process -Id $proc.pid -ErrorAction SilentlyContinue) }
+                        catch { $isAlive = $true }
+                    }
+
+                    if ($proc.type -eq 'analysis' -and (-not $instances.analysis -or $instances.analysis.alive -ne $true)) {
+                        $instances.analysis = @{
+                            instance_id = $proc.id
+                            pid = $proc.pid
+                            started_at = $proc.started_at
+                            last_heartbeat = $proc.last_heartbeat
+                            status = $proc.heartbeat_status
+                            next_action = $proc.heartbeat_next_action
+                            alive = $isAlive
+                        }
+                        $isAnalysisRunning = $true
+                    }
+                    if ($proc.type -eq 'execution' -and (-not $instances.execution -or $instances.execution.alive -ne $true)) {
+                        $instances.execution = @{
+                            instance_id = $proc.id
+                            pid = $proc.pid
+                            started_at = $proc.started_at
+                            last_heartbeat = $proc.last_heartbeat
+                            status = $proc.heartbeat_status
+                            next_action = $proc.heartbeat_next_action
+                            alive = $isAlive
+                        }
+                        $isActuallyRunning = $true
+                    }
+                }
+            } catch {}
+        }
+    }
+
+    # Track combined loop state
+    $analysisAlive = ($null -ne $instances.analysis) -and ($instances.analysis.alive -eq $true)
+    $executionAlive = ($null -ne $instances.execution) -and ($instances.execution.alive -eq $true)
+    $anyLoopRunning = $isAnalysisRunning -or $isActuallyRunning -or ($runningProcesses.Count -gt 0)
+    $anyLoopAlive = $analysisAlive -or $executionAlive -or ($runningProcesses.Count -gt 0)
+
+    # Check control signals
+    $controlSignals = @{
+        pause = Test-Path (Join-Path $controlDir "pause.signal")
+        stop = (Test-Path (Join-Path $controlDir "stop.signal")) -or
+               (Test-Path (Join-Path $controlDir "stop-analysis.signal")) -or
+               (Test-Path (Join-Path $controlDir "stop-execution.signal"))
+        resume = Test-Path (Join-Path $controlDir "resume.signal")
+        running = $isActuallyRunning
+    }
+
+    # Override session status if no loops are running but session state says running
+    if ($sessionInfo -and -not $anyLoopRunning) {
+        if ($sessionInfo.status -eq 'running') {
+            $sessionInfo.status = 'stopped'
+        }
+    }
+
+    # Get steering status (for operator whisper channel) - legacy support
+    $steeringStatus = $null
+    $steeringStatusFile = Join-Path $controlDir "steering-status.json"
+    if (Test-Path $steeringStatusFile) {
+        try {
+            $steeringStatus = Get-Content $steeringStatusFile -Raw | ConvertFrom-Json
+        } catch {
+            # Ignore read errors
+        }
+    }
+
+    $state = @{
+        timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+        tasks = @{
+            todo = $todoTasks.Count
+            analysing = $analysingTasks.Count
+            needs_input = $needsInputTasks.Count
+            analysed = $analysedTasks.Count
+            split = $splitTasks.Count
+            in_progress = $inProgressTasks.Count
+            done = $doneTasks.Count
+            skipped = $skippedTasks.Count
+            cancelled = $cancelledTasks.Count
+            current = $currentTask
+            upcoming = @($upcomingTasks)
+            upcoming_total = if ($todoTasks.Count) { $todoTasks.Count } else { 0 }
+            analysing_list = @($analysingTasksList)
+            needs_input_list = @($needsInputTasksList)
+            analysed_list = @($analysedTasksList)
+            recent_completed = @($recentCompleted)
+            completed_total = if ($doneTasks.Count) { $doneTasks.Count } else { 0 }
+            action_required = $needsInputTasks.Count
+        }
+        session = $sessionInfo
+        control = $controlSignals
+        analysis = @{
+            running = $isAnalysisRunning
+        }
+        loops = @{
+            any_running = $anyLoopRunning
+            all_stopped = -not $anyLoopRunning
+            analysis_alive = $analysisAlive
+            execution_alive = $executionAlive
+            any_alive = $anyLoopAlive
+        }
+        instances = $instances
+        steering = $steeringStatus
+    }
+
+    # Cache the result
+    Set-CachedState -State $state
+
+    return $state
+}
+
+Export-ModuleMember -Function @('Initialize-StateBuilder', 'Get-BotState')
