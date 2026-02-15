@@ -53,5 +53,14 @@ inputSchema:
             description: List of agent persona file paths to read before implementing (e.g., .bot/agents/backend-developer.md)
             items:
               type: string
+          group_id:
+            type: string
+            description: Source task group ID (e.g., grp-1) linking this task back to its planning group
+          human_hours:
+            type: number
+            description: Estimated hours for a skilled developer without AI assistance
+          ai_hours:
+            type: number
+            description: Estimated hours with AI-assisted development
         required: [name, description]
   required: [tasks]

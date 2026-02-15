@@ -1,7 +1,7 @@
 ---
 name: Plan Task Groups
 description: Phase 2a — identify high-level implementation groups from product documents
-version: 1.0
+version: 1.1
 ---
 
 # Task Group Planning
@@ -10,7 +10,7 @@ You are a roadmap planning assistant. Your job is to read the product documents 
 
 ## Goal
 
-Produce a lightweight grouping of work that can later be expanded into detailed tasks. Each group represents a coherent slice of functionality that can be planned in isolation.
+Produce a lightweight grouping of work that can later be expanded into detailed tasks. Each group represents a coherent slice of functionality that can be planned in isolation. **Focus on what's needed to ship a working product.**
 
 ## Instructions
 
@@ -24,18 +24,26 @@ Read every file in `.bot/workspace/product/`:
 
 ### Step 2: Identify Implementation Groups
 
-Based on the product docs, identify **5-10 natural implementation groups**. Think in terms of:
+Based on the product docs, identify **5-10 natural implementation groups**. Think in terms of deployable increments — each group should bring the product closer to a working state.
 
+Examples of good groups:
 1. **Foundation & Infrastructure** — Project setup, database, config, basic hosting
 2. **Core Entities & Data Layer** — Entity definitions, repositories, migrations
-3. **Authentication & External Integrations** — Auth providers, external API clients
-4. **Primary Business Logic** — Command/query handlers, service layer
+3. **Authentication & Authorization** — Auth providers, identity, permissions
+4. **Primary Business Logic** — Command/query handlers, service layer, API endpoints
 5. **Background Processing** — Scheduled jobs, event handlers, queues
-6. **Intelligence & Rules** — AI integration, rules engines, pattern detection
-7. **Notifications & Communication** — Email, push, in-app notifications
-8. **Polish & Testing** — Integration tests, error handling, performance
+6. **Notifications & Communication** — Email, push, in-app notifications
+7. **User-Facing Interface** — UI screens, views, client-side logic
 
 Not all projects need all of these. Adapt to the actual project scope. Merge small groups, split large ones.
+
+**Do NOT create groups for:**
+- Generic "Polish & Testing" — testing is part of every group's acceptance criteria
+- Vague "Enhancements" or "Nice-to-haves" — each group should deliver concrete functionality
+- "Intelligence & Rules" unless the product specifically requires AI/ML features
+- Anything that doesn't contribute to a shippable product
+
+Each group's acceptance criteria should describe a **deployable increment** — something you could demo or ship independently.
 
 ### Step 3: Define Group Dependencies
 
@@ -44,7 +52,17 @@ Groups should have explicit dependencies via `depends_on`:
 - Entity/data groups depend on infrastructure
 - Feature groups depend on the entities they use
 - Background jobs depend on the features they orchestrate
-- Testing depends on the features being tested
+
+### Step 3b: Estimate Effort Days
+
+Assign `effort_days` to each group — the estimated number of developer-days for a skilled human to complete the group (not AI-assisted time).
+
+| Complexity | Effort Days | Examples |
+|------------|-------------|----------|
+| Simple | 1-2 | Config setup, simple CRUD entity |
+| Standard | 3-5 | Auth integration, standard feature with tests |
+| Complex | 5-10 | Multi-entity business logic, complex integrations |
+| Major | 10-15 | Large subsystems, multiple integration points |
 
 ### Step 4: Assign Priority Ranges
 
@@ -57,8 +75,8 @@ Each group gets a non-overlapping priority range that encodes execution order:
 | 3     | 21-35         | Auth, external integrations |
 | 4     | 36-55         | Primary business logic |
 | 5     | 56-70         | Background processing |
-| 6     | 71-85         | Intelligence, rules |
-| 7     | 86-100        | Polish, testing, optimization |
+| 6     | 71-85         | Communication, notifications |
+| 7     | 86-100        | UI, final integration |
 
 ### Step 5: Write task-groups.json
 
@@ -79,6 +97,7 @@ The file format:
       "name": "Foundation & Infrastructure",
       "order": 1,
       "description": "Project structure, database schema, configuration loading, basic API host setup",
+      "effort_days": 3,
       "scope": [
         "Solution and project structure setup",
         "Database schema and migrations",
@@ -107,6 +126,7 @@ The file format:
 | `name` | Yes | Human-readable group name |
 | `order` | Yes | Execution order (1 = first) |
 | `description` | Yes | 1-2 sentence summary of what this group covers |
+| `effort_days` | Yes | Estimated developer-days to complete this group (1-20) |
 | `scope` | Yes | Array of specific items to implement (these become task seeds) |
 | `acceptance_criteria` | Yes | Group-level success conditions |
 | `estimated_task_count` | Yes | Expected number of tasks (2-8 per group) |
@@ -120,6 +140,7 @@ The file format:
 - **5-10 groups** is the sweet spot. Fewer than 5 means groups are too large; more than 10 means too granular.
 - **Each scope item** should map to roughly 1-2 tasks when expanded later.
 - **Estimated task count** should total 20-60 across all groups.
+- **Total effort_days** typically 15-60 across all groups. Reflect real developer time, not AI-assisted.
 - **Category hints** guide task categorization but individual tasks may override.
 - **Priority ranges** must not overlap between groups.
 
@@ -134,4 +155,5 @@ The file format:
 Write `.bot/workspace/product/task-groups.json` and confirm with a brief summary:
 - Number of groups created
 - Total estimated tasks
+- Total estimated effort (days)
 - Group names and their order

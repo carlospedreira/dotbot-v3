@@ -116,7 +116,9 @@ mcp__dotbot__task_create_bulk({
     steps: ["{steps}"],
     dependencies: [],  // Existing task names/IDs/slugs only
     applicable_agents: ["{path}"],
-    applicable_standards: ["{path}"]
+    applicable_standards: ["{path}"],
+    human_hours: 8,   // Optional: estimated hours without AI
+    ai_hours: 1       // Optional: estimated hours with AI
   }]
 })
 ```
@@ -161,6 +163,8 @@ Offer for L/XL or complex tasks. Use `mcp__dotbot__plan_create`. See `.bot/works
 | `dependencies` | N | Array of task names/IDs/slugs from EXISTING tasks. Validated at creation. |
 | `applicable_agents` | N | Agent persona paths |
 | `applicable_standards` | N | Standards paths |
+| `human_hours` | N | Estimated hours for a skilled developer (no AI) |
+| `ai_hours` | N | Estimated hours with AI-assisted development |
 
 **Auto-managed:** `id`, `status`, `created_at`, `updated_at`, `plan_path`
 

@@ -139,6 +139,9 @@ function initSettingsToggles() {
     // Initialize verification settings
     initVerificationSettings();
 
+    // Initialize cost settings
+    initCostSettings();
+
     // Load initial settings
     loadSettings();
 }
@@ -787,6 +790,77 @@ async function saveVerificationSetting(name, required) {
  */
 function initVerificationSettings() {
     loadVerificationScripts();
+}
+
+// ========== COST SETTINGS ==========
+
+/**
+ * Load cost settings from server
+ */
+async function loadCostSettings() {
+    try {
+        const response = await fetch(`${API_BASE}/api/config/costs`);
+        const data = await response.json();
+
+        const rateInput = document.getElementById('setting-hourly-rate');
+        const aiCostInput = document.getElementById('setting-ai-cost-per-task');
+        const factorInput = document.getElementById('setting-ai-speedup-factor');
+        const currencyInput = document.getElementById('setting-currency');
+
+        if (rateInput) rateInput.value = data.hourly_rate ?? 50;
+        if (aiCostInput) aiCostInput.value = data.ai_cost_per_task ?? 0.50;
+        if (factorInput) factorInput.value = data.ai_speedup_factor ?? 10;
+        if (currencyInput) currencyInput.value = data.currency ?? 'USD';
+    } catch (error) {
+        console.error('Failed to load cost settings:', error);
+    }
+}
+
+/**
+ * Save a single cost setting
+ */
+async function saveCostSetting(key, value) {
+    try {
+        const body = {};
+        body[key] = value;
+        const response = await fetch(`${API_BASE}/api/config/costs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const result = await response.json();
+        if (!result.success) {
+            console.error('Failed to save cost setting:', result.error);
+        }
+    } catch (error) {
+        console.error('Failed to save cost setting:', error);
+    }
+}
+
+/**
+ * Initialize cost settings handlers
+ */
+function initCostSettings() {
+    const inputs = [
+        { id: 'setting-hourly-rate', key: 'hourly_rate', parse: v => parseFloat(v) || 0 },
+        { id: 'setting-ai-cost-per-task', key: 'ai_cost_per_task', parse: v => parseFloat(v) || 0 },
+        { id: 'setting-ai-speedup-factor', key: 'ai_speedup_factor', parse: v => Math.max(1, parseFloat(v) || 1) },
+        { id: 'setting-currency', key: 'currency', parse: v => v.trim() || 'USD' }
+    ];
+
+    inputs.forEach(({ id, key, parse }) => {
+        const input = document.getElementById(id);
+        if (!input) return;
+        let debounceTimer = null;
+        input.addEventListener('input', () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                saveCostSetting(key, parse(input.value));
+            }, 500);
+        });
+    });
+
+    loadCostSettings();
 }
 
 // ========== STEERING ==========

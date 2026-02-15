@@ -352,6 +352,7 @@
                                 <div class="settings-nav-item" data-settings-section="analysis">Analysis</div>
                                 <div class="settings-nav-item" data-settings-section="execution">Execution</div>
                                 <div class="settings-nav-item" data-settings-section="verification">Verification</div>
+                                <div class="settings-nav-item" data-settings-section="costs">Costs</div>
                                 <div class="settings-nav-item" data-settings-section="aether" id="aetherNavItem" style="display:none">Aether</div>
                             </div>
                         </div>
@@ -830,6 +831,39 @@
                                         </div>
                                         <div class="settings-note" style="margin-top: 16px;">
                                             Changes take effect immediately on next task completion.
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Costs Section -->
+                            <div class="settings-section hidden" id="settings-costs">
+                                <div class="module">
+                                    <div class="module-header">
+                                        <span class="module-title">◈ Cost Estimates</span>
+                                    </div>
+                                    <div class="module-screen">
+                                        <div class="settings-description">
+                                            Configure cost parameters for roadmap estimates and task planning.
+                                        </div>
+                                        <div class="settings-row">
+                                            <label class="settings-label" for="setting-hourly-rate">Blended Hourly Rate</label>
+                                            <input type="number" class="settings-input" id="setting-hourly-rate" min="0" step="1" placeholder="50">
+                                        </div>
+                                        <div class="settings-row">
+                                            <label class="settings-label" for="setting-ai-cost-per-task">AI Cost Per Task</label>
+                                            <input type="number" class="settings-input" id="setting-ai-cost-per-task" min="0" step="0.01" placeholder="0.50">
+                                        </div>
+                                        <div class="settings-row">
+                                            <label class="settings-label" for="setting-ai-speedup-factor">AI Speedup Factor</label>
+                                            <input type="number" class="settings-input" id="setting-ai-speedup-factor" min="1" step="1" placeholder="10">
+                                        </div>
+                                        <div class="settings-row">
+                                            <label class="settings-label" for="setting-currency">Currency</label>
+                                            <input type="text" class="settings-input" id="setting-currency" placeholder="USD">
+                                        </div>
+                                        <div class="settings-note" style="margin-top: 16px;">
+                                            Used for roadmap timeline and cost comparisons (human vs AI-assisted).
                                         </div>
                                     </div>
                                 </div>

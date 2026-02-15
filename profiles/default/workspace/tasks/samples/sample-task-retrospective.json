@@ -79,6 +79,12 @@
   "applicable_agents": [],
   "_applicable_agents_note": "Agent personas used (e.g., 'implementer', 'tester').",
 
+  "human_hours": null,
+  "_human_hours_note": "OPTIONAL: Estimated hours for a skilled developer without AI. Use actual time if known.",
+
+  "ai_hours": null,
+  "_ai_hours_note": "OPTIONAL: Estimated hours with AI-assisted development. Use actual time if known.",
+
   "execution_activity_log": [],
   "_execution_activity_log_note": "OPTIONAL: Detailed timeline of execution actions. Populated automatically by the executor.",
 

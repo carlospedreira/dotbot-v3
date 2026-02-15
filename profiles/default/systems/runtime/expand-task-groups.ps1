@@ -216,71 +216,46 @@ foreach ($group in $sortedGroups) {
     }
 }
 
-# 5. Generate roadmap-overview.md
-Write-GroupActivity "Generating roadmap overview..."
+# 5. Append expansion results to roadmap-overview.md (generated in Phase 2a)
+Write-GroupActivity "Appending expansion results to roadmap overview..."
 
-$overviewLines = [System.Collections.ArrayList]::new()
-[void]$overviewLines.Add("# Task Roadmap Overview")
-[void]$overviewLines.Add("")
-[void]$overviewLines.Add("Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')")
-[void]$overviewLines.Add("Total Tasks: $totalTasksCreated")
-[void]$overviewLines.Add("Task Groups: $($sortedGroups.Count)")
-[void]$overviewLines.Add("")
-
-# Executive summary from mission.md
-$missionPath = Join-Path $productDir "mission.md"
-if (Test-Path $missionPath) {
-    $missionContent = Get-Content $missionPath -Raw
-    # Extract first paragraph after the title
-    if ($missionContent -match '(?m)^#[^#].*\n+(.+)') {
-        [void]$overviewLines.Add("## Executive Summary")
-        [void]$overviewLines.Add("")
-        [void]$overviewLines.Add($matches[1].Trim())
-        [void]$overviewLines.Add("")
-    }
-}
-
-[void]$overviewLines.Add("## Implementation Groups")
-[void]$overviewLines.Add("")
+$overviewPath = Join-Path $productDir "roadmap-overview.md"
+$appendLines = [System.Collections.ArrayList]::new()
+[void]$appendLines.Add("")
+[void]$appendLines.Add("---")
+[void]$appendLines.Add("")
+[void]$appendLines.Add("## Expansion Results")
+[void]$appendLines.Add("")
+[void]$appendLines.Add("**Total tasks created:** $totalTasksCreated")
+[void]$appendLines.Add("")
 
 foreach ($group in $sortedGroups) {
     $taskCount = if ($groupTaskMap.ContainsKey($group.id)) { $groupTaskMap[$group.id].Count } else { 0 }
-    $depStr = if ($group.depends_on -and $group.depends_on.Count -gt 0) {
-        " (depends on: $(($group.depends_on | ForEach-Object { $_ }) -join ', '))"
-    } else { "" }
-
-    [void]$overviewLines.Add("### $($group.order). $($group.name)")
-    [void]$overviewLines.Add("")
-    [void]$overviewLines.Add("$($group.description)")
-    [void]$overviewLines.Add("")
-    [void]$overviewLines.Add("- **Tasks:** $taskCount")
-    [void]$overviewLines.Add("- **Priority range:** $($group.priority_range[0])-$($group.priority_range[1])")
-    [void]$overviewLines.Add("- **Category:** $($group.category_hint)$depStr")
-    [void]$overviewLines.Add("")
+    [void]$appendLines.Add("### $($group.order). $($group.name) ($taskCount tasks)")
+    [void]$appendLines.Add("")
 
     if ($groupTaskMap.ContainsKey($group.id)) {
         foreach ($task in $groupTaskMap[$group.id]) {
-            [void]$overviewLines.Add("  - $($task.name)")
+            [void]$appendLines.Add("  - $($task.name)")
         }
-        [void]$overviewLines.Add("")
+        [void]$appendLines.Add("")
     }
 }
 
-[void]$overviewLines.Add("## Next Steps")
-[void]$overviewLines.Add("")
-[void]$overviewLines.Add("1. Review task list and adjust priorities if needed")
-[void]$overviewLines.Add("2. Begin implementation with ``task_get_next``")
-[void]$overviewLines.Add("3. Run analysis loop to prepare tasks for execution")
-[void]$overviewLines.Add("")
+[void]$appendLines.Add("## Next Steps")
+[void]$appendLines.Add("")
+[void]$appendLines.Add("1. Review task list and adjust priorities if needed")
+[void]$appendLines.Add("2. Begin implementation with ``task_get_next``")
+[void]$appendLines.Add("3. Run analysis loop to prepare tasks for execution")
+[void]$appendLines.Add("")
 
-$overviewPath = Join-Path $productDir "roadmap-overview.md"
-$overviewLines -join "`n" | Set-Content -Path $overviewPath -Encoding UTF8
-Write-GroupActivity "Roadmap overview saved to: $overviewPath"
-
-# 6. Rename task-groups.json -> task-groups.done.json
-$donePath = Join-Path $productDir "task-groups.done.json"
-Move-Item -Path $groupsPath -Destination $donePath -Force
-Write-GroupActivity "Renamed task-groups.json -> task-groups.done.json"
+if (Test-Path $overviewPath) {
+    $appendLines -join "`n" | Add-Content -Path $overviewPath -Encoding UTF8
+} else {
+    # Fallback if Phase 2a roadmap wasn't generated
+    $appendLines -join "`n" | Set-Content -Path $overviewPath -Encoding UTF8
+}
+Write-GroupActivity "Expansion results appended to: $overviewPath"
 
 # Final summary
 Write-Header "Expansion Complete"

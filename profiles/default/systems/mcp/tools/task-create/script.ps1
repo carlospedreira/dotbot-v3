@@ -15,6 +15,8 @@ function Invoke-TaskCreate {
     $applicableStandards = $Arguments['applicable_standards']
     $applicableAgents = $Arguments['applicable_agents']
     $needsInterview = $Arguments['needs_interview'] -eq $true
+    $humanHours = $Arguments['human_hours']
+    $aiHours = $Arguments['ai_hours']
     
     # Validate required fields
     if (-not $name) {
@@ -113,6 +115,8 @@ function Invoke-TaskCreate {
         applicable_standards = $applicableStandards
         applicable_agents = $applicableAgents
         needs_interview = $needsInterview
+        human_hours = $humanHours
+        ai_hours = $aiHours
         created_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
         updated_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
         completed_at = $null

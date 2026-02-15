@@ -84,7 +84,9 @@ task_create_bulk({
       ],
       dependencies: [],
       applicable_standards: [],
-      applicable_agents: []
+      applicable_agents: [],
+      human_hours: 8,
+      ai_hours: 1
     }
   ]
 })
@@ -118,6 +120,11 @@ task_create_bulk({
 - Specific and testable
 - Each starts with a verb
 - Covers happy path and key edge cases
+
+**Hour estimates** (optional but recommended):
+- `human_hours` — how long a skilled developer would take without AI assistance
+- `ai_hours` — estimated time with AI-assisted development
+- Use the effort guide: XS=1h, S=2-4h, M=4-8h, L=8-16h, XL=16h+
 
 ## Output
 

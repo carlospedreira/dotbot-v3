@@ -11,5 +11,11 @@
   },
   "execution": {
     "model": "Opus"
+  },
+  "costs": {
+    "hourly_rate": 50,
+    "ai_cost_per_task": 0.50,
+    "ai_speedup_factor": 10,
+    "currency": "USD"
   }
 }

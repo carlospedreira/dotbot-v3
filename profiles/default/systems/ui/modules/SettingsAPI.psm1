@@ -290,6 +290,57 @@ function Set-VerificationConfig {
     }
 }
 
+function Get-CostConfig {
+    $settingsDefaultFile = Join-Path $script:Config.BotRoot "defaults\settings.default.json"
+
+    try {
+        $settingsData = Get-Content $settingsDefaultFile -Raw | ConvertFrom-Json
+        $costs = if ($settingsData.costs) { $settingsData.costs } else {
+            @{ hourly_rate = 50; ai_cost_per_task = 0.50; ai_speedup_factor = 10; currency = "USD" }
+        }
+        return $costs
+    } catch {
+        return @{ _statusCode = 500; error = "Failed to read cost config: $($_.Exception.Message)" }
+    }
+}
+
+function Set-CostConfig {
+    param(
+        [Parameter(Mandatory)] $Body
+    )
+    $settingsDefaultFile = Join-Path $script:Config.BotRoot "defaults\settings.default.json"
+
+    $settingsData = Get-Content $settingsDefaultFile -Raw | ConvertFrom-Json
+    if (-not $settingsData.costs) {
+        $settingsData | Add-Member -NotePropertyName "costs" -NotePropertyValue @{
+            hourly_rate = 50
+            ai_speedup_factor = 10
+            currency = "USD"
+        }
+    }
+
+    if ($null -ne $Body.hourly_rate) {
+        $settingsData.costs.hourly_rate = [decimal]$Body.hourly_rate
+    }
+    if ($null -ne $Body.ai_cost_per_task) {
+        $settingsData.costs.ai_cost_per_task = [decimal]$Body.ai_cost_per_task
+    }
+    if ($null -ne $Body.ai_speedup_factor) {
+        $settingsData.costs.ai_speedup_factor = [decimal]$Body.ai_speedup_factor
+    }
+    if ($null -ne $Body.currency) {
+        $settingsData.costs.currency = [string]$Body.currency
+    }
+
+    $settingsData | ConvertTo-Json -Depth 5 | Set-Content $settingsDefaultFile -Force
+    Write-Status "Cost config updated" -Type Success
+
+    return @{
+        success = $true
+        costs = $settingsData.costs
+    }
+}
+
 Export-ModuleMember -Function @(
     'Initialize-SettingsAPI',
     'Get-Theme',
@@ -299,5 +350,7 @@ Export-ModuleMember -Function @(
     'Get-AnalysisConfig',
     'Set-AnalysisConfig',
     'Get-VerificationConfig',
-    'Set-VerificationConfig'
+    'Set-VerificationConfig',
+    'Get-CostConfig',
+    'Set-CostConfig'
 )

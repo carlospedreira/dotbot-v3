@@ -51,4 +51,10 @@ inputSchema:
       type: boolean
       description: If true, the analysis phase should interview the user to clarify requirements before finalizing the task
       default: false
+    human_hours:
+      type: number
+      description: Estimated hours for a skilled developer without AI assistance
+    ai_hours:
+      type: number
+      description: Estimated hours with AI-assisted development
   required: [name, description]

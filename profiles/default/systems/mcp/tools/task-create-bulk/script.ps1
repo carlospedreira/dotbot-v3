@@ -139,6 +139,9 @@ function Invoke-TaskCreateBulk {
                 steps = $steps
                 applicable_standards = $applicableStandards
                 applicable_agents = $applicableAgents
+                group_id = $task.group_id
+                human_hours = $task.human_hours
+                ai_hours = $task.ai_hours
                 created_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
                 updated_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
                 completed_at = $null

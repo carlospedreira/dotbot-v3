@@ -58,7 +58,7 @@ Load samples for structure:
 - `acceptance_criteria`: Success criteria
 - `files_created`, `files_modified`, `files_deleted`: File path arrays
 
-**Optional**: `commits`, `execution_activity_log`, `analysis`, `dependencies`, `applicable_standards`, `applicable_agents`
+**Optional**: `commits`, `execution_activity_log`, `analysis`, `dependencies`, `applicable_standards`, `applicable_agents`, `human_hours`, `ai_hours`
 
 **Notes**: Remove `_comment`/`_note` fields; use relative paths from repo root.
 
