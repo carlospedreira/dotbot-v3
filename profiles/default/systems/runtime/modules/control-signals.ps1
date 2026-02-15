@@ -133,30 +133,6 @@ function Test-ControlSignals {
     return $null
 }
 
-function Test-ResumeSignal {
-    <#
-    .SYNOPSIS
-    Check if resume signal is present
-
-    .PARAMETER ControlDir
-    Path to the control directory containing signal files
-
-    .OUTPUTS
-    Boolean indicating if resume signal is present
-    #>
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$ControlDir
-    )
-
-    # Initialize watcher on first call
-    if (-not $script:SignalState.Initialized -or $script:SignalState.ControlDir -ne $ControlDir) {
-        Initialize-ControlSignalWatcher -ControlDir $ControlDir
-    }
-
-    return $script:SignalState.ResumePending
-}
-
 function Stop-ControlSignalWatcher {
     <#
     .SYNOPSIS
@@ -172,24 +148,3 @@ function Stop-ControlSignalWatcher {
     $script:SignalState.Initialized = $false
 }
 
-function Refresh-SignalState {
-    <#
-    .SYNOPSIS
-    Force refresh of signal state from disk (useful as fallback)
-
-    .PARAMETER ControlDir
-    Path to the control directory containing signal files
-    #>
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$ControlDir
-    )
-
-    # Check for any stop signal (generic or loop-specific)
-    $script:SignalState.StopPending = (Test-Path (Join-Path $ControlDir "stop.signal")) -or
-                                       (Test-Path (Join-Path $ControlDir "stop-analysis.signal")) -or
-                                       (Test-Path (Join-Path $ControlDir "stop-execution.signal"))
-    $script:SignalState.PausePending = Test-Path (Join-Path $ControlDir "pause.signal")
-    $script:SignalState.ResumePending = Test-Path (Join-Path $ControlDir "resume.signal")
-    $script:SignalState.LastCheck = [DateTime]::UtcNow
-}

@@ -150,14 +150,6 @@ function Write-ProcessFile {
     Move-Item -Path $tempFile -Destination $filePath -Force
 }
 
-function Read-ProcessFile {
-    param([string]$Id)
-    $filePath = Join-Path $processesDir "$Id.json"
-    if (Test-Path $filePath) {
-        try { Get-Content $filePath -Raw | ConvertFrom-Json } catch { $null }
-    }
-}
-
 function Write-ProcessActivity {
     param([string]$Id, [string]$ActivityType, [string]$Message)
     $logPath = Join-Path $processesDir "$Id.activity.jsonl"
