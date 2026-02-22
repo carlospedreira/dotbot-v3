@@ -1352,7 +1352,7 @@ Do NOT read or follow 03-plan-roadmap.md or 04-new-tasks.md — those are for ot
             $roadmap -join "`n" | Set-Content -Path $overviewPath -Encoding UTF8
             Write-Status "Roadmap overview generated: $overviewPath" -Type Success
         } catch {
-            Write-Status "Warning: could not generate roadmap overview: $($_.Exception.Message)" -Type Warning
+            Write-Status "Warning: could not generate roadmap overview: $($_.Exception.Message)" -Type Warn
         }
 
         # Checkpoint: commit task groups + roadmap

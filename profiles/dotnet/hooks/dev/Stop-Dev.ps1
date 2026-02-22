@@ -39,7 +39,7 @@ if (Test-Path $pidFile) {
         $savedPids = Get-Content $pidFile -Raw | ConvertFrom-Json
         Write-Status "Found saved PIDs from Start-Dev.ps1" -Type Info
     } catch {
-        Write-Status "Could not read PID file" -Type Warning
+        Write-Status "Could not read PID file" -Type Warn
     }
 }
 
@@ -58,7 +58,7 @@ if ($savedPids) {
         }
     }
 } elseif (-not $Quiet) {
-    Write-Status "No PID file found - nothing to stop" -Type Warning
+    Write-Status "No PID file found - nothing to stop" -Type Warn
     Write-Status "If processes are still running, stop them manually" -Type Info
 }
 

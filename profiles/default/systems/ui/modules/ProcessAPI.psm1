@@ -157,7 +157,7 @@ function Stop-ManagedProcessById {
             # Create stop signal file for cleanup
             $stopFile = Join-Path $processesDir "$ProcessId.stop"
             "stop" | Set-Content -Path $stopFile -Force
-            Write-Status "Killed process $ProcessId (PID: $pid)" -Type Warning
+            Write-Status "Killed process $ProcessId (PID: $pid)" -Type Warn
 
             return @{ success = $true; process_id = $ProcessId; message = "Process killed (PID: $pid)" }
         } catch {
@@ -215,7 +215,7 @@ function Stop-ManagedProcessByType {
             }
         } catch {}
     }
-    Write-Status "Killed $($killed.Count) $Type process(es)" -Type Warning
+    Write-Status "Killed $($killed.Count) $Type process(es)" -Type Warn
 
     return @{ success = $true; killed = $killed; count = $killed.Count }
 }
@@ -241,7 +241,7 @@ function Stop-AllManagedProcesses {
             }
         } catch {}
     }
-    Write-Status "Killed all processes ($($killed.Count) total)" -Type Warning
+    Write-Status "Killed all processes ($($killed.Count) total)" -Type Warn
 
     return @{ success = $true; killed = $killed; count = $killed.Count }
 }

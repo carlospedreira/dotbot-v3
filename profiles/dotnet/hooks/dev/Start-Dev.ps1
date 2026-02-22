@@ -31,7 +31,7 @@ if (Test-Path $envFile) {
     }
 }
 else {
-    Write-Status ".env.local file not found" -Type Warning
+    Write-Status ".env.local file not found" -Type Warn
     Write-Status "Copy .env.example to .env.local and configure your settings" -Type Info
 }
 
@@ -208,7 +208,7 @@ if ($healthCheckPassed) {
     } else {
         # Port is listening but health check failed
         $finalStatus = "starting"
-        Write-Status "API is listening but health check timed out" -Type Warning
+        Write-Status "API is listening but health check timed out" -Type Warn
         Write-Status "Check logs for errors: $logsDir" -Type Info
     }
 }
