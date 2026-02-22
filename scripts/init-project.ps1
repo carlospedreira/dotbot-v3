@@ -338,12 +338,29 @@ if (-not (Get-Command gitleaks -ErrorAction SilentlyContinue)) {
     if (-not (Test-Path $hooksDir)) {
         New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null
     }
-    $hookContent = @'
+
+    # On Windows, Git Bash cannot execute WinGet app execution aliases (reparse
+    # points).  Resolve the real binary path so the hook calls it directly.
+    $gitleaksCmd = "gitleaks"
+    if ($IsWindows) {
+        $resolved = Get-Command gitleaks -ErrorAction SilentlyContinue
+        if ($resolved) {
+            $target = (Get-Item $resolved.Source -ErrorAction SilentlyContinue).Target
+            if ($target) {
+                # Convert backslashes to forward slashes for Git Bash
+                $gitleaksCmd = $target -replace '\\', '/'
+            } else {
+                $gitleaksCmd = ($resolved.Source) -replace '\\', '/'
+            }
+        }
+    }
+
+    $hookContent = @"
 #!/bin/sh
 # dotbot: gitleaks pre-commit hook
 # Scans staged changes for secrets before allowing commit.
-gitleaks git --pre-commit --staged
-'@
+"$gitleaksCmd" git --pre-commit --staged
+"@
     Set-Content -Path $preCommitPath -Value $hookContent -Encoding UTF8 -NoNewline
     # Make executable on non-Windows platforms
     if (-not $IsWindows) {
