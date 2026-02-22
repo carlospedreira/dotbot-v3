@@ -37,10 +37,13 @@ function Reset-InProgressTasks {
     
     foreach ($taskFile in $inProgressTasks) {
         try {
+            # Re-verify file exists (may have been moved by concurrent process)
+            if (-not (Test-Path $taskFile.FullName)) { continue }
+
             $taskContent = Get-Content -Path $taskFile.FullName -Raw | ConvertFrom-Json
             $taskId = $taskContent.id
             $taskName = $taskContent.name
-            
+
             # If task has analysis data, return to analysed; otherwise to todo
             $hasAnalysis = $taskContent.analysis -and $taskContent.analysis.PSObject.Properties.Count -gt 0
             if ($hasAnalysis) {
@@ -65,9 +68,9 @@ function Reset-InProgressTasks {
 
             # Write to target directory
             $taskContent | ConvertTo-Json -Depth 10 | Set-Content -Path $targetPath -Force
-            
-            # Remove from in-progress
-            Remove-Item -Path $taskFile.FullName -Force
+
+            # Remove from in-progress (ignore if already gone — concurrent process handled it)
+            Remove-Item -Path $taskFile.FullName -Force -ErrorAction SilentlyContinue
             
             $resetTasks += @{
                 id = $taskId
@@ -113,26 +116,29 @@ function Reset-SkippedTasks {
     
     foreach ($taskFile in $skippedTasks) {
         try {
+            # Re-verify file exists (may have been moved by concurrent process)
+            if (-not (Test-Path $taskFile.FullName)) { continue }
+
             $taskContent = Get-Content -Path $taskFile.FullName -Raw | ConvertFrom-Json
             $taskId = $taskContent.id
             $taskName = $taskContent.name
-            
+
             # Move to todo directory
             $todoDir = Join-Path $TasksBaseDir "todo"
             $todoPath = Join-Path $todoDir $taskFile.Name
-            
+
             # Update status
             $taskContent.status = "todo"
             $taskContent.updated_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-            
+
             # Preserve skip_history as audit trail
             # (don't clear it - this is intentional to maintain history for debugging)
-            
+
             # Write to todo directory
             $taskContent | ConvertTo-Json -Depth 10 | Set-Content -Path $todoPath -Force
-            
-            # Remove from skipped
-            Remove-Item -Path $taskFile.FullName -Force
+
+            # Remove from skipped (ignore if already gone — concurrent process handled it)
+            Remove-Item -Path $taskFile.FullName -Force -ErrorAction SilentlyContinue
             
             $resetTasks += @{
                 id = $taskId
@@ -226,6 +232,9 @@ function Reset-AnalysingTasks {
 
     foreach ($taskFile in $analysingTasks) {
         try {
+            # Re-verify file exists (may have been moved by concurrent process)
+            if (-not (Test-Path $taskFile.FullName)) { continue }
+
             $taskContent = Get-Content -Path $taskFile.FullName -Raw | ConvertFrom-Json
             $taskId = $taskContent.id
             $taskName = $taskContent.name
@@ -277,8 +286,8 @@ function Reset-AnalysingTasks {
             # Write to todo directory
             $taskContent | ConvertTo-Json -Depth 10 | Set-Content -Path $todoPath -Force
 
-            # Remove from analysing
-            Remove-Item -Path $taskFile.FullName -Force
+            # Remove from analysing (ignore if already gone — concurrent process handled it)
+            Remove-Item -Path $taskFile.FullName -Force -ErrorAction SilentlyContinue
 
             $resetTasks += @{
                 id   = $taskId

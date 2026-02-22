@@ -789,7 +789,7 @@ Do NOT implement the task. Your job is research and preparation only.
                             }
                             $newPath = Join-Path $needsInputDir $taskFile.Name
                             $taskContent | ConvertTo-Json -Depth 20 | Set-Content -Path $newPath -Encoding UTF8
-                            Remove-Item -Path $taskFile.FullName -Force
+                            Remove-Item -Path $taskFile.FullName -Force -ErrorAction SilentlyContinue
 
                             Write-Status "Task moved to needs-input for manual conflict resolution" -Type Warn
                         }

@@ -98,20 +98,46 @@ function Get-TaskSlug {
 function Remove-Junctions {
     <#
     .SYNOPSIS
-    Remove directory junctions from a worktree without following into shared dirs
+    Remove directory junctions from a worktree without following into shared dirs.
+    Returns $true if all junctions were removed, $false otherwise.
+    Throws on failure unless -ErrorOnFailure is $false.
     #>
-    param([string]$WorktreePath)
+    param(
+        [string]$WorktreePath,
+        [bool]$ErrorOnFailure = $true
+    )
 
     $junctionPaths = @(
         (Join-Path $WorktreePath ".bot\.control"),
         (Join-Path $WorktreePath ".bot\workspace\tasks")
     )
+    $failures = @()
     foreach ($jp in $junctionPaths) {
         if ((Test-Path $jp) -and (Get-Item $jp).Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
             # cmd rmdir removes the junction link without following into target
             cmd /c rmdir "$jp" 2>$null
+
+            # Verify the junction is actually gone
+            if (Test-Path $jp) {
+                # Fallback: use .NET to remove the junction
+                try {
+                    [System.IO.Directory]::Delete($jp, $false)
+                } catch {
+                    # Last resort failed — record it
+                }
+            }
+
+            # Final check
+            if (Test-Path $jp) {
+                $failures += $jp
+            }
         }
     }
+
+    if ($failures.Count -gt 0 -and $ErrorOnFailure) {
+        throw "Failed to remove junctions: $($failures -join ', ')"
+    }
+    return ($failures.Count -eq 0)
 }
 
 # --- Exported Functions ---
@@ -147,24 +173,32 @@ function New-TaskWorktree {
         New-Item -Path $worktreeDir -ItemType Directory -Force | Out-Null
     }
 
-    # If worktree already exists, return it
+    # If worktree directory already exists, validate it's a real worktree
     if (Test-Path $worktreePath) {
-        # Ensure map entry exists
-        $map = Read-WorktreeMap
-        if (-not $map.ContainsKey($TaskId)) {
-            $map[$TaskId] = @{
+        $gitMarker = Join-Path $worktreePath ".git"
+        if (Test-Path $gitMarker) {
+            # Valid worktree — ensure map entry exists and return it
+            $map = Read-WorktreeMap
+            if (-not $map.ContainsKey($TaskId)) {
+                $map[$TaskId] = @{
+                    worktree_path = $worktreePath
+                    branch_name   = $branchName
+                    task_name     = $TaskName
+                    created_at    = (Get-Date).ToUniversalTime().ToString("o")
+                }
+                Write-WorktreeMap -Map $map
+            }
+            return @{
                 worktree_path = $worktreePath
                 branch_name   = $branchName
-                task_name     = $TaskName
-                created_at    = (Get-Date).ToUniversalTime().ToString("o")
+                success       = $true
+                message       = "Worktree already exists"
             }
-            Write-WorktreeMap -Map $map
-        }
-        return @{
-            worktree_path = $worktreePath
-            branch_name   = $branchName
-            success       = $true
-            message       = "Worktree already exists"
+        } else {
+            # Stale leftover directory (no .git marker) — remove and recreate
+            Remove-Item -Path $worktreePath -Recurse -Force -ErrorAction SilentlyContinue
+            # Also prune git's worktree list so it doesn't think it still exists
+            git -C $ProjectRoot worktree prune 2>$null
         }
     }
 
@@ -181,6 +215,12 @@ function New-TaskWorktree {
             if ($LASTEXITCODE -ne 0) {
                 throw "git worktree add failed: $($output -join ' ')"
             }
+        }
+
+        # Sanity check: verify worktree was actually created
+        $gitMarker = Join-Path $worktreePath ".git"
+        if (-not (Test-Path $gitMarker)) {
+            throw "git worktree add succeeded but .git marker not found in $worktreePath"
         }
 
         # --- Set up junctions for shared infrastructure ---
@@ -279,7 +319,7 @@ function Complete-TaskWorktree {
         }
 
         # Remove junctions BEFORE commit/rebase so git sees real tracked files
-        Remove-Junctions -WorktreePath $worktreePath
+        $junctionsClean = Remove-Junctions -WorktreePath $worktreePath -ErrorOnFailure $false
 
         # Restore tracked files that were replaced by the tasks junction
         git -C $worktreePath checkout -- .bot/workspace/tasks 2>$null
@@ -340,8 +380,13 @@ function Complete-TaskWorktree {
         git -C $ProjectRoot add .bot/workspace/tasks/ 2>$null
         git -C $ProjectRoot commit --quiet -m "chore: update task state" 2>$null
 
-        # Remove worktree and branch
-        git -C $ProjectRoot worktree remove $worktreePath --force 2>$null
+        # Remove worktree and branch — only force-remove if junctions were cleaned
+        if ($junctionsClean) {
+            git -C $ProjectRoot worktree remove $worktreePath --force 2>$null
+        } else {
+            Write-Warning "Skipping force worktree removal — junctions still present in $worktreePath"
+            git -C $ProjectRoot worktree remove $worktreePath 2>$null
+        }
         git -C $ProjectRoot branch -D $branchName 2>$null
 
         # Remove from registry
@@ -521,12 +566,18 @@ function Remove-OrphanWorktrees {
         $worktreePath = $entry.worktree_path
         $branchName = $entry.branch_name
 
-        # Remove junctions first
+        # Remove junctions first, then only force-remove if junctions are clean
+        $junctionsClean = $true
         if ($worktreePath -and (Test-Path $worktreePath)) {
-            Remove-Junctions -WorktreePath $worktreePath
+            $junctionsClean = Remove-Junctions -WorktreePath $worktreePath -ErrorOnFailure $false
         }
 
-        git -C $ProjectRoot worktree remove $worktreePath --force 2>$null
+        if ($junctionsClean) {
+            git -C $ProjectRoot worktree remove $worktreePath --force 2>$null
+        } else {
+            Write-Warning "Skipping force worktree removal for orphan $taskId — junctions still present"
+            git -C $ProjectRoot worktree remove $worktreePath 2>$null
+        }
         git -C $ProjectRoot branch -D $branchName 2>$null
 
         $map.Remove($taskId)
