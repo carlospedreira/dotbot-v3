@@ -20,18 +20,18 @@ function Invoke-TaskCreateBulk {
     $validEfforts = @('XS', 'S', 'M', 'L', 'XL')
     
     # Import task index module for dependency validation
-    $indexModule = Join-Path $PSScriptRoot "..\..\modules\TaskIndexCache.psm1"
+    $indexModule = Join-Path $global:DotbotProjectRoot ".bot\systems\mcp\modules\TaskIndexCache.psm1"
     if (-not (Get-Module TaskIndexCache)) {
         Import-Module $indexModule -Force
     }
     
     # Initialize task index
-    $tasksBaseDir = Join-Path $PSScriptRoot "..\..\..\..\workspace\tasks"
+    $tasksBaseDir = Join-Path $global:DotbotProjectRoot ".bot\workspace\tasks"
     Initialize-TaskIndex -TasksBaseDir $tasksBaseDir
     $index = Get-TaskIndex
     
     # Define tasks directory
-    $tasksDir = Join-Path $PSScriptRoot "..\..\..\..\workspace\tasks\todo"
+    $tasksDir = Join-Path $global:DotbotProjectRoot ".bot\workspace\tasks\todo"
     
     # Ensure directory exists
     if (-not (Test-Path $tasksDir)) {

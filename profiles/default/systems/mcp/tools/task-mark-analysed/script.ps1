@@ -1,5 +1,5 @@
 # Import session tracking module
-Import-Module "$PSScriptRoot\..\..\modules\SessionTracking.psm1" -Force
+Import-Module (Join-Path $global:DotbotProjectRoot ".bot\systems\mcp\modules\SessionTracking.psm1") -Force
 
 # Helper function to extract analysis-phase activity logs and attach to analysed tasks
 function Get-AnalysisActivityLog {
@@ -8,7 +8,7 @@ function Get-AnalysisActivityLog {
     )
 
     # Control directory: .bot/.control (script is at .bot/systems/mcp/tools/task-mark-analysed)
-    $controlDir = Join-Path (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))) ".control"
+    $controlDir = Join-Path $global:DotbotProjectRoot ".bot\.control"
     $activityFile = Join-Path $controlDir "activity.jsonl"
 
     if (-not (Test-Path $activityFile)) { return @() }
@@ -48,7 +48,7 @@ function Invoke-TaskMarkAnalysed {
     }
     
     # Define tasks directories
-    $tasksBaseDir = Join-Path $PSScriptRoot "..\..\..\..\workspace\tasks"
+    $tasksBaseDir = Join-Path $global:DotbotProjectRoot ".bot\workspace\tasks"
     $analysingDir = Join-Path $tasksBaseDir "analysing"
     $needsInputDir = Join-Path $tasksBaseDir "needs-input"
     $analysedDir = Join-Path $tasksBaseDir "analysed"

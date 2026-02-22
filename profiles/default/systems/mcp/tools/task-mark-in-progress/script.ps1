@@ -1,5 +1,5 @@
 # Import session tracking module
-Import-Module "$PSScriptRoot\..\..\modules\SessionTracking.psm1" -Force
+Import-Module (Join-Path $global:DotbotProjectRoot ".bot\systems\mcp\modules\SessionTracking.psm1") -Force
 
 function Invoke-TaskMarkInProgress {
     param(
@@ -15,7 +15,7 @@ function Invoke-TaskMarkInProgress {
     }
     
     # Define tasks directories
-    $tasksBaseDir = Join-Path $PSScriptRoot "..\..\..\..\workspace\tasks"
+    $tasksBaseDir = Join-Path $global:DotbotProjectRoot ".bot\workspace\tasks"
     $todosDir = Join-Path $tasksBaseDir "todo"
     $analysedDir = Join-Path $tasksBaseDir "analysed"
     $inProgressDir = Join-Path $tasksBaseDir "in-progress"

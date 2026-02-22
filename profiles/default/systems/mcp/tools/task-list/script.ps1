@@ -1,11 +1,12 @@
 # Import task index module
-$indexModule = Join-Path $PSScriptRoot "..\..\modules\TaskIndexCache.psm1"
+$indexModule = Join-Path $global:DotbotProjectRoot ".bot\systems\mcp\modules\TaskIndexCache.psm1"
 if (-not (Get-Module TaskIndexCache)) {
     Import-Module $indexModule -Force
 }
 
 # Initialize index on first use
-$tasksBaseDir = Join-Path $PSScriptRoot "..\..\..\..\workspace\tasks"
+$tasksBaseDir = Join-Path $global:DotbotProjectRoot ".bot\workspace\tasks"
+[Console]::Error.WriteLine("[task-list] tasksBaseDir=$tasksBaseDir exists=$(Test-Path $tasksBaseDir)")
 Initialize-TaskIndex -TasksBaseDir $tasksBaseDir
 
 function Invoke-TaskList {

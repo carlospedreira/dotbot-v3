@@ -41,7 +41,7 @@ function Invoke-SteeringHeartbeat {
         }
     }
 
-    $controlDir = Join-Path $PSScriptRoot "..\..\..\..\.control"
+    $controlDir = Join-Path $global:DotbotProjectRoot ".bot\.control"
     $controlDir = [System.IO.Path]::GetFullPath($controlDir)
 
     # Ensure control directory exists

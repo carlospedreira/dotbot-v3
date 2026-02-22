@@ -274,7 +274,8 @@ if (-not $dotbotInstalled) {
             Assert-PathExists -Name "-Profile: .bot created with dotnet profile" -Path $botDir3
 
             # Check that dotnet-specific files exist (look for any file from the dotnet profile)
-            $dotnetFiles = Get-ChildItem -Path $dotnetProfile -Recurse -File
+            # Exclude profile-init.ps1 which is intentionally not copied (it runs once during init)
+            $dotnetFiles = Get-ChildItem -Path $dotnetProfile -Recurse -File | Where-Object { $_.Name -ne "profile-init.ps1" }
             if ($dotnetFiles.Count -gt 0) {
                 $firstFile = $dotnetFiles[0]
                 $relativePath = $firstFile.FullName.Substring($dotnetProfile.Length + 1)

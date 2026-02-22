@@ -1,5 +1,5 @@
 # Import session tracking module
-Import-Module "$PSScriptRoot\..\..\modules\SessionTracking.psm1" -Force
+Import-Module (Join-Path $global:DotbotProjectRoot ".bot\systems\mcp\modules\SessionTracking.psm1") -Force
 
 # Helper function to extract execution-phase activity logs
 function Get-ExecutionActivityLog {
@@ -9,7 +9,7 @@ function Get-ExecutionActivityLog {
     )
 
     # Control directory: .bot/.control (script is at .bot/systems/mcp/tools/task-mark-done)
-    $controlDir = Join-Path (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))) ".control"
+    $controlDir = Join-Path $global:DotbotProjectRoot ".bot\.control"
     $activityFile = Join-Path $controlDir "activity.jsonl"
 
     if (-not (Test-Path $activityFile)) { return @() }
@@ -47,7 +47,7 @@ function Invoke-VerificationScripts {
         [string]$ProjectRoot
     )
     
-    $scriptsDir = Join-Path $PSScriptRoot "..\..\..\..\hooks\verify"
+    $scriptsDir = Join-Path $global:DotbotProjectRoot ".bot\hooks\verify"
     $configPath = Join-Path $scriptsDir "config.json"
     
     # If no verification configured, allow marking done
@@ -174,7 +174,8 @@ function Invoke-TaskMarkDone {
     }
     
     # Define tasks directories
-    $tasksBaseDir = Join-Path $PSScriptRoot "..\..\..\..\workspace\tasks"
+    $tasksBaseDir = Join-Path $global:DotbotProjectRoot ".bot\workspace\tasks"
+    [Console]::Error.WriteLine("[task-mark-done] tasksBaseDir=$tasksBaseDir exists=$(Test-Path $tasksBaseDir)")
     $todosDir = Join-Path $tasksBaseDir "todo"
     $inProgressDir = Join-Path $tasksBaseDir "in-progress"
     $doneDir = Join-Path $tasksBaseDir "done"
@@ -247,7 +248,7 @@ function Invoke-TaskMarkDone {
     $commitInfo = $null
     try {
         # Import the commit extraction module
-        $modulePath = Join-Path $PSScriptRoot "..\..\modules\Extract-CommitInfo.ps1"
+        $modulePath = Join-Path $global:DotbotProjectRoot ".bot\systems\mcp\modules\Extract-CommitInfo.ps1"
         if (Test-Path $modulePath) {
             . $modulePath
             $commits = Get-TaskCommitInfo -TaskId $taskId -ProjectRoot $projectRoot

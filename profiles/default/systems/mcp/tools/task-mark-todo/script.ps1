@@ -13,7 +13,7 @@ function Invoke-TaskMarkTodo {
     }
     
     # Define tasks directories
-    $tasksBaseDir = Join-Path $PSScriptRoot "..\..\..\..\workspace\tasks"
+    $tasksBaseDir = Join-Path $global:DotbotProjectRoot ".bot\workspace\tasks"
     $todosDir = Join-Path $tasksBaseDir "todo"
     $inProgressDir = Join-Path $tasksBaseDir "in-progress"
     $doneDir = Join-Path $tasksBaseDir "done"

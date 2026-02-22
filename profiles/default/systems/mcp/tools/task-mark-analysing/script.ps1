@@ -1,5 +1,5 @@
 # Import session tracking module
-Import-Module "$PSScriptRoot\..\..\modules\SessionTracking.psm1" -Force
+Import-Module (Join-Path $global:DotbotProjectRoot ".bot\systems\mcp\modules\SessionTracking.psm1") -Force
 
 function Invoke-TaskMarkAnalysing {
     param(
@@ -15,7 +15,8 @@ function Invoke-TaskMarkAnalysing {
     }
     
     # Define tasks directories
-    $tasksBaseDir = Join-Path $PSScriptRoot "..\..\..\..\workspace\tasks"
+    $tasksBaseDir = Join-Path $global:DotbotProjectRoot ".bot\workspace\tasks"
+    [Console]::Error.WriteLine("[task-mark-analysing] tasksBaseDir=$tasksBaseDir exists=$(Test-Path $tasksBaseDir)")
     $todoDir = Join-Path $tasksBaseDir "todo"
     $analysingDir = Join-Path $tasksBaseDir "analysing"
     

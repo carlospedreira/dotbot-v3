@@ -12,7 +12,7 @@ function Invoke-PlanGet {
     }
 
     # Find task file by ID (search all status directories)
-    $tasksBaseDir = Join-Path $PSScriptRoot "..\..\..\..\workspace\tasks"
+    $tasksBaseDir = Join-Path $global:DotbotProjectRoot ".bot\workspace\tasks"
     $statusDirs = @('todo', 'in-progress', 'done', 'skipped', 'cancelled')
     $taskFile = $null
     $task = $null
@@ -49,7 +49,7 @@ function Invoke-PlanGet {
     }
 
     # Resolve plan path (relative to project root)
-    $botRoot = Join-Path $PSScriptRoot "..\..\..\..\.."
+    $botRoot = $global:DotbotProjectRoot
     $planFullPath = Join-Path $botRoot $task.plan_path
 
     if (-not (Test-Path $planFullPath)) {

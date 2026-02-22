@@ -42,7 +42,14 @@ if (-not $script:ProjectRoot) {
 # Also export to global scope so dot-sourced tools can access it
 $global:DotbotProjectRoot = $script:ProjectRoot
 
-# Auto-detected project root: $script:ProjectRoot
+# Diagnostic logging (stderr, separate from MCP protocol on stdout)
+[Console]::Error.WriteLine("Project root: $($script:ProjectRoot)")
+$tasksCheck = Join-Path $script:ProjectRoot ".bot\workspace\tasks"
+if (Test-Path $tasksCheck) {
+    [Console]::Error.WriteLine("Tasks directory: OK ($tasksCheck)")
+} else {
+    [Console]::Error.WriteLine("Tasks directory: MISSING ($tasksCheck)")
+}
 
 # Load helpers
 . "$PSScriptRoot\dotbot-mcp-helpers.ps1"

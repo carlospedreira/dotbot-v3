@@ -53,13 +53,13 @@ function Invoke-TaskCreate {
     # Validate dependencies exist
     if ($dependencies -and $dependencies.Count -gt 0) {
         # Import task index module
-        $indexModule = Join-Path $PSScriptRoot "..\..\modules\TaskIndexCache.psm1"
+        $indexModule = Join-Path $global:DotbotProjectRoot ".bot\systems\mcp\modules\TaskIndexCache.psm1"
         if (-not (Get-Module TaskIndexCache)) {
             Import-Module $indexModule -Force
         }
         
         # Initialize index
-        $tasksBaseDir = Join-Path $PSScriptRoot "..\..\..\..\workspace\tasks"
+        $tasksBaseDir = Join-Path $global:DotbotProjectRoot ".bot\workspace\tasks"
         Initialize-TaskIndex -TasksBaseDir $tasksBaseDir
         $index = Get-TaskIndex
         
@@ -123,7 +123,7 @@ function Invoke-TaskCreate {
     }
     
     # Define file path
-    $tasksDir = Join-Path $PSScriptRoot "..\..\..\..\workspace\tasks\todo"
+    $tasksDir = Join-Path $global:DotbotProjectRoot ".bot\workspace\tasks\todo"
     
     # Ensure directory exists
     if (-not (Test-Path $tasksDir)) {
