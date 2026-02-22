@@ -324,6 +324,47 @@ if (Test-Path $mcpJsonPath) {
 }
 
 # ---------------------------------------------------------------------------
+# Ensure common patterns are gitignored in the project root
+# ---------------------------------------------------------------------------
+$projectGitignore = Join-Path $ProjectDir ".gitignore"
+$requiredIgnores = @(
+    ".serena/"
+    ".playwright-mcp/"
+    "node_modules/"
+    "test-results/"
+    "playwright-report/"
+    ".vscode/mcp.json"
+    ".idea"
+    ".DS_Store"
+    ".env"
+    "sessions/"
+)
+
+$existingContent = ""
+if (Test-Path $projectGitignore) {
+    $existingContent = Get-Content $projectGitignore -Raw
+}
+
+$entriesToAdd = @()
+foreach ($pattern in $requiredIgnores) {
+    $escaped = [regex]::Escape($pattern.TrimEnd('/'))
+    if ($existingContent -notmatch "(?m)^\s*$escaped/?(\s|$)") {
+        $entriesToAdd += $pattern
+    }
+}
+
+if ($entriesToAdd.Count -gt 0) {
+    $block = "`n# dotbot defaults (auto-added by dotbot init)`n"
+    foreach ($pattern in $entriesToAdd) {
+        $block += "$pattern`n"
+    }
+    Add-Content -Path $projectGitignore -Value $block -Encoding UTF8
+    Write-Success "Added $($entriesToAdd.Count) entries to .gitignore"
+} else {
+    Write-Host "  ✓ .gitignore already covers dotbot defaults" -ForegroundColor DarkGray
+}
+
+# ---------------------------------------------------------------------------
 # Install gitleaks pre-commit hook
 # ---------------------------------------------------------------------------
 $hooksDir = Join-Path $gitDir "hooks"
