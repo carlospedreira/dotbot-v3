@@ -344,6 +344,10 @@ function Complete-TaskWorktree {
             }
         }
 
+        # Discard any pending task state changes in main repo before merge
+        # (analysis process writes to shared task files via junctions)
+        git -C $ProjectRoot checkout -- .bot/workspace/tasks/ 2>$null
+
         # Squash merge into main
         $mergeOutput = git -C $ProjectRoot merge --squash $branchName 2>&1
         if ($LASTEXITCODE -ne 0) {
