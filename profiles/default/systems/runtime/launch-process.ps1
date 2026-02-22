@@ -80,6 +80,7 @@ $botRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $controlDir = Join-Path $botRoot ".control"
 $processesDir = Join-Path $controlDir "processes"
 $projectRoot = Split-Path -Parent $botRoot
+$global:DotbotProjectRoot = $projectRoot
 
 # Ensure directories exist
 if (-not (Test-Path $processesDir)) {

@@ -21,6 +21,7 @@ param(
 # Find .bot root (server is at .bot/systems/ui, so go up 2 levels)
 $botRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $projectRoot = Split-Path -Parent $botRoot
+$global:DotbotProjectRoot = $projectRoot
 $staticRoot = Join-Path $PSScriptRoot "static"
 $controlDir = Join-Path $botRoot ".control"
 

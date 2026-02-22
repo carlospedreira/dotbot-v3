@@ -319,6 +319,35 @@ try {
 Write-Host ""
 
 # ═══════════════════════════════════════════════════════════════════
+# GLOBAL INITIALIZATION
+# ═══════════════════════════════════════════════════════════════════
+
+Write-Host "  GLOBAL INITIALIZATION" -ForegroundColor Cyan
+Write-Host "  ────────────────────────────────────────────" -ForegroundColor DarkGray
+
+# Find all scripts that dot-source MCP tool scripts (scan repo source, not installed copy)
+$profilesDir = Join-Path $repoRoot "profiles"
+$allScripts = Get-ChildItem -Path $profilesDir -Filter "*.ps1" -Recurse
+$toolSourcePattern = '\.\s+.*tools[\\/][^\\/]+[\\/]script\.ps1'
+$globalSetPattern = '\$global:DotbotProjectRoot\s*='
+
+foreach ($script in $allScripts) {
+    # Skip the tool scripts themselves
+    if ($script.FullName -match 'tools[\\/][^\\/]+[\\/]script\.ps1') { continue }
+
+    $content = Get-Content $script.FullName -Raw
+    if ($content -match $toolSourcePattern) {
+        $setsGlobal = $content -match $globalSetPattern
+        $relativePath = $script.FullName.Substring($profilesDir.Length + 1)
+        Assert-True -Name "$relativePath sets DotbotProjectRoot" `
+            -Condition $setsGlobal `
+            -Message "File dot-sources tool scripts but never sets `$global:DotbotProjectRoot"
+    }
+}
+
+Write-Host ""
+
+# ═══════════════════════════════════════════════════════════════════
 # SUMMARY
 # ═══════════════════════════════════════════════════════════════════
 
