@@ -439,6 +439,11 @@ if ($Type -in @('analysis', 'execution')) {
 
                 # For analysis: check resumed tasks (answered questions) first, then todo
                 $taskResult = Get-NextTodoTask -Verbose
+
+                # Immediately claim task to prevent execution from picking it up
+                if ($taskResult.task) {
+                    Invoke-TaskMarkAnalysing -Arguments @{ task_id = $taskResult.task.id } | Out-Null
+                }
             } else {
                 # For execution: prefer analysed, then todo
                 $taskResult = Invoke-TaskGetNext -Arguments @{ verbose = $true }
@@ -491,6 +496,12 @@ if ($Type -in @('analysis', 'execution')) {
             Write-Status "Task: $($task.name)" -Type Success
             Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Started task: $($task.name)"
 
+            # Mark execution task immediately to prevent analysis from picking it up
+            if ($Type -eq 'execution') {
+                Invoke-TaskMarkInProgress -Arguments @{ task_id = $task.id } | Out-Null
+                Invoke-SessionUpdate -Arguments @{ current_task_id = $task.id } | Out-Null
+            }
+
             # --- Worktree setup ---
             $worktreePath = $null
             $branchName = $null
@@ -514,12 +525,6 @@ if ($Type -in @('analysis', 'execution')) {
                 }
             }
             # Analysis runs in $projectRoot (no worktree needed — it's read-only)
-
-            # Mark task status
-            if ($Type -eq 'execution') {
-                Invoke-TaskMarkInProgress -Arguments @{ task_id = $task.id } | Out-Null
-                Invoke-SessionUpdate -Arguments @{ current_task_id = $task.id } | Out-Null
-            }
 
             # Generate new Claude session ID per task
             $claudeSessionId = [System.Guid]::NewGuid().ToString()

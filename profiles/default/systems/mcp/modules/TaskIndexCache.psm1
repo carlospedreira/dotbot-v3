@@ -110,6 +110,29 @@ function Update-TaskIndex {
             }
         }
     }
+
+    # Dedup: if a task exists in multiple state directories (stale copies),
+    # keep only the most advanced state to prevent double-pickup
+    $seenIds = @{}
+    foreach ($bucket in @(
+        $script:TaskIndex.Done,
+        $script:TaskIndex.Skipped,
+        $script:TaskIndex.Cancelled,
+        $script:TaskIndex.Split,
+        $script:TaskIndex.InProgress,
+        $script:TaskIndex.Analysed,
+        $script:TaskIndex.NeedsInput,
+        $script:TaskIndex.Analysing,
+        $script:TaskIndex.Todo
+    )) {
+        foreach ($taskId in @($bucket.Keys)) {
+            if ($seenIds.ContainsKey($taskId)) {
+                $bucket.Remove($taskId)
+            } else {
+                $seenIds[$taskId] = $true
+            }
+        }
+    }
 }
 
 function Get-TaskIndex {
