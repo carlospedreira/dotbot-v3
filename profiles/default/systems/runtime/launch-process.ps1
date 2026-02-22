@@ -400,6 +400,43 @@ if ($Type -in @('analysis', 'execution')) {
             Write-Status "Fetching next task..." -Type Process
             if ($Type -eq 'analysis') {
                 Reset-TaskIndex
+
+                # Wait for any active execution worktrees to merge first
+                $waitingLogged = $false
+                while ($true) {
+                    Initialize-WorktreeMap -BotRoot $botRoot
+                    $map = Read-WorktreeMap
+                    $hasActiveExecutionWt = $false
+
+                    if ($map.Count -gt 0) {
+                        $index = Get-TaskIndex
+                        foreach ($taskId in @($map.Keys)) {
+                            if ($index.InProgress.ContainsKey($taskId) -or
+                                $index.Done.ContainsKey($taskId)) {
+                                $entry = $map[$taskId]
+                                if ($entry.worktree_path -and (Test-Path $entry.worktree_path)) {
+                                    $hasActiveExecutionWt = $true
+                                    break
+                                }
+                            }
+                        }
+                    }
+
+                    if (-not $hasActiveExecutionWt) { break }
+
+                    if (-not $waitingLogged) {
+                        Write-Status "Waiting for execution merge before next analysis..." -Type Info
+                        Write-ProcessActivity -Id $procId -ActivityType "text" `
+                            -Message "Waiting for execution to merge before starting next analysis"
+                        $processData.heartbeat_status = "Waiting for execution merge"
+                        Write-ProcessFile -Id $procId -Data $processData
+                        $waitingLogged = $true
+                    }
+
+                    Start-Sleep -Seconds 5
+                    if (Test-ProcessStopSignal -Id $procId) { break }
+                }
+
                 # For analysis: check resumed tasks (answered questions) first, then todo
                 $taskResult = Get-NextTodoTask -Verbose
             } else {
@@ -457,33 +494,26 @@ if ($Type -in @('analysis', 'execution')) {
             # --- Worktree setup ---
             $worktreePath = $null
             $branchName = $null
-            if ($Type -eq 'analysis') {
-                $wtResult = New-TaskWorktree -TaskId $task.id -TaskName $task.name -ProjectRoot $projectRoot -BotRoot $botRoot
-                if ($wtResult.success) {
-                    $worktreePath = $wtResult.worktree_path
-                    $branchName = $wtResult.branch_name
-                    Write-Status "Worktree: $worktreePath" -Type Info
-                } else {
-                    Write-Status "Worktree failed: $($wtResult.message)" -Type Warn
-                }
-            } else {
-                # Execution: look up existing worktree or create fallback
+            if ($Type -eq 'execution') {
+                # Execution: look up existing worktree or create new
                 $wtInfo = Get-TaskWorktreeInfo -TaskId $task.id -BotRoot $botRoot
                 if ($wtInfo -and (Test-Path $wtInfo.worktree_path)) {
                     $worktreePath = $wtInfo.worktree_path
                     $branchName = $wtInfo.branch_name
                     Write-Status "Using worktree: $worktreePath" -Type Info
                 } else {
-                    $wtResult = New-TaskWorktree -TaskId $task.id -TaskName $task.name -ProjectRoot $projectRoot -BotRoot $botRoot
+                    $wtResult = New-TaskWorktree -TaskId $task.id -TaskName $task.name `
+                        -ProjectRoot $projectRoot -BotRoot $botRoot
                     if ($wtResult.success) {
                         $worktreePath = $wtResult.worktree_path
                         $branchName = $wtResult.branch_name
-                        Write-Status "Worktree (fallback): $worktreePath" -Type Info
+                        Write-Status "Worktree: $worktreePath" -Type Info
                     } else {
                         Write-Status "Worktree failed: $($wtResult.message)" -Type Warn
                     }
                 }
             }
+            # Analysis runs in $projectRoot (no worktree needed — it's read-only)
 
             # Mark task status
             if ($Type -eq 'execution') {
@@ -544,7 +574,7 @@ Work on this task autonomously. When complete, ensure you call task_mark_done vi
                 $steps = if ($task.steps) { ($task.steps | ForEach-Object { "- $_" }) -join "`n" } else { "No specific steps defined." }
                 $prompt = $prompt -replace '\{\{TASK_STEPS\}\}', $steps
 
-                $branchForPrompt = if ($branchName) { $branchName } else { "main" }
+                $branchForPrompt = "main"
                 $prompt = $prompt -replace '\{\{BRANCH_NAME\}\}', $branchForPrompt
 
                 # Build resolved questions context for resumed tasks
@@ -776,6 +806,18 @@ Do NOT implement the task. Your job is research and preparation only.
                 try { Remove-ClaudeSession -SessionId $claudeSessionId -ProjectRoot $projectRoot | Out-Null } catch {}
             } else {
                 Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Task failed: $($task.name)"
+
+                # Clean up worktree for failed/skipped tasks to unblock analysis
+                if ($Type -eq 'execution' -and $worktreePath) {
+                    Write-Status "Cleaning up worktree for failed task..." -Type Info
+                    Remove-Junctions -WorktreePath $worktreePath
+                    git -C $projectRoot worktree remove $worktreePath --force 2>$null
+                    git -C $projectRoot branch -D $branchName 2>$null
+                    Initialize-WorktreeMap -BotRoot $botRoot
+                    $map = Read-WorktreeMap
+                    $map.Remove($task.id)
+                    Write-WorktreeMap -Map $map
+                }
 
                 # Update session failure counters (execution only)
                 if ($Type -eq 'execution') {

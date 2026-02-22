@@ -16,10 +16,9 @@ You are an autonomous AI coding agent performing **pre-flight analysis** of a ta
 
 ## Working Directory
 
-You are working in a **git worktree** on branch `{{BRANCH_NAME}}`.
-- This is the same worktree that will be used for execution
+You are working on the **main branch** of the repository.
 - Do NOT modify code files — you are preparing, not implementing
-- The .bot/ MCP tools access the central task queue (shared via junction)
+- The .bot/ MCP tools access the central task queue
 
 ## Task Details
 
