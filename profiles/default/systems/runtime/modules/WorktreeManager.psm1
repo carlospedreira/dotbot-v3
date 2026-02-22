@@ -538,6 +538,10 @@ function Remove-OrphanWorktrees {
 
 # --- Module Exports ---
 Export-ModuleMember -Function @(
+    'Initialize-WorktreeMap'
+    'Read-WorktreeMap'
+    'Write-WorktreeMap'
+    'Remove-Junctions'
     'New-TaskWorktree'
     'Complete-TaskWorktree'
     'Get-TaskWorktreePath'
