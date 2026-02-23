@@ -123,6 +123,13 @@ function Reset-SkippedTasks {
             $taskId = $taskContent.id
             $taskName = $taskContent.name
 
+            # Guard against infinite skip loops — leave persistently-failing tasks for manual review
+            $skipCount = ($taskContent.skip_history | Measure-Object).Count
+            if ($skipCount -ge 3) {
+                Write-Warning "Task '$taskName' skipped $skipCount times - leaving in skipped for manual review"
+                continue
+            }
+
             # Move to todo directory
             $todoDir = Join-Path $TasksBaseDir "todo"
             $todoPath = Join-Path $todoDir $taskFile.Name

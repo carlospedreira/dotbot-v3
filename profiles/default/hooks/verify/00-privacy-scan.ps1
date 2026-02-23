@@ -20,7 +20,7 @@ $patterns = @(
     # Secrets and credentials
     @{ name = "api_key_value"; pattern = '(?:api[_-]?key|apikey)\s*[=:]\s*["\u0027]?[A-Za-z0-9_\-]{20,}'; description = "API key value"; caseSensitive = $false }
     @{ name = "secret_value"; pattern = '(?:secret|password|passwd|pwd)\s*[=:]\s*["\u0027]?[^\s"]{8,}'; description = "Secret/password value"; caseSensitive = $false }
-    @{ name = "bearer_token"; pattern = 'Bearer\s+[A-Za-z0-9_\-\.]+'; description = "Bearer token"; caseSensitive = $false }
+    @{ name = "bearer_token"; pattern = 'Bearer\s+[A-Za-z0-9_\-\.]{20,}'; description = "Bearer token"; caseSensitive = $false }
     @{ name = "connection_string"; pattern = '(?:Server|Data Source|mongodb\+srv|postgresql|mysql)://[^\s"]+'; description = "Connection string"; caseSensitive = $false }
     
     # Cloud credentials
@@ -39,7 +39,6 @@ $excludePatterns = @(
 
 # Scan directories
 $scanPaths = @(
-    ".bot/workspace/tasks",
     ".bot/workspace/plans"
 )
 

@@ -360,10 +360,17 @@ function Complete-TaskWorktree {
         git -C $ProjectRoot checkout -- .bot/workspace/tasks/ 2>$null
         git -C $ProjectRoot clean -fd -- .bot/workspace/tasks/ 2>$null
 
+        # Stash all remaining dirty state (e.g. .gitignore, user edits) so merge can proceed
+        $stashOutput = git -C $ProjectRoot stash push -u -m "dotbot-pre-merge-$TaskId" 2>&1
+        $wasStashed = $LASTEXITCODE -eq 0 -and "$stashOutput" -notmatch 'No local changes'
+
         # Squash merge into main
         $mergeOutput = git -C $ProjectRoot merge --squash $branchName 2>&1
         if ($LASTEXITCODE -ne 0) {
             git -C $ProjectRoot reset --hard HEAD 2>$null
+            if ($wasStashed) {
+                git -C $ProjectRoot stash pop 2>$null
+            }
             # Restore backed-up task state after failed merge
             foreach ($key in $taskBackup.Keys) {
                 $restorePath = Join-Path $ProjectRoot ".bot\workspace\tasks\$key"
@@ -417,6 +424,17 @@ function Complete-TaskWorktree {
         # but were previously only "accidentally" committed via task branches
         git -C $ProjectRoot add .bot/workspace/tasks/ 2>$null
         git -C $ProjectRoot commit --quiet -m "chore: update task state" 2>$null
+
+        # Restore stashed state after successful merge+commit
+        if ($wasStashed) {
+            git -C $ProjectRoot stash pop 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                # Stash conflicts with merge result — keep merge, drop stash
+                git -C $ProjectRoot checkout --theirs -- . 2>$null
+                git -C $ProjectRoot add . 2>$null
+                git -C $ProjectRoot stash drop 2>$null
+            }
+        }
 
         # Remove worktree and branch — only force-remove if junctions were cleaned
         if ($junctionsClean) {
