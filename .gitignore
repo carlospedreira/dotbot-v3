@@ -14,5 +14,6 @@ Thumbs.db
 *.swp
 *.swo
 
-# Playwright MCP
+# MCP tools
 .playwright-mcp/
+.serena/
