@@ -98,6 +98,7 @@ function Invoke-TaskGetNext {
             applicable_standards = $nextTask.applicable_standards
             file_path = $nextTask.file_path
             needs_interview = $nextTask.needs_interview
+            questions_resolved = $nextTask.questions_resolved
         }
     } else {
         $taskObj = @{

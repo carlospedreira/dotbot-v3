@@ -91,6 +91,11 @@ function Get-BotState {
             created_at = $taskContent.created_at
             updated_at = $taskContent.updated_at
             started_at = $taskContent.started_at
+            analysis = $taskContent.analysis
+            questions_resolved = $taskContent.questions_resolved
+            analysis_started_at = $taskContent.analysis_started_at
+            analysis_completed_at = $taskContent.analysis_completed_at
+            analysed_by = $taskContent.analysed_by
         }
     }
 
@@ -140,6 +145,41 @@ function Get-BotState {
             Select-Object -First 100
     }
 
+    # Get skipped tasks list
+    $skippedTasksList = @()
+    if ($skippedTasks.Count -gt 0) {
+        $skippedTasksList = $skippedTasks |
+            ForEach-Object {
+                try {
+                    $taskContent = Get-Content $_.FullName -Raw -ErrorAction Stop | ConvertFrom-Json
+                    @{
+                        id = $taskContent.id
+                        name = $taskContent.name
+                        description = $taskContent.description
+                        category = $taskContent.category
+                        priority = $taskContent.priority
+                        effort = $taskContent.effort
+                        status = $taskContent.status
+                        acceptance_criteria = $taskContent.acceptance_criteria
+                        steps = $taskContent.steps
+                        dependencies = $taskContent.dependencies
+                        applicable_agents = $taskContent.applicable_agents
+                        applicable_standards = $taskContent.applicable_standards
+                        analysis = $taskContent.analysis
+                        questions_resolved = $taskContent.questions_resolved
+                        analysis_started_at = $taskContent.analysis_started_at
+                        analysis_completed_at = $taskContent.analysis_completed_at
+                        analysed_by = $taskContent.analysed_by
+                        skip_history = $taskContent.skip_history
+                        created_at = $taskContent.created_at
+                        updated_at = $taskContent.updated_at
+                    }
+                } catch {
+                    $null
+                }
+            } | Where-Object { $_ -ne $null }
+    }
+
     # Get analysing tasks list
     $analysingTasksList = @()
     if ($analysingTasks.Count -gt 0) {
@@ -176,6 +216,7 @@ function Get-BotState {
                         effort = $taskContent.effort
                         status = $taskContent.status
                         pending_question = $taskContent.pending_question
+                        questions_resolved = $taskContent.questions_resolved
                     }
                 } catch { $null }
             } | Where-Object { $_ -ne $null }
@@ -467,6 +508,7 @@ function Get-BotState {
             analysed_list = @($analysedTasksList)
             recent_completed = @($recentCompleted)
             completed_total = if ($doneTasks.Count) { $doneTasks.Count } else { 0 }
+            skipped_list = @($skippedTasksList)
             action_required = $needsInputTasks.Count + $processNeedsInputCount
         }
         session = $sessionInfo

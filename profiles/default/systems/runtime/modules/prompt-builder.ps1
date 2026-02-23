@@ -102,6 +102,17 @@ function Build-TaskPrompt {
     # Replace standards list
     $prompt = $prompt -replace '\{\{STANDARDS_LIST\}\}', $StandardsList
 
+    # Format and replace questions resolved (user decisions from analysis Q&A)
+    $questionsResolved = ""
+    if ($Task.questions_resolved -and $Task.questions_resolved.Count -gt 0) {
+        $questionsResolved = "The following decisions were made by the user during analysis. You **MUST** honour them — do not contradict or override these answers.`n`n"
+        foreach ($qa in $Task.questions_resolved) {
+            $questionsResolved += "**Q:** $($qa.question)`n"
+            $questionsResolved += "**A:** $($qa.answer)`n`n"
+        }
+    }
+    $prompt = $prompt -replace '\{\{QUESTIONS_RESOLVED\}\}', $questionsResolved
+
     # Add steering protocol include
     $steeringProtocolPath = Join-Path $PSScriptRoot "..\..\prompts\workflows\06-steering-protocol.include.md"
     $steeringProtocol = ""

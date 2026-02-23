@@ -39,8 +39,20 @@ function findTaskById(id) {
     const upcoming = lastState.tasks.upcoming?.find(t => t.id === id);
     if (upcoming) return upcoming;
 
+    const analysing = lastState.tasks.analysing_list?.find(t => t.id === id);
+    if (analysing) return analysing;
+
+    const needsInput = lastState.tasks.needs_input_list?.find(t => t.id === id);
+    if (needsInput) return needsInput;
+
+    const analysed = lastState.tasks.analysed_list?.find(t => t.id === id);
+    if (analysed) return analysed;
+
     const completed = lastState.tasks.recent_completed?.find(t => t.id === id);
     if (completed) return completed;
+
+    const skipped = lastState.tasks.skipped_list?.find(t => t.id === id);
+    if (skipped) return skipped;
 
     return null;
 }

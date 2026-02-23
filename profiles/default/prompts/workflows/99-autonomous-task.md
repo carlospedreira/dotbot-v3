@@ -36,6 +36,9 @@ You are working in a **git worktree** on branch `{{BRANCH_NAME}}`.
 ### Implementation Steps
 {{TASK_STEPS}}
 
+### User Decisions
+{{QUESTIONS_RESOLVED}}
+
 ---
 
 ## Implementation Protocol

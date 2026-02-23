@@ -74,7 +74,7 @@ function updateTaskCounts(tasks) {
     setElementText('pipeline-todo-count', tasks.todo);
     setElementText('pipeline-working-count', (tasks.analysing || 0) + (tasks.in_progress || 0));
     setElementText('pipeline-needs-input-count', tasks.needs_input || 0);
-    setElementText('pipeline-done-count', tasks.done);
+    setElementText('pipeline-done-count', (tasks.done || 0) + (tasks.skipped || 0));
     // Legacy pipeline counts (kept for backward compat)
     setElementText('pipeline-analysing-count', tasks.analysing || 0);
     setElementText('pipeline-analysed-count', tasks.analysed || 0);
@@ -402,7 +402,9 @@ function updatePipelineView(tasks) {
     updatePipelineColumn('pipeline-working', working, 'active');
 
     updatePipelineColumn('pipeline-needs-input', needsInput, 'needs-input');
-    updatePipelineColumn('pipeline-done', completed, 'done');
+    const skipped = Array.isArray(tasks.skipped_list) ? tasks.skipped_list : [];
+    const doneAndSkipped = [...completed, ...skipped];
+    updatePipelineColumn('pipeline-done', doneAndSkipped, 'done');
 
     // Legacy columns (for backward compat if old HTML is cached)
     updatePipelineColumn('pipeline-analysing', analysing, 'analysing');
@@ -442,7 +444,9 @@ function updatePipelineColumn(containerId, tasks, type) {
 
         // Format duration or completed date for done items
         let completedBadge = '';
-        if (type === 'done' && task.completed_at) {
+        if (type === 'done' && task.status === 'skipped') {
+            completedBadge = `<span class="task-tag phase-tag">skipped</span>`;
+        } else if (type === 'done' && task.completed_at) {
             const duration = task.started_at
                 ? formatDuration(task.started_at, task.completed_at)
                 : formatCompactDate(task.completed_at);
