@@ -70,16 +70,16 @@ function updateTaskCounts(tasks) {
     setElementText('needs-input-count', tasks.needs_input || 0);
     setElementText('analysed-count', tasks.analysed || 0);
 
-    // Pipeline counts - Analysis stage
+    // Pipeline counts - Unified pipeline
     setElementText('pipeline-todo-count', tasks.todo);
-    setElementText('pipeline-analysing-count', tasks.analysing || 0);
+    setElementText('pipeline-working-count', (tasks.analysing || 0) + (tasks.in_progress || 0));
     setElementText('pipeline-needs-input-count', tasks.needs_input || 0);
-    setElementText('pipeline-analysed-count', tasks.analysed || 0);
-    
-    // Pipeline counts - Execution stage
-    setElementText('pipeline-ready-count', tasks.analysed || 0);  // Ready = Analysed (shared)
-    setElementText('pipeline-progress-count', tasks.in_progress);
     setElementText('pipeline-done-count', tasks.done);
+    // Legacy pipeline counts (kept for backward compat)
+    setElementText('pipeline-analysing-count', tasks.analysing || 0);
+    setElementText('pipeline-analysed-count', tasks.analysed || 0);
+    setElementText('pipeline-ready-count', tasks.analysed || 0);
+    setElementText('pipeline-progress-count', tasks.in_progress);
     
     // Update action widget
     if (typeof updateActionWidget === 'function') {
@@ -210,6 +210,9 @@ function updateRunningStatus(session, control, analysis, loops) {
     const agentState = document.getElementById('agent-state');
 
     // Update loop status LEDs
+    const workflowLed = document.getElementById('workflow-loop-led');
+    const workflowActive = loops?.workflow_alive ?? false;
+    // Legacy LEDs (kept for backward compat if old HTML is cached)
     const analysisLed = document.getElementById('analysis-loop-led');
     const executionLed = document.getElementById('execution-loop-led');
 
@@ -217,20 +220,16 @@ function updateRunningStatus(session, control, analysis, loops) {
     const analysisActive = loops?.analysis_alive ?? analysis?.running;
     const executionActive = loops?.execution_alive ?? control?.running;
 
+    if (workflowLed) {
+        workflowLed.className = workflowActive ? 'led pulse' : 'led off';
+    }
+
     if (analysisLed) {
-        if (analysisActive) {
-            analysisLed.className = 'led pulse';
-        } else {
-            analysisLed.className = 'led off';
-        }
+        analysisLed.className = analysisActive ? 'led pulse' : 'led off';
     }
 
     if (executionLed) {
-        if (executionActive) {
-            executionLed.className = 'led pulse';
-        } else {
-            executionLed.className = 'led off';
-        }
+        executionLed.className = executionActive ? 'led pulse' : 'led off';
     }
 
     if (!session) {
@@ -387,17 +386,29 @@ function updatePipelineView(tasks) {
     const analysing = Array.isArray(tasks.analysing_list) ? tasks.analysing_list : [];
     const needsInput = Array.isArray(tasks.needs_input_list) ? tasks.needs_input_list : [];
     const analysed = Array.isArray(tasks.analysed_list) ? tasks.analysed_list : [];
-    
-    // Analysis pipeline columns
+    const inProgress = tasks.current ? [tasks.current] : [];
+
+    // Unified pipeline columns
     updatePipelineColumn('pipeline-todo', upcoming, 'todo');
-    updatePipelineColumn('pipeline-analysing', analysing, 'analysing');
+
+    // "Working" combines analysing + analysed + in-progress (all actively being processed)
+    const working = [...analysing, ...analysed, ...inProgress];
+    // Tag each task with its phase for sub-label display
+    working.forEach(t => {
+        if (analysing.includes(t)) t._phase = 'analysing';
+        else if (analysed.includes(t)) t._phase = 'ready';
+        else t._phase = 'executing';
+    });
+    updatePipelineColumn('pipeline-working', working, 'active');
+
     updatePipelineColumn('pipeline-needs-input', needsInput, 'needs-input');
-    updatePipelineColumn('pipeline-analysed', analysed, 'analysed');
-    
-    // Execution pipeline columns
-    updatePipelineColumn('pipeline-ready', analysed, 'ready');  // Ready = Analysed tasks
-    updatePipelineColumn('pipeline-progress', tasks.current ? [tasks.current] : [], 'active');
     updatePipelineColumn('pipeline-done', completed, 'done');
+
+    // Legacy columns (for backward compat if old HTML is cached)
+    updatePipelineColumn('pipeline-analysing', analysing, 'analysing');
+    updatePipelineColumn('pipeline-analysed', analysed, 'analysed');
+    updatePipelineColumn('pipeline-ready', analysed, 'ready');
+    updatePipelineColumn('pipeline-progress', inProgress, 'active');
 }
 
 /**
@@ -438,13 +449,17 @@ function updatePipelineColumn(containerId, tasks, type) {
             completedBadge = `<span class="task-tag completed-date">${duration}</span>`;
         }
 
+        // Show phase sub-label for tasks in the "Working" column
+        const phaseLabel = task._phase ? `<span class="task-tag phase-tag">${escapeHtml(task._phase)}</span>` : '';
+
         return `
             <div class="pipeline-task ${type === 'active' ? 'active' : ''} ${priorityClass}" data-task-id="${escapeHtml(task.id || '')}">
                 <div class="task-id">${escapeHtml(task.id || '')}</div>
                 <div class="task-title">${escapeHtml(task.name || task.id || 'Unknown')}</div>
                 <div class="task-tags">
                     ${task.category ? `<span class="task-tag">${escapeHtml(task.category)}</span>` : ''}
-                    ${type === 'active' ? '<span class="task-tag">↻ agent</span>' : ''}
+                    ${phaseLabel}
+                    ${type === 'active' && !task._phase ? '<span class="task-tag">↻ agent</span>' : ''}
                 </div>
                 ${completedBadge}
             </div>
@@ -457,8 +472,9 @@ function updatePipelineColumn(containerId, tasks, type) {
  */
 function initPipelineInfiniteScroll() {
     const columnIds = [
-        'pipeline-todo', 'pipeline-analysing', 'pipeline-needs-input', 'pipeline-analysed',
-        'pipeline-ready', 'pipeline-progress', 'pipeline-done'
+        'pipeline-todo', 'pipeline-working', 'pipeline-needs-input', 'pipeline-done',
+        // Legacy columns (backward compat)
+        'pipeline-analysing', 'pipeline-analysed', 'pipeline-ready', 'pipeline-progress'
     ];
 
     columnIds.forEach(containerId => {
@@ -531,16 +547,22 @@ function updateControlSignalStatus(control) {
 function updateControlButtonStates(session, control, loops) {
     const analysisAlive = loops?.analysis_alive ?? false;
     const executionAlive = loops?.execution_alive ?? false;
+    const workflowAlive = loops?.workflow_alive ?? false;
     const anyAlive = loops?.any_alive ?? false;
 
     const btnMap = [
-        { action: 'start-analysis', enabled: !analysisAlive },
+        // Unified workflow controls
+        { action: 'start-workflow', enabled: !workflowAlive && !analysisAlive && !executionAlive },
+        { action: 'stop-workflow', enabled: workflowAlive },
+        { action: 'kill-workflow', enabled: workflowAlive },
+        // Legacy controls (kept for backward compat)
+        { action: 'start-analysis', enabled: !analysisAlive && !workflowAlive },
         { action: 'stop-analysis', enabled: analysisAlive },
         { action: 'kill-analysis', enabled: analysisAlive },
-        { action: 'start-execution', enabled: !executionAlive },
+        { action: 'start-execution', enabled: !executionAlive && !workflowAlive },
         { action: 'stop-execution', enabled: executionAlive },
         { action: 'kill-execution', enabled: executionAlive },
-        { action: 'start-both', enabled: !analysisAlive || !executionAlive },
+        { action: 'start-both', enabled: (!analysisAlive || !executionAlive) && !workflowAlive },
         { action: 'stop-all', enabled: anyAlive },
         { action: 'kill-all', enabled: anyAlive },
     ];
@@ -741,7 +763,7 @@ async function updateActiveProcessesWidget() {
  * @param {Object} instances - Instances object from state
  */
 function updateSteeringPanel(instances) {
-    ['analysis', 'execution'].forEach(type => {
+    ['workflow', 'analysis', 'execution'].forEach(type => {
         const btn = document.getElementById(`btn-${type}`);
         const led = document.getElementById(`led-${type}`);
         const pid = document.getElementById(`pid-${type}`);

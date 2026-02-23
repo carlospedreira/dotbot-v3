@@ -310,6 +310,7 @@ function Start-ProcessLaunch {
     $launchModel = if ($Model) { $Model } else {
         switch ($Type) {
             'analysis' { 'Opus' }
+            'workflow' { 'Opus' }
             default    { 'Opus' }
         }
     }

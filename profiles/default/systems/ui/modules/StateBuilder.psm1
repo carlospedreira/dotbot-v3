@@ -393,6 +393,18 @@ function Get-BotState {
                         }
                         $isActuallyRunning = $true
                     }
+                    if ($proc.type -eq 'workflow' -and -not $instances.workflow) {
+                        $instances.workflow = @{
+                            instance_id = $proc.id
+                            pid = $proc.pid
+                            started_at = $proc.started_at
+                            last_heartbeat = $proc.last_heartbeat
+                            status = $proc.heartbeat_status
+                            next_action = $proc.heartbeat_next_action
+                            alive = $isAlive
+                        }
+                        $isActuallyRunning = $true
+                    }
                 }
             } catch {}
         }
@@ -401,8 +413,9 @@ function Get-BotState {
     # Track combined loop state
     $analysisAlive = ($null -ne $instances.analysis) -and ($instances.analysis.alive -eq $true)
     $executionAlive = ($null -ne $instances.execution) -and ($instances.execution.alive -eq $true)
+    $workflowAlive = ($null -ne $instances.workflow) -and ($instances.workflow.alive -eq $true)
     $anyLoopRunning = $runningProcesses.Count -gt 0
-    $anyLoopAlive = $analysisAlive -or $executionAlive
+    $anyLoopAlive = $analysisAlive -or $executionAlive -or $workflowAlive
 
     # Check control signals — derive stop from per-process .stop files
     $anyStopPending = $false
@@ -466,6 +479,7 @@ function Get-BotState {
             all_stopped = -not $anyLoopRunning
             analysis_alive = $analysisAlive
             execution_alive = $executionAlive
+            workflow_alive = $workflowAlive
             any_alive = $anyLoopAlive
         }
         instances = $instances

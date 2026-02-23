@@ -344,14 +344,33 @@ function Complete-TaskWorktree {
             }
         }
 
-        # Discard any pending task state changes in main repo before merge
-        # (analysis process writes to shared task files via junctions)
+        # Backup live task state before merge (concurrent processes may have written via junctions)
+        $taskBackup = @{}
+        foreach ($subDir in @('todo','analysing','analysed','needs-input','in-progress','done','skipped','split','cancelled')) {
+            $backupDir = Join-Path $ProjectRoot ".bot\workspace\tasks\$subDir"
+            $backupFiles = Get-ChildItem $backupDir -Filter "*.json" -File -ErrorAction SilentlyContinue
+            foreach ($bf in $backupFiles) {
+                try {
+                    $taskBackup["$subDir/$($bf.Name)"] = Get-Content $bf.FullName -Raw
+                } catch {}
+            }
+        }
+
+        # Clean tracked + untracked task files so merge can proceed cleanly
         git -C $ProjectRoot checkout -- .bot/workspace/tasks/ 2>$null
+        git -C $ProjectRoot clean -fd -- .bot/workspace/tasks/ 2>$null
 
         # Squash merge into main
         $mergeOutput = git -C $ProjectRoot merge --squash $branchName 2>&1
         if ($LASTEXITCODE -ne 0) {
             git -C $ProjectRoot reset --hard HEAD 2>$null
+            # Restore backed-up task state after failed merge
+            foreach ($key in $taskBackup.Keys) {
+                $restorePath = Join-Path $ProjectRoot ".bot\workspace\tasks\$key"
+                $restoreDir = Split-Path $restorePath -Parent
+                if (-not (Test-Path $restoreDir)) { New-Item $restoreDir -ItemType Directory -Force | Out-Null }
+                $taskBackup[$key] | Set-Content $restorePath -Encoding UTF8
+            }
             return @{
                 success        = $false
                 merge_commit   = $null
@@ -360,8 +379,23 @@ function Complete-TaskWorktree {
             }
         }
 
-        # Discard task state changes from branch — task queue is shared, not branch-specific
+        # Discard branch's task state, restore live state from backup
         git -C $ProjectRoot checkout HEAD -- .bot/workspace/tasks/ 2>$null
+        foreach ($key in $taskBackup.Keys) {
+            $restorePath = Join-Path $ProjectRoot ".bot\workspace\tasks\$key"
+            $restoreDir = Split-Path $restorePath -Parent
+            if (-not (Test-Path $restoreDir)) { New-Item $restoreDir -ItemType Directory -Force | Out-Null }
+            $taskBackup[$key] | Set-Content $restorePath -Encoding UTF8
+        }
+
+        # Remove stale copies of the completed task from non-done directories
+        foreach ($staleDir in @('todo', 'analysing', 'analysed', 'needs-input', 'in-progress')) {
+            $stalePath = Join-Path $ProjectRoot ".bot\workspace\tasks\$staleDir"
+            Get-ChildItem -Path $stalePath -Filter "*.json" -File -ErrorAction SilentlyContinue |
+                Where-Object {
+                    try { (Get-Content $_.FullName -Raw | ConvertFrom-Json).id -eq $TaskId } catch { $false }
+                } | Remove-Item -Force -ErrorAction SilentlyContinue
+        }
 
         # Commit if there are staged changes (task may have made no code changes)
         $staged = git -C $ProjectRoot diff --cached --name-only 2>$null

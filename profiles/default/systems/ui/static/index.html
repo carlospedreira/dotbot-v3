@@ -90,34 +90,13 @@
                             <div class="control-buttons" id="controls">
                                 <div class="process-control-row">
                                     <div class="process-control-header">
-                                        <span class="led off" id="analysis-loop-led"></span>
-                                        <span class="process-control-label">Analysis</span>
+                                        <span class="led off" id="workflow-loop-led"></span>
+                                        <span class="process-control-label">Workflow</span>
                                     </div>
                                     <div class="process-control-actions">
-                                        <button class="ctrl-btn-xs primary" data-action="start-analysis" title="Launch analysis process">Start</button>
-                                        <button class="ctrl-btn-xs" data-action="stop-analysis" title="Graceful stop: finish current task then end" disabled>Stop</button>
-                                        <button class="ctrl-btn-xs danger" data-action="kill-analysis" title="Immediate: terminate process via PID" disabled>Kill</button>
-                                    </div>
-                                </div>
-                                <div class="process-control-row">
-                                    <div class="process-control-header">
-                                        <span class="led off" id="execution-loop-led"></span>
-                                        <span class="process-control-label">Execution</span>
-                                    </div>
-                                    <div class="process-control-actions">
-                                        <button class="ctrl-btn-xs primary" data-action="start-execution" title="Launch execution process">Start</button>
-                                        <button class="ctrl-btn-xs" data-action="stop-execution" title="Graceful stop: finish current task then end" disabled>Stop</button>
-                                        <button class="ctrl-btn-xs danger" data-action="kill-execution" title="Immediate: terminate process via PID" disabled>Kill</button>
-                                    </div>
-                                </div>
-                                <div class="process-control-row global">
-                                    <div class="process-control-header">
-                                        <span class="process-control-label">Global</span>
-                                    </div>
-                                    <div class="process-control-actions">
-                                        <button class="ctrl-btn-xs primary" data-action="start-both" title="Launch both analysis and execution">Both</button>
-                                        <button class="ctrl-btn-xs" data-action="stop-all" title="Graceful stop all running processes" disabled>Stop</button>
-                                        <button class="ctrl-btn-xs danger" data-action="kill-all" title="Immediately kill all running processes" disabled>Kill</button>
+                                        <button class="ctrl-btn-xs primary" data-action="start-workflow" title="Launch workflow: analyse then execute each task">Start</button>
+                                        <button class="ctrl-btn-xs" data-action="stop-workflow" title="Graceful stop: finish current task then end" disabled>Stop</button>
+                                        <button class="ctrl-btn-xs danger" data-action="kill-workflow" title="Immediate: terminate process via PID" disabled>Kill</button>
                                     </div>
                                 </div>
                             </div>
@@ -338,8 +317,8 @@
                         <div class="sidebar-content">
                             <div class="settings-nav">
                                 <div class="settings-nav-item active" data-settings-section="theme">Theme</div>
-                                <div class="settings-nav-item" data-settings-section="analysis">Analysis</div>
-                                <div class="settings-nav-item" data-settings-section="execution">Execution</div>
+                                <div class="settings-nav-item" data-settings-section="analysis">Analysis Phase</div>
+                                <div class="settings-nav-item" data-settings-section="execution">Execution Phase</div>
                                 <div class="settings-nav-item" data-settings-section="verification">Verification</div>
                                 <div class="settings-nav-item" data-settings-section="costs">Costs</div>
                                 <div class="settings-nav-item" data-settings-section="aether" id="aetherNavItem" style="display:none">Aether</div>
@@ -470,10 +449,10 @@
                     <!-- Pipeline Tab -->
                     <div class="tab-pane" id="tab-pipeline">
                         <div class="pipeline-wrapper">
-                            <!-- Analysis Pipeline Stage -->
+                            <!-- Unified Task Pipeline -->
                             <div class="pipeline-stage">
                                 <div class="pipeline-stage-header">
-                                    <span class="pipeline-stage-title analysis">◈ Analysis Pipeline</span>
+                                    <span class="pipeline-stage-title">◈ Task Pipeline</span>
                                 </div>
                                 <div class="pipeline-container">
                                     <!-- Todo Column -->
@@ -490,72 +469,27 @@
 
                                     <div class="flow-arrow">→</div>
 
-                                    <!-- Analysing Column -->
-                                    <div class="pipeline-column">
+                                    <!-- Working Column (Analysing + In Progress) -->
+                                    <div class="pipeline-column highlight">
                                         <div class="column-header">
-                                            <span class="column-label">◈ Analysing</span>
-                                            <span class="column-count" id="pipeline-analysing-count">0</span>
+                                            <span class="column-label">◈ Working</span>
+                                            <span class="column-count" id="pipeline-working-count">0</span>
                                         </div>
-                                        <div class="column-items" id="pipeline-analysing">
-                                            <div class="empty-state">No tasks</div>
+                                        <div class="column-items" id="pipeline-working">
+                                            <div class="empty-state">No active tasks</div>
                                         </div>
                                     </div>
 
                                     <div class="flow-arrow">→</div>
 
                                     <!-- Needs Input Column -->
-                                    <div class="pipeline-column highlight">
+                                    <div class="pipeline-column">
                                         <div class="column-header">
                                             <span class="column-label">⚡ Needs Input</span>
                                             <span class="column-count" id="pipeline-needs-input-count">0</span>
                                         </div>
                                         <div class="column-items" id="pipeline-needs-input">
                                             <div class="empty-state">No tasks</div>
-                                        </div>
-                                    </div>
-
-                                    <div class="flow-arrow">→</div>
-
-                                    <!-- Analysed Column -->
-                                    <div class="pipeline-column">
-                                        <div class="column-header">
-                                            <span class="column-label">✓ Analysed</span>
-                                            <span class="column-count" id="pipeline-analysed-count">0</span>
-                                        </div>
-                                        <div class="column-items" id="pipeline-analysed">
-                                            <div class="empty-state">No tasks</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Execution Pipeline Stage -->
-                            <div class="pipeline-stage">
-                                <div class="pipeline-stage-header">
-                                    <span class="pipeline-stage-title execution">◈ Execution Pipeline</span>
-                                </div>
-                                <div class="pipeline-container">
-                                    <!-- Analysed Column (shared input) -->
-                                    <div class="pipeline-column">
-                                        <div class="column-header">
-                                            <span class="column-label">◇ Ready</span>
-                                            <span class="column-count" id="pipeline-ready-count">0</span>
-                                        </div>
-                                        <div class="column-items" id="pipeline-ready">
-                                            <div class="empty-state">No tasks</div>
-                                        </div>
-                                    </div>
-
-                                    <div class="flow-arrow">→</div>
-
-                                    <!-- In Progress Column -->
-                                    <div class="pipeline-column highlight">
-                                        <div class="column-header">
-                                            <span class="column-label">◈ In Progress</span>
-                                            <span class="column-count" id="pipeline-progress-count">0</span>
-                                        </div>
-                                        <div class="column-items" id="pipeline-progress">
-                                            <div class="empty-state">No active tasks</div>
                                         </div>
                                     </div>
 
@@ -998,6 +932,11 @@
 
                 <!-- Instance Selector -->
                 <div class="instance-selector">
+                    <button class="instance-btn" data-instance="workflow" id="btn-workflow" disabled>
+                        <span class="instance-led dead" id="led-workflow"></span>
+                        <span>Workflow</span>
+                        <span class="instance-pid" id="pid-workflow"></span>
+                    </button>
                     <button class="instance-btn" data-instance="analysis" id="btn-analysis" disabled>
                         <span class="instance-led dead" id="led-analysis"></span>
                         <span>Analysis</span>

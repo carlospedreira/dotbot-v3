@@ -85,8 +85,9 @@ function renderProcessList(processes) {
 
     // Group by type
     const groups = {};
-    const typeOrder = ['analysis', 'execution', 'kickstart', 'analyse', 'planning', 'commit', 'task-creation'];
+    const typeOrder = ['workflow', 'analysis', 'execution', 'kickstart', 'analyse', 'planning', 'commit', 'task-creation'];
     const typeLabels = {
+        'workflow': 'Workflow',
         'analysis': 'Analysis',
         'execution': 'Execution',
         'kickstart': 'Kickstart',

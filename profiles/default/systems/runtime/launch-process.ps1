@@ -39,7 +39,7 @@ Optional: resume an existing process by ID (skips creation)
 
 param(
     [Parameter(Mandatory)]
-    [ValidateSet('analysis', 'execution', 'kickstart', 'analyse', 'planning', 'commit', 'task-creation')]
+    [ValidateSet('analysis', 'execution', 'workflow', 'kickstart', 'analyse', 'planning', 'commit', 'task-creation')]
     [string]$Type,
 
     [string]$TaskId,
@@ -66,6 +66,7 @@ $modelMap = @{
 $phaseMap = @{
     'analysis'      = 'analysis'
     'execution'     = 'execution'
+    'workflow'      = 'workflow'
     'kickstart'     = 'execution'
     'analyse'       = 'execution'
     'planning'      = 'execution'
@@ -96,8 +97,8 @@ $t = Get-DotBotTheme
 . "$PSScriptRoot\modules\prompt-builder.ps1"
 . "$PSScriptRoot\modules\rate-limit-handler.ps1"
 
-# Import task-based modules for analysis/execution types
-if ($Type -in @('analysis', 'execution')) {
+# Import task-based modules for analysis/execution/workflow types
+if ($Type -in @('analysis', 'execution', 'workflow')) {
     Import-Module "$PSScriptRoot\..\mcp\modules\TaskIndexCache.psm1" -Force
     Import-Module "$PSScriptRoot\..\mcp\modules\SessionTracking.psm1" -Force
     . "$PSScriptRoot\modules\cleanup.ps1"
@@ -117,7 +118,7 @@ if ($Type -in @('analysis', 'execution')) {
     . "$PSScriptRoot\..\mcp\tools\task-mark-skipped\script.ps1"
 }
 
-if ($Type -eq 'analysis') {
+if ($Type -in @('analysis', 'workflow')) {
     . "$PSScriptRoot\..\mcp\tools\task-mark-analysing\script.ps1"
 }
 
@@ -132,6 +133,7 @@ if (Test-Path $settingsPath) {
 if (-not $Model) {
     $Model = switch ($Type) {
         { $_ -in @('analysis', 'kickstart') } { if ($settings.analysis?.model) { $settings.analysis.model } else { 'Opus' } }
+        'workflow' { if ($settings.execution?.model) { $settings.execution.model } else { 'Opus' } }
         default    { if ($settings.execution?.model) { $settings.execution.model } else { 'Opus' } }
     }
 }
@@ -876,6 +878,597 @@ Do NOT implement the task. Your job is research and preparation only.
         if ($Type -eq 'execution') {
             try { Invoke-SessionUpdate -Arguments @{ status = "stopped" } | Out-Null } catch {}
         }
+    }
+}
+
+# --- Workflow type: unified analyse-then-execute per task ---
+elseif ($Type -eq 'workflow') {
+    # Initialize session for execution phase tracking
+    $sessionResult = Invoke-SessionInitialize -Arguments @{ session_type = "autonomous" }
+    if ($sessionResult.success) {
+        $sessionId = $sessionResult.session.session_id
+    }
+
+    # Load both prompt templates
+    $analysisTemplateFile = Join-Path $botRoot "prompts\workflows\98-analyse-task.md"
+    $executionTemplateFile = Join-Path $botRoot "prompts\workflows\99-autonomous-task.md"
+    $analysisPromptTemplate = Get-Content $analysisTemplateFile -Raw
+    $executionPromptTemplate = Get-Content $executionTemplateFile -Raw
+
+    $processData.workflow = "workflow (analyse + execute)"
+
+    # Standards and product context (for execution phase)
+    $standardsList = ""
+    $productMission = ""
+    $entityModel = ""
+    $standardsDir = Join-Path $botRoot "prompts\standards\global"
+    if (Test-Path $standardsDir) {
+        $standardsFiles = Get-ChildItem -Path $standardsDir -Filter "*.md" -File |
+            ForEach-Object { ".bot/prompts/standards/global/$($_.Name)" }
+        $standardsList = if ($standardsFiles) { "- " + ($standardsFiles -join "`n- ") } else { "No standards files found." }
+    }
+    $productDir = Join-Path $botRoot "workspace\product"
+    $productMission = if (Test-Path (Join-Path $productDir "mission.md")) { "Read the product mission and context from: .bot/workspace/product/mission.md" } else { "No product mission file found." }
+    $entityModel = if (Test-Path (Join-Path $productDir "entity-model.md")) { "Read the entity model design from: .bot/workspace/product/entity-model.md" } else { "No entity model file found." }
+
+    # Task reset
+    . "$PSScriptRoot\modules\task-reset.ps1"
+    $tasksBaseDir = Join-Path $botRoot "workspace\tasks"
+
+    # Recover orphaned tasks
+    Reset-AnalysingTasks -TasksBaseDir $tasksBaseDir -ProcessesDir $processesDir | Out-Null
+    Reset-InProgressTasks -TasksBaseDir $tasksBaseDir | Out-Null
+    Reset-SkippedTasks -TasksBaseDir $tasksBaseDir | Out-Null
+
+    # Clean up orphan worktrees
+    Remove-OrphanWorktrees -ProjectRoot $projectRoot -BotRoot $botRoot
+
+    # Initialize task index
+    Initialize-TaskIndex -TasksBaseDir $tasksBaseDir
+
+    $tasksProcessed = 0
+    $maxRetriesPerTask = 2
+    $consecutiveFailureThreshold = 3
+
+    # Update process status to running
+    $processData.status = 'running'
+    Write-ProcessFile -Id $procId -Data $processData
+
+    try {
+        while ($true) {
+            # Check max tasks
+            if ($MaxTasks -gt 0 -and $tasksProcessed -ge $MaxTasks) {
+                Write-Status "Reached maximum task limit ($MaxTasks)" -Type Warn
+                break
+            }
+
+            # Check stop signal
+            if (Test-ProcessStopSignal -Id $procId) {
+                Write-Status "Stop signal received" -Type Error
+                $processData.status = 'stopped'
+                $processData.failed_at = (Get-Date).ToUniversalTime().ToString("o")
+                Write-ProcessFile -Id $procId -Data $processData
+                Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Process stopped by user"
+                break
+            }
+
+            # ===== Pick next task =====
+            Write-Status "Fetching next task..." -Type Process
+            Reset-TaskIndex
+
+            # Check resumed tasks (answered questions) first, then todo
+            $taskResult = Get-NextTodoTask -Verbose
+
+            if (-not $taskResult.success) {
+                Write-Status "Error fetching task: $($taskResult.message)" -Type Error
+                break
+            }
+
+            if (-not $taskResult.task) {
+                if ($Continue) {
+                    Write-Status "No tasks available - waiting..." -Type Info
+                    Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Waiting for new tasks..."
+
+                    $foundTask = $false
+                    while ($true) {
+                        Start-Sleep -Seconds 5
+                        if (Test-ProcessStopSignal -Id $procId) { break }
+                        Reset-TaskIndex
+                        $taskResult = Get-NextTodoTask -Verbose
+                        if ($taskResult.task) { $foundTask = $true; break }
+                    }
+                    if (-not $foundTask) { break }
+                } else {
+                    Write-Status "No tasks available" -Type Info
+                    break
+                }
+            }
+
+            $task = $taskResult.task
+            $processData.task_id = $task.id
+            $processData.task_name = $task.name
+            $env:DOTBOT_CURRENT_TASK_ID = $task.id
+            Write-Status "Task: $($task.name)" -Type Success
+
+            # ===== PHASE 1: Analysis =====
+            $env:DOTBOT_CURRENT_PHASE = 'analysis'
+            $processData.heartbeat_status = "Analysing: $($task.name)"
+            Write-ProcessFile -Id $procId -Data $processData
+            Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Analysis phase started: $($task.name)"
+
+            # Claim task for analysis (unless already analysing from resumed question)
+            if ($task.status -ne 'analysing') {
+                Invoke-TaskMarkAnalysing -Arguments @{ task_id = $task.id } | Out-Null
+            }
+
+            # Build analysis prompt
+            $analysisPrompt = $analysisPromptTemplate
+            $analysisPrompt = $analysisPrompt -replace '\{\{SESSION_ID\}\}', $sessionId
+            $analysisPrompt = $analysisPrompt -replace '\{\{TASK_ID\}\}', $task.id
+            $analysisPrompt = $analysisPrompt -replace '\{\{TASK_NAME\}\}', $task.name
+            $analysisPrompt = $analysisPrompt -replace '\{\{TASK_CATEGORY\}\}', $task.category
+            $analysisPrompt = $analysisPrompt -replace '\{\{TASK_PRIORITY\}\}', $task.priority
+            $analysisPrompt = $analysisPrompt -replace '\{\{TASK_EFFORT\}\}', $task.effort
+            $analysisPrompt = $analysisPrompt -replace '\{\{TASK_DESCRIPTION\}\}', $task.description
+            $niValue = if ("$($task.needs_interview)" -eq 'true') { 'true' } else { 'false' }
+            $analysisPrompt = $analysisPrompt -replace '\{\{NEEDS_INTERVIEW\}\}', $niValue
+            $acceptanceCriteria = if ($task.acceptance_criteria) { ($task.acceptance_criteria | ForEach-Object { "- $_" }) -join "`n" } else { "No specific acceptance criteria defined." }
+            $analysisPrompt = $analysisPrompt -replace '\{\{ACCEPTANCE_CRITERIA\}\}', $acceptanceCriteria
+            $steps = if ($task.steps) { ($task.steps | ForEach-Object { "- $_" }) -join "`n" } else { "No specific steps defined." }
+            $analysisPrompt = $analysisPrompt -replace '\{\{TASK_STEPS\}\}', $steps
+            $analysisPrompt = $analysisPrompt -replace '\{\{BRANCH_NAME\}\}', 'main'
+
+            # Build resolved questions context for resumed tasks
+            $isResumedTask = $task.status -eq 'analysing'
+            $resolvedQuestionsContext = ""
+            if ($isResumedTask -and $task.questions_resolved) {
+                $resolvedQuestionsContext = "`n## Previously Resolved Questions`n`n"
+                $resolvedQuestionsContext += "This task was previously paused for human input. The following questions have been answered:`n`n"
+                foreach ($q in $task.questions_resolved) {
+                    $resolvedQuestionsContext += "**Q:** $($q.question)`n"
+                    $resolvedQuestionsContext += "**A:** $($q.answer)`n`n"
+                }
+                $resolvedQuestionsContext += "Use these answers to guide your analysis. The task is already in ``analysing`` status - do NOT call ``task_mark_analysing`` again.`n"
+            }
+
+            # Use analysis model from settings
+            $analysisModel = if ($settings.analysis?.model) { $settings.analysis.model } else { 'Opus' }
+            $analysisModelName = $modelMap[$analysisModel]
+
+            $fullAnalysisPrompt = @"
+$analysisPrompt
+$resolvedQuestionsContext
+## Process Context
+
+- **Process ID:** $procId
+- **Instance Type:** workflow (analysis phase)
+
+Use the Process ID when calling ``steering_heartbeat`` (pass it as ``process_id``).
+
+## Completion Goal
+
+Analyse task $($task.id) completely. When analysis is finished:
+- If all context is gathered: Call task_mark_analysed with the full analysis object
+- If you need human input: Call task_mark_needs_input with a question or split_proposal
+- If blocked by issues: Call task_mark_skipped with a reason
+
+Do NOT implement the task. Your job is research and preparation only.
+"@
+
+            # Invoke Claude for analysis
+            $analysisSessionId = [System.Guid]::NewGuid().ToString()
+            $env:CLAUDE_SESSION_ID = $analysisSessionId
+            $processData.claude_session_id = $analysisSessionId
+            Write-ProcessFile -Id $procId -Data $processData
+
+            $analysisSuccess = $false
+            $analysisAttempt = 0
+
+            while ($analysisAttempt -le $maxRetriesPerTask) {
+                $analysisAttempt++
+                if (Test-ProcessStopSignal -Id $procId) { break }
+
+                Write-Header "Analysis Phase"
+                try {
+                    $streamArgs = @{
+                        Prompt = $fullAnalysisPrompt
+                        Model = $analysisModelName
+                        SessionId = $analysisSessionId
+                        PersistSession = $false
+                    }
+                    if ($ShowDebug) { $streamArgs['ShowDebugJson'] = $true }
+                    if ($ShowVerbose) { $streamArgs['ShowVerbose'] = $true }
+
+                    Invoke-ClaudeStream @streamArgs
+                    $exitCode = 0
+                } catch {
+                    Write-Status "Analysis error: $($_.Exception.Message)" -Type Error
+                    $exitCode = 1
+                }
+
+                # Update heartbeat
+                $processData.last_heartbeat = (Get-Date).ToUniversalTime().ToString("o")
+                Write-ProcessFile -Id $procId -Data $processData
+
+                # Handle rate limit
+                $rateLimitMsg = Get-LastRateLimitInfo
+                if ($rateLimitMsg) {
+                    $rateLimitInfo = Get-RateLimitResetTime -Message $rateLimitMsg
+                    if ($rateLimitInfo) {
+                        $processData.heartbeat_status = "Rate limited - waiting..."
+                        Write-ProcessFile -Id $procId -Data $processData
+                        Write-ProcessActivity -Id $procId -ActivityType "rate_limit" -Message $rateLimitMsg
+                        $waitSeconds = $rateLimitInfo.wait_seconds
+                        if (-not $waitSeconds -or $waitSeconds -lt 30) { $waitSeconds = 60 }
+                        for ($w = 0; $w -lt $waitSeconds; $w++) {
+                            Start-Sleep -Seconds 1
+                            if (Test-ProcessStopSignal -Id $procId) { break }
+                        }
+                        $analysisAttempt--
+                        continue
+                    }
+                }
+
+                # Check if analysis completed (task moved to analysed/needs-input/skipped)
+                $taskDirs = @('analysed', 'needs-input', 'skipped', 'in-progress', 'done')
+                $taskFound = $false
+                $analysisOutcome = $null
+                foreach ($dir in $taskDirs) {
+                    $checkDir = Join-Path $botRoot "workspace\tasks\$dir"
+                    if (Test-Path $checkDir) {
+                        $files = Get-ChildItem -Path $checkDir -Filter "*.json" -File
+                        foreach ($f in $files) {
+                            try {
+                                $content = Get-Content -Path $f.FullName -Raw | ConvertFrom-Json
+                                if ($content.id -eq $task.id) {
+                                    $taskFound = $true
+                                    $analysisSuccess = $true
+                                    $analysisOutcome = $dir
+                                    Write-Status "Analysis complete (status: $dir)" -Type Complete
+                                    break
+                                }
+                            } catch {}
+                        }
+                        if ($taskFound) { break }
+                    }
+                }
+                if ($analysisSuccess) { break }
+
+                if ($analysisAttempt -ge $maxRetriesPerTask) {
+                    Write-Status "Analysis max retries exhausted" -Type Error
+                    break
+                }
+            }
+
+            # Clean up analysis session
+            try { Remove-ClaudeSession -SessionId $analysisSessionId -ProjectRoot $projectRoot | Out-Null } catch {}
+
+            if (-not $analysisSuccess) {
+                Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Analysis failed: $($task.name)"
+                # Skip to next task
+                if (-not $Continue) { break }
+                $TaskId = $null
+                $processData.task_id = $null
+                $processData.task_name = $null
+                for ($i = 0; $i -lt 3; $i++) {
+                    Start-Sleep -Seconds 1
+                    if (Test-ProcessStopSignal -Id $procId) { break }
+                }
+                continue
+            }
+
+            Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Analysis complete: $($task.name) -> $analysisOutcome"
+
+            # If analysis resulted in needs-input or skipped, don't proceed to execution
+            if ($analysisOutcome -ne 'analysed') {
+                Write-Status "Task not ready for execution (status: $analysisOutcome) - moving to next task" -Type Info
+                Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Task $($task.name) needs input or was skipped - moving on"
+                if (-not $Continue) { break }
+                $TaskId = $null
+                $processData.task_id = $null
+                $processData.task_name = $null
+                for ($i = 0; $i -lt 3; $i++) {
+                    Start-Sleep -Seconds 1
+                    if (Test-ProcessStopSignal -Id $procId) { break }
+                }
+                continue
+            }
+
+            # ===== PHASE 2: Execution =====
+            $env:DOTBOT_CURRENT_PHASE = 'execution'
+            $processData.heartbeat_status = "Executing: $($task.name)"
+            Write-ProcessFile -Id $procId -Data $processData
+            Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Execution phase started: $($task.name)"
+
+            # Re-read task data (analysis may have enriched it)
+            Reset-TaskIndex
+            $freshTask = Invoke-TaskGetNext -Arguments @{ verbose = $true }
+            if ($freshTask.task -and $freshTask.task.id -eq $task.id) {
+                $task = $freshTask.task
+            }
+
+            # Mark in-progress
+            Invoke-TaskMarkInProgress -Arguments @{ task_id = $task.id } | Out-Null
+            Invoke-SessionUpdate -Arguments @{ current_task_id = $task.id } | Out-Null
+
+            # Worktree setup
+            $worktreePath = $null
+            $branchName = $null
+            $wtInfo = Get-TaskWorktreeInfo -TaskId $task.id -BotRoot $botRoot
+            if ($wtInfo -and (Test-Path $wtInfo.worktree_path)) {
+                $worktreePath = $wtInfo.worktree_path
+                $branchName = $wtInfo.branch_name
+                Write-Status "Using worktree: $worktreePath" -Type Info
+            } else {
+                $wtResult = New-TaskWorktree -TaskId $task.id -TaskName $task.name `
+                    -ProjectRoot $projectRoot -BotRoot $botRoot
+                if ($wtResult.success) {
+                    $worktreePath = $wtResult.worktree_path
+                    $branchName = $wtResult.branch_name
+                    Write-Status "Worktree: $worktreePath" -Type Info
+                } else {
+                    Write-Status "Worktree failed: $($wtResult.message)" -Type Warn
+                }
+            }
+
+            # Use execution model from settings
+            $executionModel = if ($settings.execution?.model) { $settings.execution.model } else { 'Opus' }
+            $executionModelName = $modelMap[$executionModel]
+
+            # Build execution prompt
+            $executionPrompt = Build-TaskPrompt `
+                -PromptTemplate $executionPromptTemplate `
+                -Task $task `
+                -SessionId $sessionId `
+                -ProductMission $productMission `
+                -EntityModel $entityModel `
+                -StandardsList $standardsList
+
+            $branchForPrompt = if ($branchName) { $branchName } else { "main" }
+            $executionPrompt = $executionPrompt -replace '\{\{BRANCH_NAME\}\}', $branchForPrompt
+
+            $fullExecutionPrompt = @"
+$executionPrompt
+
+## Process Context
+
+- **Process ID:** $procId
+- **Instance Type:** workflow (execution phase)
+
+Use the Process ID when calling ``steering_heartbeat`` (pass it as ``process_id``).
+
+## Completion Goal
+
+Task $($task.id) is complete: all acceptance criteria met, verification passed, and task marked done.
+
+Work on this task autonomously. When complete, ensure you call task_mark_done via MCP.
+"@
+
+            # Invoke Claude for execution
+            $executionSessionId = [System.Guid]::NewGuid().ToString()
+            $env:CLAUDE_SESSION_ID = $executionSessionId
+            $processData.claude_session_id = $executionSessionId
+            Write-ProcessFile -Id $procId -Data $processData
+
+            $taskSuccess = $false
+            $attemptNumber = 0
+
+            if ($worktreePath) { Push-Location $worktreePath }
+            try {
+            while ($attemptNumber -le $maxRetriesPerTask) {
+                $attemptNumber++
+                if ($attemptNumber -gt 1) {
+                    Write-Status "Retry attempt $attemptNumber of $maxRetriesPerTask" -Type Warn
+                }
+                if (Test-ProcessStopSignal -Id $procId) {
+                    $processData.status = 'stopped'
+                    $processData.failed_at = (Get-Date).ToUniversalTime().ToString("o")
+                    Write-ProcessFile -Id $procId -Data $processData
+                    break
+                }
+
+                Write-Header "Execution Phase"
+                try {
+                    $streamArgs = @{
+                        Prompt = $fullExecutionPrompt
+                        Model = $executionModelName
+                        SessionId = $executionSessionId
+                        PersistSession = $false
+                    }
+                    if ($ShowDebug) { $streamArgs['ShowDebugJson'] = $true }
+                    if ($ShowVerbose) { $streamArgs['ShowVerbose'] = $true }
+
+                    Invoke-ClaudeStream @streamArgs
+                    $exitCode = 0
+                } catch {
+                    Write-Status "Execution error: $($_.Exception.Message)" -Type Error
+                    $exitCode = 1
+                }
+
+                # Update heartbeat
+                $processData.last_heartbeat = (Get-Date).ToUniversalTime().ToString("o")
+                Write-ProcessFile -Id $procId -Data $processData
+
+                # Handle rate limit
+                $rateLimitMsg = Get-LastRateLimitInfo
+                if ($rateLimitMsg) {
+                    $rateLimitInfo = Get-RateLimitResetTime -Message $rateLimitMsg
+                    if ($rateLimitInfo) {
+                        $processData.heartbeat_status = "Rate limited - waiting..."
+                        Write-ProcessFile -Id $procId -Data $processData
+                        Write-ProcessActivity -Id $procId -ActivityType "rate_limit" -Message $rateLimitMsg
+                        $waitSeconds = $rateLimitInfo.wait_seconds
+                        if (-not $waitSeconds -or $waitSeconds -lt 30) { $waitSeconds = 60 }
+                        for ($w = 0; $w -lt $waitSeconds; $w++) {
+                            Start-Sleep -Seconds 1
+                            if (Test-ProcessStopSignal -Id $procId) { break }
+                        }
+                        $attemptNumber--
+                        continue
+                    }
+                }
+
+                # Check completion
+                $completionCheck = Test-TaskCompletion -TaskId $task.id
+                if ($completionCheck.completed) {
+                    Write-Status "Task completed!" -Type Complete
+                    Invoke-SessionIncrementCompleted -Arguments @{} | Out-Null
+                    $taskSuccess = $true
+                    break
+                }
+
+                # Task not completed - handle failure
+                $failureReason = Get-FailureReason -ExitCode $exitCode -Stdout "" -Stderr "" -TimedOut $false
+                if (-not $failureReason.recoverable) {
+                    Write-Status "Non-recoverable failure - skipping" -Type Error
+                    try {
+                        Invoke-TaskMarkSkipped -Arguments @{ task_id = $task.id; skip_reason = "non-recoverable" } | Out-Null
+                    } catch {}
+                    break
+                }
+
+                if ($attemptNumber -ge $maxRetriesPerTask) {
+                    Write-Status "Max retries exhausted" -Type Error
+                    try {
+                        Invoke-TaskMarkSkipped -Arguments @{ task_id = $task.id; skip_reason = "max-retries" } | Out-Null
+                    } catch {}
+                    break
+                }
+            }
+            } finally {
+                if ($worktreePath) { Pop-Location }
+            }
+
+            # Clean up execution session
+            try { Remove-ClaudeSession -SessionId $executionSessionId -ProjectRoot $projectRoot | Out-Null } catch {}
+
+            # Update process data
+            $env:DOTBOT_CURRENT_TASK_ID = $null
+            $env:CLAUDE_SESSION_ID = $null
+
+            if ($taskSuccess) {
+                # Squash-merge task branch to main
+                if ($worktreePath) {
+                    Write-Status "Merging task branch to main..." -Type Process
+                    $mergeResult = Complete-TaskWorktree -TaskId $task.id -ProjectRoot $projectRoot -BotRoot $botRoot
+                    if ($mergeResult.success) {
+                        Write-Status "Merged: $($mergeResult.message)" -Type Complete
+                        Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Squash-merged to main: $($task.name)"
+                    } else {
+                        Write-Status "Merge failed: $($mergeResult.message)" -Type Error
+                        Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Merge failed for $($task.name): $($mergeResult.message)"
+
+                        # Escalate: move task from done/ to needs-input/ with conflict info
+                        $doneDir = Join-Path $tasksBaseDir "done"
+                        $needsInputDir = Join-Path $tasksBaseDir "needs-input"
+                        $taskFile = Get-ChildItem -Path $doneDir -Filter "*.json" -File -ErrorAction SilentlyContinue | Where-Object {
+                            try {
+                                $c = Get-Content $_.FullName -Raw | ConvertFrom-Json
+                                $c.id -eq $task.id
+                            } catch { $false }
+                        } | Select-Object -First 1
+
+                        if ($taskFile) {
+                            $taskContent = Get-Content $taskFile.FullName -Raw | ConvertFrom-Json
+                            $taskContent.status = 'needs-input'
+                            $taskContent.updated_at = (Get-Date).ToUniversalTime().ToString("o")
+
+                            if (-not $taskContent.PSObject.Properties['pending_question']) {
+                                $taskContent | Add-Member -NotePropertyName 'pending_question' -NotePropertyValue $null -Force
+                            }
+                            $taskContent.pending_question = @{
+                                id             = "merge-conflict"
+                                question       = "Merge conflict during squash-merge to main"
+                                context        = "Conflict details: $($mergeResult.conflict_files -join '; '). Worktree preserved at: $worktreePath"
+                                options        = @(
+                                    @{ key = "A"; label = "Resolve manually and retry (recommended)"; rationale = "Inspect the worktree, resolve conflicts, then retry merge" }
+                                    @{ key = "B"; label = "Discard task changes"; rationale = "Remove worktree and abandon this task's changes" }
+                                    @{ key = "C"; label = "Retry with fresh rebase"; rationale = "Reset and attempt rebase again" }
+                                )
+                                recommendation = "A"
+                                asked_at       = (Get-Date).ToUniversalTime().ToString("o")
+                            }
+
+                            if (-not (Test-Path $needsInputDir)) {
+                                New-Item -ItemType Directory -Force -Path $needsInputDir | Out-Null
+                            }
+                            $newPath = Join-Path $needsInputDir $taskFile.Name
+                            $taskContent | ConvertTo-Json -Depth 20 | Set-Content -Path $newPath -Encoding UTF8
+                            Remove-Item -Path $taskFile.FullName -Force -ErrorAction SilentlyContinue
+
+                            Write-Status "Task moved to needs-input for manual conflict resolution" -Type Warn
+                        }
+                    }
+                }
+
+                $tasksProcessed++
+                $processData.tasks_completed = $tasksProcessed
+                $processData.heartbeat_status = "Completed: $($task.name)"
+                Write-ProcessFile -Id $procId -Data $processData
+                Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Task completed (analyse+execute): $($task.name)"
+            } else {
+                Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Task failed: $($task.name)"
+
+                # Clean up worktree for failed/skipped tasks
+                if ($worktreePath) {
+                    Write-Status "Cleaning up worktree for failed task..." -Type Info
+                    Remove-Junctions -WorktreePath $worktreePath
+                    git -C $projectRoot worktree remove $worktreePath --force 2>$null
+                    git -C $projectRoot branch -D $branchName 2>$null
+                    Initialize-WorktreeMap -BotRoot $botRoot
+                    $map = Read-WorktreeMap
+                    $map.Remove($task.id)
+                    Write-WorktreeMap -Map $map
+                }
+
+                # Update session failure counters
+                try {
+                    $state = Invoke-SessionGetState -Arguments @{}
+                    $newFailures = $state.state.consecutive_failures + 1
+                    Invoke-SessionUpdate -Arguments @{
+                        consecutive_failures = $newFailures
+                        tasks_skipped = $state.state.tasks_skipped + 1
+                    } | Out-Null
+
+                    if ($newFailures -ge $consecutiveFailureThreshold) {
+                        Write-Status "$consecutiveFailureThreshold consecutive failures - stopping" -Type Error
+                        break
+                    }
+                } catch {}
+            }
+
+            # Continue to next task?
+            if (-not $Continue) { break }
+
+            # Clear task ID for next iteration
+            $TaskId = $null
+            $processData.task_id = $null
+            $processData.task_name = $null
+
+            # Delay between tasks
+            Write-Phosphor "Waiting 3s before next task..." -Color Bezel
+            for ($i = 0; $i -lt 3; $i++) {
+                Start-Sleep -Seconds 1
+                if (Test-ProcessStopSignal -Id $procId) { break }
+            }
+
+            if (Test-ProcessStopSignal -Id $procId) {
+                $processData.status = 'stopped'
+                $processData.failed_at = (Get-Date).ToUniversalTime().ToString("o")
+                Write-ProcessFile -Id $procId -Data $processData
+                break
+            }
+        }
+    } finally {
+        # Final cleanup
+        if ($processData.status -eq 'running') {
+            $processData.status = 'completed'
+            $processData.completed_at = (Get-Date).ToUniversalTime().ToString("o")
+        }
+        Write-ProcessFile -Id $procId -Data $processData
+        Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Process $procId finished ($($processData.status))"
+
+        try { Invoke-SessionUpdate -Arguments @{ status = "stopped" } | Out-Null } catch {}
     }
 }
 
