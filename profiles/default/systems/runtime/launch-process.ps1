@@ -201,6 +201,64 @@ function Add-YamlFrontMatter {
     ($yaml + $existing) | Set-Content -Path $FilePath -Encoding utf8NoBOM -NoNewline
 }
 
+# Get-NextTodoTask: checks analysing/ for resumed tasks (answered questions), then todo/ for new tasks
+function Get-NextTodoTask {
+    param([switch]$Verbose)
+
+    # First priority: check for analysing tasks that came back from needs-input
+    $index = Get-TaskIndex
+    $resumedTasks = @($index.Analysing.Values) | Sort-Object priority
+    foreach ($candidate in $resumedTasks) {
+        if ($candidate.file_path -and (Test-Path $candidate.file_path)) {
+            try {
+                $content = Get-Content -Path $candidate.file_path -Raw | ConvertFrom-Json
+                if ($content.questions_resolved -and $content.questions_resolved.Count -gt 0 -and -not $content.pending_question) {
+                    Write-Status "Found resumed task (question answered): $($candidate.name)" -Type Info
+                    $taskObj = @{
+                        id = $content.id
+                        name = $content.name
+                        status = 'analysing'
+                        priority = [int]$content.priority
+                        effort = $content.effort
+                        category = $content.category
+                    }
+                    if ($Verbose.IsPresent) {
+                        $taskObj.description = $content.description
+                        $taskObj.dependencies = $content.dependencies
+                        $taskObj.acceptance_criteria = $content.acceptance_criteria
+                        $taskObj.steps = $content.steps
+                        $taskObj.applicable_agents = $content.applicable_agents
+                        $taskObj.applicable_standards = $content.applicable_standards
+                        $taskObj.file_path = $candidate.file_path
+                        $taskObj.questions_resolved = $content.questions_resolved
+                        $taskObj.claude_session_id = $content.claude_session_id
+                        $taskObj.needs_interview = $content.needs_interview
+                    }
+                    return @{
+                        success = $true
+                        task = $taskObj
+                        message = "Resumed task (question answered): $($content.name)"
+                    }
+                }
+            } catch {
+                Write-Warning "Failed to read analysing task: $($candidate.file_path) - $_"
+            }
+        }
+    }
+
+    # Second priority: get next todo task
+    $result = Invoke-TaskGetNext -Arguments @{ prefer_analysed = $false; verbose = $Verbose.IsPresent }
+    if ($result.task -and $result.task.status -eq 'todo') {
+        return $result
+    }
+
+    return @{
+        success = $true
+        task = $null
+        message = "No tasks available for analysis."
+    }
+}
+
 # --- Crash Trap ---
 # Catch unexpected termination and persist process state before exit
 trap {
@@ -297,64 +355,6 @@ if ($Type -in @('analysis', 'execution')) {
     # Task reset for analysis and execution
     . "$PSScriptRoot\modules\task-reset.ps1"
     $tasksBaseDir = Join-Path $botRoot "workspace\tasks"
-
-    # Get-NextTodoTask: checks analysing/ for resumed tasks (answered questions), then todo/ for new tasks
-    function Get-NextTodoTask {
-        param([switch]$Verbose)
-
-        # First priority: check for analysing tasks that came back from needs-input
-        $index = Get-TaskIndex
-        $resumedTasks = @($index.Analysing.Values) | Sort-Object priority
-        foreach ($candidate in $resumedTasks) {
-            if ($candidate.file_path -and (Test-Path $candidate.file_path)) {
-                try {
-                    $content = Get-Content -Path $candidate.file_path -Raw | ConvertFrom-Json
-                    if ($content.questions_resolved -and $content.questions_resolved.Count -gt 0 -and -not $content.pending_question) {
-                        Write-Status "Found resumed task (question answered): $($candidate.name)" -Type Info
-                        $taskObj = @{
-                            id = $content.id
-                            name = $content.name
-                            status = 'analysing'
-                            priority = [int]$content.priority
-                            effort = $content.effort
-                            category = $content.category
-                        }
-                        if ($Verbose.IsPresent) {
-                            $taskObj.description = $content.description
-                            $taskObj.dependencies = $content.dependencies
-                            $taskObj.acceptance_criteria = $content.acceptance_criteria
-                            $taskObj.steps = $content.steps
-                            $taskObj.applicable_agents = $content.applicable_agents
-                            $taskObj.applicable_standards = $content.applicable_standards
-                            $taskObj.file_path = $candidate.file_path
-                            $taskObj.questions_resolved = $content.questions_resolved
-                            $taskObj.claude_session_id = $content.claude_session_id
-                            $taskObj.needs_interview = $content.needs_interview
-                        }
-                        return @{
-                            success = $true
-                            task = $taskObj
-                            message = "Resumed task (question answered): $($content.name)"
-                        }
-                    }
-                } catch {
-                    Write-Warning "Failed to read analysing task: $($candidate.file_path) - $_"
-                }
-            }
-        }
-
-        # Second priority: get next todo task
-        $result = Invoke-TaskGetNext -Arguments @{ prefer_analysed = $false; verbose = $Verbose.IsPresent }
-        if ($result.task -and $result.task.status -eq 'todo') {
-            return $result
-        }
-
-        return @{
-            success = $true
-            task = $null
-            message = "No tasks available for analysis."
-        }
-    }
 
     # Recover orphaned analysing tasks (both types benefit from this)
     Reset-AnalysingTasks -TasksBaseDir $tasksBaseDir -ProcessesDir $processesDir | Out-Null
