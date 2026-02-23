@@ -286,15 +286,19 @@ if (Test-Path $mcpJsonPath) {
 } else {
     Write-Status "Creating .mcp.json (dotbot + Context7 + Playwright)"
 
+    # Playwright MCP output goes to OS temp dir to avoid polluting the project
+    $projectName = Split-Path $ProjectDir -Leaf
+    $pwOutputDir = Join-Path ([System.IO.Path]::GetTempPath()) "dotbot" "playwright-mcp" $projectName
+
     # On Windows, npx must be invoked via 'cmd /c' for stdio MCP servers
     if ($IsWindows) {
         $npxCommand = "cmd"
         $npxContext7Args = @("/c", "npx", "-y", "@upstash/context7-mcp@latest")
-        $npxPlaywrightArgs = @("/c", "npx", "-y", "@playwright/mcp@latest")
+        $npxPlaywrightArgs = @("/c", "npx", "-y", "@playwright/mcp@latest", "--output-dir", $pwOutputDir)
     } else {
         $npxCommand = "npx"
         $npxContext7Args = @("-y", "@upstash/context7-mcp@latest")
-        $npxPlaywrightArgs = @("-y", "@playwright/mcp@latest")
+        $npxPlaywrightArgs = @("-y", "@playwright/mcp@latest", "--output-dir", $pwOutputDir)
     }
 
     $mcpConfig = @{
@@ -329,7 +333,6 @@ if (Test-Path $mcpJsonPath) {
 $projectGitignore = Join-Path $ProjectDir ".gitignore"
 $requiredIgnores = @(
     ".serena/"
-    ".playwright-mcp/"
     "node_modules/"
     "test-results/"
     "playwright-report/"
