@@ -95,6 +95,14 @@ if (Get-Command npx -ErrorAction SilentlyContinue) {
     $depWarnings++
 }
 
+if (Get-Command uvx -ErrorAction SilentlyContinue) {
+    Write-Success "uv / uvx (for Serena MCP)"
+} else {
+    Write-DotbotWarning "uv / uvx is not installed (needed for Serena MCP)"
+    Write-Host "    Install: pip install uv  (or see https://docs.astral.sh/uv/)" -ForegroundColor Cyan
+    $depWarnings++
+}
+
 if (Get-Command gitleaks -ErrorAction SilentlyContinue) {
     Write-Success "gitleaks"
 } else {
@@ -284,7 +292,7 @@ $mcpJsonPath = Join-Path $ProjectDir ".mcp.json"
 if (Test-Path $mcpJsonPath) {
     Write-DotbotWarning ".mcp.json already exists -- skipping"
 } else {
-    Write-Status "Creating .mcp.json (dotbot + Context7 + Playwright)"
+    Write-Status "Creating .mcp.json (dotbot + Context7 + Playwright + Serena)"
 
     # Playwright MCP output goes to OS temp dir to avoid polluting the project
     $projectName = Split-Path $ProjectDir -Leaf
@@ -319,6 +327,12 @@ if (Test-Path $mcpJsonPath) {
                 type    = "stdio"
                 command = $npxCommand
                 args    = $npxPlaywrightArgs
+                env     = @{}
+            }
+            serena = [ordered]@{
+                type    = "stdio"
+                command = "uvx"
+                args    = @("--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server")
                 env     = @{}
             }
         }
