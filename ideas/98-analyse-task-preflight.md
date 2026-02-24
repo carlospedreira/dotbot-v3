@@ -328,7 +328,7 @@ Write enriched analysis to task JSON:
 {
   "analysis": {
     "analysed_at": "2026-02-03T17:00:00Z",
-    "analysed_by": "claude-opus-4-5-20251101",
+    "analysed_by": "claude-opus-4-6",
     
     "entities": {
       "primary": ["Email", "Settings"],
