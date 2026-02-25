@@ -20,20 +20,6 @@
       "required": true,
       "core": true,
       "timeout_seconds": 30
-    },
-    {
-      "name": "03-dotnet-build.ps1",
-      "description": "Verify dotnet build succeeds",
-      "required": true,
-      "core": false,
-      "timeout_seconds": 60
-    },
-    {
-      "name": "04-dotnet-format.ps1",
-      "description": "Verify code formatting",
-      "required": true,
-      "core": false,
-      "timeout_seconds": 60
     }
   ]
 }

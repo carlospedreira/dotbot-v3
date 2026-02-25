@@ -247,8 +247,15 @@ if ($Profile -and $Profile.Count -gt 0) {
                     $baseConfig = Get-Content $baseConfigPath -Raw | ConvertFrom-Json
                     $profileConfig = Get-Content $_.FullName -Raw | ConvertFrom-Json
                     
-                    # Add profile scripts to base scripts
-                    $mergedScripts = @($baseConfig.scripts) + @($profileConfig.scripts)
+                    # Add profile scripts to base scripts (dedup by name)
+                    $existingNames = @{}
+                    foreach ($s in @($baseConfig.scripts)) { $existingNames[$s.name] = $true }
+                    $mergedScripts = @($baseConfig.scripts)
+                    foreach ($s in @($profileConfig.scripts)) {
+                        if (-not $existingNames.ContainsKey($s.name)) {
+                            $mergedScripts += $s
+                        }
+                    }
                     $baseConfig.scripts = $mergedScripts
                     
                     $baseConfig | ConvertTo-Json -Depth 10 | Set-Content $baseConfigPath
