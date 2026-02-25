@@ -101,7 +101,14 @@ function Update-TaskIndex {
                         $slug = ($content.name -replace '[^a-zA-Z0-9\s-]', '' -replace '\s+', '-').ToLower()
                         $script:TaskIndex.DoneSlugs += $slug
                     }
-                    'split' { $script:TaskIndex.Split[$content.id] = $entry }
+                    'split' {
+                        $script:TaskIndex.Split[$content.id] = $entry
+                        # Split tasks satisfy dependencies — work delegated to sub-tasks
+                        $script:TaskIndex.DoneIds += $content.id
+                        $script:TaskIndex.DoneNames += $content.name
+                        $slug = ($content.name -replace '[^a-zA-Z0-9\s-]', '' -replace '\s+', '-').ToLower()
+                        $script:TaskIndex.DoneSlugs += $slug
+                    }
                     'skipped' { $script:TaskIndex.Skipped[$content.id] = $entry }
                     'cancelled' { $script:TaskIndex.Cancelled[$content.id] = $entry }
                 }

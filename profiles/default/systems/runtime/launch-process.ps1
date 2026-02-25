@@ -473,6 +473,8 @@ if ($Type -in @('analysis', 'execution')) {
                     while ($true) {
                         Start-Sleep -Seconds 5
                         if (Test-ProcessStopSignal -Id $procId) { break }
+                        $processData.last_heartbeat = (Get-Date).ToUniversalTime().ToString("o")
+                        Write-ProcessFile -Id $procId -Data $processData
                         Reset-TaskIndex
                         if ($Type -eq 'analysis') {
                             $taskResult = Get-NextTodoTask -Verbose
@@ -973,6 +975,8 @@ elseif ($Type -eq 'workflow') {
                     while ($true) {
                         Start-Sleep -Seconds 5
                         if (Test-ProcessStopSignal -Id $procId) { break }
+                        $processData.last_heartbeat = (Get-Date).ToUniversalTime().ToString("o")
+                        Write-ProcessFile -Id $procId -Data $processData
                         Reset-TaskIndex
                         $taskResult = Get-NextTodoTask -Verbose
                         if ($taskResult.task) { $foundTask = $true; break }
