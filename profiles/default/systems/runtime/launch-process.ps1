@@ -758,6 +758,14 @@ Do NOT implement the task. Your job is research and preparation only.
                     if ($mergeResult.success) {
                         Write-Status "Merged: $($mergeResult.message)" -Type Complete
                         Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Squash-merged to main: $($task.name)"
+                        if ($mergeResult.push_result.attempted) {
+                            if ($mergeResult.push_result.success) {
+                                Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Pushed to remote: $($task.name)"
+                            } else {
+                                Write-Status "Push failed: $($mergeResult.push_result.error)" -Type Warning
+                                Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Push failed after merge: $($mergeResult.push_result.error)"
+                            }
+                        }
                     } else {
                         Write-Status "Merge failed: $($mergeResult.message)" -Type Error
                         Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Merge failed for $($task.name): $($mergeResult.message)"
@@ -1358,6 +1366,14 @@ Work on this task autonomously. When complete, ensure you call task_mark_done vi
                     if ($mergeResult.success) {
                         Write-Status "Merged: $($mergeResult.message)" -Type Complete
                         Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Squash-merged to main: $($task.name)"
+                        if ($mergeResult.push_result.attempted) {
+                            if ($mergeResult.push_result.success) {
+                                Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Pushed to remote: $($task.name)"
+                            } else {
+                                Write-Status "Push failed: $($mergeResult.push_result.error)" -Type Warning
+                                Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Push failed after merge: $($mergeResult.push_result.error)"
+                            }
+                        }
                     } else {
                         Write-Status "Merge failed: $($mergeResult.message)" -Type Error
                         Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Merge failed for $($task.name): $($mergeResult.message)"

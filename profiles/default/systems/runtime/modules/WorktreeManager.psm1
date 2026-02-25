@@ -425,6 +425,19 @@ function Complete-TaskWorktree {
         git -C $ProjectRoot add .bot/workspace/tasks/ 2>$null
         git -C $ProjectRoot commit --quiet -m "chore: update task state" 2>$null
 
+        # Auto-push to remote if one is configured
+        $pushResult = @{ attempted = $false; success = $false; error = $null }
+        $remoteUrl = git -C $ProjectRoot remote get-url origin 2>$null
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($remoteUrl)) {
+            $pushResult.attempted = $true
+            $pushOutput = git -C $ProjectRoot push origin $baseBranch 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                $pushResult.success = $true
+            } else {
+                $pushResult.error = ($pushOutput | Out-String).Trim()
+            }
+        }
+
         # Restore stashed state after successful merge+commit
         if ($wasStashed) {
             git -C $ProjectRoot stash pop 2>$null
@@ -454,6 +467,7 @@ function Complete-TaskWorktree {
             merge_commit   = $mergeCommit
             message        = "Squash-merged to $baseBranch and cleaned up"
             conflict_files = @()
+            push_result    = $pushResult
         }
     } catch {
         return @{

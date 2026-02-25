@@ -15,7 +15,7 @@ function updateUI(state) {
     updateRunningStatus(state.session, state.control, state.analysis, state.loops);
     updateCurrentTask(state.tasks.current);
     updateUpcomingTasks(state.tasks.upcoming);
-    updateCompletedTasks(state.tasks.recent_completed);
+    updateCompletedTasks(state.tasks.recent_completed, state.tasks.skipped_list);
     updatePipelineView(state.tasks);
     updateControlSignalStatus(state.control);
     updateControlButtonStates(state.session, state.control, state.loops);
@@ -65,7 +65,7 @@ function updateTaskCounts(tasks) {
     // Overview stats
     setElementText('todo-count', tasks.todo);
     setElementText('progress-count', tasks.in_progress);
-    setElementText('done-count', tasks.done);
+    setElementText('done-count', (tasks.done || 0) + (tasks.skipped || 0));
     setElementText('analysing-count', tasks.analysing || 0);
     setElementText('needs-input-count', tasks.needs_input || 0);
     setElementText('analysed-count', tasks.analysed || 0);
@@ -355,11 +355,13 @@ function updateUpcomingTasks(tasks) {
  * Update completed tasks list
  * @param {Array} tasks - Array of completed tasks
  */
-function updateCompletedTasks(tasks) {
+function updateCompletedTasks(tasks, skippedTasks) {
     const container = document.getElementById('completed-tasks');
 
-    // Ensure tasks is an array
-    const taskList = Array.isArray(tasks) ? tasks : [];
+    // Merge completed and skipped tasks
+    const completedList = Array.isArray(tasks) ? tasks : [];
+    const skippedList = Array.isArray(skippedTasks) ? skippedTasks : [];
+    const taskList = [...completedList, ...skippedList];
 
     if (!container) return;
 
@@ -368,12 +370,16 @@ function updateCompletedTasks(tasks) {
         return;
     }
 
-    container.innerHTML = taskList.map(task => `
-        <div class="task-list-item done" data-task-id="${escapeHtml(task.id || '')}">
-            <span class="task-list-item-name">${escapeHtml(task.name || task.id || 'Unknown')}</span>
-            <span class="task-list-item-meta">${escapeHtml(task.category || '')}</span>
-        </div>
-    `).join('');
+    container.innerHTML = taskList.map(task => {
+        const isSkipped = task.status === 'skipped';
+        const meta = isSkipped ? 'skipped' : (task.category || '');
+        return `
+            <div class="task-list-item done" data-task-id="${escapeHtml(task.id || '')}">
+                <span class="task-list-item-name">${escapeHtml(task.name || task.id || 'Unknown')}</span>
+                <span class="task-list-item-meta">${escapeHtml(meta)}</span>
+            </div>
+        `;
+    }).join('');
 }
 
 /**
