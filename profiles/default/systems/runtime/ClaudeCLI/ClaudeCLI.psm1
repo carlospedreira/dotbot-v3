@@ -387,7 +387,7 @@ function Invoke-ClaudeStream {
     Maximum characters to show in preview messages (default: 140).
     
     .PARAMETER Model
-    Claude model to use (default: claude-opus-4-5-20251101).
+    Claude model to use (default: claude-opus-4-6).
     
     .PARAMETER PluginDir
     Directory containing plugins, or __no_plugins__ to disable (default: __no_plugins__).
@@ -416,7 +416,7 @@ function Invoke-ClaudeStream {
         [string]$Prompt,
 
         [Parameter(Position = 1)]
-        [string]$Model = "claude-opus-4-5-20251101",
+        [string]$Model = "claude-opus-4-6",
 
         [int]$FlushChars = 200,
 
@@ -924,7 +924,7 @@ function Invoke-Claude {
     The prompt to send to Claude.
     
     .PARAMETER Model
-    Claude model to use (default: claude-opus-4-5-20251101).
+    Claude model to use (default: claude-opus-4-6).
     
     .PARAMETER SessionId
     Optional session ID for conversation continuity.
@@ -944,7 +944,7 @@ function Invoke-Claude {
         [string]$Prompt,
 
         [Parameter(Position = 1)]
-        [string]$Model = "claude-opus-4-5-20251101",
+        [string]$Model = "claude-opus-4-6",
         
         [string]$SessionId,
         
@@ -982,7 +982,7 @@ function Get-ClaudeModels {
     param()
     
     [PSCustomObject]@{
-        Name = "claude-opus-4-5-20251101"
+        Name = "claude-opus-4-6"
         Description = "Most capable model"
         Alias = "opus"
     }

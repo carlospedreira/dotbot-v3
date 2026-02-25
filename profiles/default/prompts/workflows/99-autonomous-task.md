@@ -103,7 +103,7 @@ You are working in a **git worktree** on branch `{{BRANCH_NAME}}`.
      Add CalendarEvent entity with EF Core configuration
 
      [task:7b012fb8]
-     Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+     Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
      ```
 
 ### Phase 3: Verification
