@@ -6,6 +6,20 @@ function Invoke-TaskMarkAnalysing {
         [hashtable]$Arguments
     )
 
+    function Set-OrAddProperty {
+        param(
+            [Parameter(Mandatory)] [psobject]$Object,
+            [Parameter(Mandatory)] [string]$Name,
+            [Parameter()] $Value
+        )
+
+        if ($Object.PSObject.Properties[$Name]) {
+            $Object.$Name = $Value
+        } else {
+            $Object | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
+        }
+    }
+
     # Extract arguments
     $taskId = $Arguments['task_id']
 
@@ -74,14 +88,11 @@ function Invoke-TaskMarkAnalysing {
     $taskContent = Get-Content -Path $taskFile.FullName -Raw | ConvertFrom-Json
 
     # Update task properties
-    $taskContent.status = 'analysing'
-    $taskContent.updated_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+    Set-OrAddProperty -Object $taskContent -Name 'status' -Value 'analysing'
+    Set-OrAddProperty -Object $taskContent -Name 'updated_at' -Value ((Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'"))
 
     # Add analysis_started_at timestamp
-    if (-not $taskContent.PSObject.Properties['analysis_started_at']) {
-        $taskContent | Add-Member -NotePropertyName 'analysis_started_at' -NotePropertyValue $null -Force
-    }
-    $taskContent.analysis_started_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+    Set-OrAddProperty -Object $taskContent -Name 'analysis_started_at' -Value ((Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'"))
 
     # Track Claude session for conversation continuity
     $claudeSessionId = $env:CLAUDE_SESSION_ID
