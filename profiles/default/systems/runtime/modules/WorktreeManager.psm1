@@ -395,13 +395,17 @@ function Complete-TaskWorktree {
             $taskBackup[$key] | Set-Content $restorePath -Encoding UTF8
         }
 
-        # Remove stale copies of the completed task from non-done directories
-        foreach ($staleDir in @('todo', 'analysing', 'analysed', 'needs-input', 'in-progress')) {
-            $stalePath = Join-Path $ProjectRoot ".bot\workspace\tasks\$staleDir"
-            Get-ChildItem -Path $stalePath -Filter "*.json" -File -ErrorAction SilentlyContinue |
-                Where-Object {
-                    try { (Get-Content $_.FullName -Raw | ConvertFrom-Json).id -eq $TaskId } catch { $false }
-                } | Remove-Item -Force -ErrorAction SilentlyContinue
+        # Remove any task JSON files from the merge that weren't in the live backup.
+        # The branch may carry stale copies of tasks that moved while the branch was alive
+        # (e.g., a task split from todo→split while this branch still had the todo copy).
+        foreach ($subDir in @('todo','analysing','analysed','needs-input','in-progress','done','skipped','split','cancelled')) {
+            $dir = Join-Path $ProjectRoot ".bot\workspace\tasks\$subDir"
+            Get-ChildItem $dir -Filter "*.json" -File -ErrorAction SilentlyContinue | ForEach-Object {
+                $key = "$subDir/$($_.Name)"
+                if (-not $taskBackup.ContainsKey($key)) {
+                    Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+                }
+            }
         }
 
         # Commit if there are staged changes (task may have made no code changes)
