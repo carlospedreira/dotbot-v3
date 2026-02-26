@@ -33,6 +33,31 @@ $diagLog = Join-Path $controlDir "diag.log"
 Write-Host "  Starting .bot UI..." -ForegroundColor Cyan
 Write-Host ""
 
+# Check if a server is already running for this project
+$uiPortFile = Join-Path $controlDir "ui-port"
+if (Test-Path $uiPortFile) {
+    $existingPort = (Get-Content $uiPortFile -Raw).Trim()
+    if ($existingPort -match '^\d+$') {
+        try {
+            $resp = Invoke-WebRequest -Uri "http://localhost:$existingPort/api/info" -TimeoutSec 2 -ErrorAction Stop
+            if ($resp.StatusCode -eq 200) {
+                $url = "http://localhost:$existingPort"
+                Write-Host "  Server already running on port $existingPort" -ForegroundColor Green
+                if (Get-Command Open-Url -ErrorAction SilentlyContinue) {
+                    Open-Url $url
+                } else {
+                    Start-Process $url
+                }
+                Write-Host "  Browser opened at $url" -ForegroundColor Green
+                Write-Host ""
+                exit 0
+            }
+        } catch {
+            # Server not responding — stale port file, continue with fresh start
+        }
+    }
+}
+
 # Check if server script exists
 if (-not (Test-Path $ServerScript)) {
     Write-Host "  Error: UI server script not found at:" -ForegroundColor Red
@@ -60,11 +85,13 @@ if ($Port -gt 0) {
     $serverArgs += "-Port", $Port.ToString()
 }
 
+# Remove stale port file so we only read the new server's port
+if (Test-Path $uiPortFile) { Remove-Item $uiPortFile -Force }
+
 # Start the server in a new PowerShell window
 Start-Process pwsh -ArgumentList $serverArgs
 
 # Wait for the server to write its selected port
-$uiPortFile = Join-Path $controlDir "ui-port"
 $resolvedPort = 0
 for ($i = 0; $i -lt 20; $i++) {
     Start-Sleep -Milliseconds 250

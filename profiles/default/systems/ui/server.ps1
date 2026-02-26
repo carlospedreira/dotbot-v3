@@ -28,13 +28,27 @@ function Find-AvailablePort {
     param([int]$StartPort)
     $maxPort = 8699
     for ($p = $StartPort; $p -le $maxPort; $p++) {
+        # Phase 1: TCP socket probe
         try {
             $tcp = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $p)
             $tcp.Start()
             $tcp.Stop()
+        } catch {
+            continue  # Port in use — try next
+        }
+
+        # Phase 2: HTTP prefix probe (catches existing HttpListener registrations
+        # that a raw TCP check can miss on Windows)
+        $http = [System.Net.HttpListener]::new()
+        try {
+            $http.Prefixes.Add("http://localhost:$p/")
+            $http.Start()
             return $p
         } catch {
-            # Port in use — try next
+            continue  # HTTP prefix conflict — try next
+        } finally {
+            try { if ($http.IsListening) { $http.Stop() } } catch { }
+            try { $http.Close() } catch { }
         }
     }
     throw "No available port found in range ${StartPort}–${maxPort}"
