@@ -285,7 +285,6 @@ function renderQuestionItem(item) {
     const question = item.question || {};
     const options = question.options || [];
     const isMultiSelect = question.multi_select || false;
-    const recommendation = question.recommendation || 'A';
     
     // Initialize selected answers for this task
     if (!selectedAnswers[item.task_id]) {
@@ -306,7 +305,7 @@ function renderQuestionItem(item) {
                 
                 <div class="answer-options" data-multi-select="${isMultiSelect}">
                     ${options.map(opt => `
-                        <div class="answer-option${opt.key === recommendation ? ' recommended' : ''}" 
+                        <div class="answer-option" 
                              data-key="${escapeHtml(opt.key)}">
                             <span class="answer-key">${escapeHtml(opt.key)}</span>
                             <div class="answer-content">
@@ -391,7 +390,7 @@ function renderKickstartQuestionsItem(item) {
                         ${q.context ? `<div class="action-question-context">${escapeHtml(q.context)}</div>` : ''}
                         <div class="answer-options" data-multi-select="false">
                             ${(q.options || []).map(opt => `
-                                <div class="answer-option${opt.key === q.recommendation ? ' recommended' : ''}"
+                                <div class="answer-option"
                                      data-key="${escapeHtml(opt.key)}"
                                      data-question-key="${escapeHtml(q.id)}">
                                     <span class="answer-key">${escapeHtml(opt.key)}</span>
@@ -535,6 +534,7 @@ function attachActionHandlers(container) {
         option.addEventListener('click', () => {
             const questionEl = option.closest('.kickstart-question');
             if (!questionEl) return;
+            if (questionEl.classList.contains('answered')) return;
 
             // Single-select within each question
             questionEl.querySelectorAll('.answer-option').forEach(opt => {
@@ -550,8 +550,10 @@ function attachActionHandlers(container) {
     // Kickstart interview: clear option selection when typing free text
     container.querySelectorAll('.kickstart-freetext-input').forEach(textarea => {
         textarea.addEventListener('input', () => {
+            const questionEl = textarea.closest('.kickstart-question');
+            if (questionEl?.classList.contains('answered')) return;
+
             if (textarea.value.trim()) {
-                const questionEl = textarea.closest('.kickstart-question');
                 if (questionEl) {
                     questionEl.querySelectorAll('.answer-option').forEach(opt => opt.classList.remove('selected'));
                 }
@@ -669,101 +671,54 @@ async function submitGitCommit() {
  */
 /**
  * Handle individual kickstart question submission from the slideout
- * Marks the question as answered and submits all answered-so-far to the API
+ * Toggles the question between submitted/editable before final "Submit All"
+ * @param {HTMLElement} questionEl - Question element
+ * @param {boolean} submitted - Whether question is currently submitted
+ */
+function setKickstartQuestionSubmittedState(questionEl, submitted) {
+    const actionBody = questionEl.closest('.action-item-body');
+    const questionEls = actionBody ? Array.from(actionBody.querySelectorAll('.kickstart-question')) : [];
+    const questionIndex = Math.max(1, questionEls.indexOf(questionEl) + 1);
+    const submitBtn = questionEl.querySelector('.submit-single-kickstart');
+    const freetextInput = questionEl.querySelector('.kickstart-freetext-input');
+
+    questionEl.classList.toggle('answered', submitted);
+
+    if (freetextInput) {
+        freetextInput.disabled = submitted;
+    }
+
+    if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = submitted
+            ? `Edit Q${questionIndex}`
+            : `Submit Q${questionIndex}`;
+    }
+}
+
+/**
+ * Handle individual kickstart question submission from the slideout
+ * Allows toggling back to edit if the user changes their mind
  * @param {HTMLElement} btn - The per-question submit button
  */
-async function handleSingleKickstartAnswer(btn) {
+function handleSingleKickstartAnswer(btn) {
     const questionEl = btn.closest('.kickstart-question');
-    const actionItem = btn.closest('.action-item');
-    const processId = actionItem?.dataset.processId;
-    if (!questionEl || !processId) return;
+    if (!questionEl) return;
 
-    const questionId = questionEl.dataset.questionId;
+    if (questionEl.classList.contains('answered')) {
+        setKickstartQuestionSubmittedState(questionEl, false);
+        return;
+    }
+
     const selectedOpt = questionEl.querySelector('.answer-option.selected');
     const freetext = questionEl.querySelector('.kickstart-freetext-input')?.value?.trim() || '';
-    const questionText = questionEl.querySelector('.action-question-text')?.textContent || '';
 
     if (!selectedOpt && !freetext) {
         showToast('Please select an option or type a custom answer', 'warning');
         return;
     }
 
-    // Build answer text
-    let answerText;
-    if (freetext) {
-        answerText = freetext;
-    } else {
-        const key = selectedOpt.dataset.key;
-        const label = selectedOpt.querySelector('.answer-label')?.textContent || key;
-        answerText = `${key}: ${label}`;
-    }
-
-    // Mark question as answered visually
-    questionEl.classList.add('answered');
-    btn.disabled = true;
-    btn.textContent = '✓';
-
-    // Collect all answered questions (including this one) and submit
-    const allQuestions = actionItem.querySelectorAll('.kickstart-question');
-    const answers = [];
-
-    allQuestions.forEach(qEl => {
-        const qId = qEl.dataset.questionId;
-        const qText = qEl.querySelector('.action-question-text')?.textContent || '';
-
-        if (qEl === questionEl) {
-            answers.push({ question_id: qId, question: qText, answer: answerText });
-        } else if (qEl.classList.contains('answered')) {
-            // Reconstruct previously answered
-            const prevOpt = qEl.querySelector('.answer-option.selected');
-            const prevFreetext = qEl.querySelector('.kickstart-freetext-input')?.value?.trim() || '';
-            if (prevFreetext) {
-                answers.push({ question_id: qId, question: qText, answer: prevFreetext });
-            } else if (prevOpt) {
-                const k = prevOpt.dataset.key;
-                const l = prevOpt.querySelector('.answer-label')?.textContent || k;
-                answers.push({ question_id: qId, question: qText, answer: `${k}: ${l}` });
-            }
-        }
-    });
-
-    // Check if all questions are now answered
-    const allAnswered = actionItem.querySelectorAll('.kickstart-question:not(.answered)').length === 0;
-
-    if (allAnswered) {
-        // All done — submit to API
-        try {
-            const response = await fetch(`${API_BASE}/api/process/answer`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ process_id: processId, answers, skipped: false })
-            });
-
-            const result = await response.json();
-            if (result.success) {
-                actionItem.remove();
-                const remaining = document.querySelectorAll('.action-item').length;
-                updateActionWidget(remaining);
-                if (remaining === 0) {
-                    document.getElementById('slideout-content').innerHTML =
-                        '<div class="empty-state">No pending actions</div>';
-                }
-                showToast('Interview answers submitted', 'success');
-                if (typeof pollState === 'function') pollState();
-            } else {
-                showToast('Failed to submit answers: ' + (result.error || 'Unknown error'), 'error');
-                questionEl.classList.remove('answered');
-                btn.disabled = false;
-                btn.textContent = `Submit Q${Array.from(allQuestions).indexOf(questionEl) + 1}`;
-            }
-        } catch (error) {
-            console.error('Error submitting interview answers:', error);
-            showToast('Error submitting answers', 'error');
-            questionEl.classList.remove('answered');
-            btn.disabled = false;
-            btn.textContent = `Submit Q${Array.from(allQuestions).indexOf(questionEl) + 1}`;
-        }
-    }
+    setKickstartQuestionSubmittedState(questionEl, true);
 }
 
 async function handleInterviewSubmit(btn, skipped) {

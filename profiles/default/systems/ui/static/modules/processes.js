@@ -202,8 +202,7 @@ function renderProcessList(processes) {
                         }
                         html += `  <div class="interview-options">`;
                         (q.options || []).forEach(opt => {
-                            const recClass = opt.key === q.recommendation ? ' recommended' : '';
-                            html += `<div class="interview-option${recClass}" data-key="${escapeHtml(opt.key)}" data-question-key="${escapeHtml(q.id)}" onclick="selectInterviewOption(this)">`;
+                            html += `<div class="interview-option" data-key="${escapeHtml(opt.key)}" data-question-key="${escapeHtml(q.id)}" onclick="selectInterviewOption(this)">`;
                             html += `  <span class="interview-option-key">${escapeHtml(opt.key)}</span>`;
                             html += `  <div class="interview-option-content">`;
                             html += `    <div class="interview-option-label">${escapeHtml(opt.label)}</div>`;
@@ -218,7 +217,7 @@ function renderProcessList(processes) {
                         html += `    <textarea class="interview-freetext-input" placeholder="Or type a custom answer..." oninput="handleInterviewFreetextInput(this)"></textarea>`;
                         html += `  </div>`;
                         html += `  <div class="interview-question-submit">`;
-                        html += `    <button class="ctrl-btn-sm primary" onclick="submitSingleInterviewFromProcess('${proc.id}', '${escapeHtml(q.id)}', this)">Submit Q${idx + 1}</button>`;
+                        html += `    <button class="ctrl-btn-sm primary" onclick="submitSingleInterviewFromProcess('${proc.id}', '${escapeHtml(q.id)}')">Submit Q${idx + 1}</button>`;
                         html += `  </div>`;
                         html += `</div>`;
                     });
@@ -488,6 +487,7 @@ function escapeHtml(text) {
 function selectInterviewOption(element) {
     const questionEl = element.closest('.interview-question');
     if (!questionEl) return;
+    if (questionEl.classList.contains('answered')) return;
 
     // Single-select within each question
     questionEl.querySelectorAll('.interview-option').forEach(opt => {
@@ -504,8 +504,10 @@ function selectInterviewOption(element) {
  * @param {HTMLTextAreaElement} textarea - The free text input
  */
 function handleInterviewFreetextInput(textarea) {
+    const questionEl = textarea.closest('.interview-question');
+    if (questionEl?.classList.contains('answered')) return;
+
     if (textarea.value.trim()) {
-        const questionEl = textarea.closest('.interview-question');
         if (questionEl) {
             questionEl.querySelectorAll('.interview-option').forEach(opt => opt.classList.remove('selected'));
         }
@@ -513,18 +515,48 @@ function handleInterviewFreetextInput(textarea) {
 }
 
 /**
+ * Toggle submitted/editable state for a single process interview question
+ * @param {HTMLElement} questionEl - Interview question element
+ * @param {boolean} submitted - Whether question is currently submitted
+ */
+function setProcessInterviewQuestionSubmittedState(questionEl, submitted) {
+    const questionContainer = questionEl.parentElement;
+    const questionEls = questionContainer ? Array.from(questionContainer.querySelectorAll('.interview-question')) : [];
+    const questionIndex = Math.max(1, questionEls.indexOf(questionEl) + 1);
+    const submitBtn = questionEl.querySelector('.interview-question-submit .ctrl-btn-sm');
+    const freetextInput = questionEl.querySelector('.interview-freetext-input');
+
+    questionEl.classList.toggle('answered', submitted);
+
+    if (freetextInput) {
+        freetextInput.disabled = submitted;
+    }
+
+    if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = submitted
+            ? `Edit Q${questionIndex}`
+            : `Submit Q${questionIndex}`;
+    }
+}
+
+/**
  * Submit a single interview question from the Process tab
- * Marks the question as answered; when all are done, submits to API
+ * Allows toggling back to edit if the user changes their mind
  * @param {string} processId - Process ID
  * @param {string} questionId - Question ID
- * @param {HTMLElement} btn - The per-question submit button
  */
-async function submitSingleInterviewFromProcess(processId, questionId, btn) {
+async function submitSingleInterviewFromProcess(processId, questionId) {
     const container = document.querySelector(`.process-interview[data-process-id="${processId}"]`);
     if (!container) return;
 
     const questionEl = container.querySelector(`.interview-question[data-question-id="${questionId}"]`);
     if (!questionEl) return;
+
+    if (questionEl.classList.contains('answered')) {
+        setProcessInterviewQuestionSubmittedState(questionEl, false);
+        return;
+    }
 
     const selectedOpt = questionEl.querySelector('.interview-option.selected');
     const freetext = questionEl.querySelector('.interview-freetext-input')?.value?.trim() || '';
@@ -534,17 +566,7 @@ async function submitSingleInterviewFromProcess(processId, questionId, btn) {
         return;
     }
 
-    // Mark question as answered visually
-    questionEl.classList.add('answered');
-    btn.disabled = true;
-    btn.textContent = '✓';
-
-    // Check if all questions are now answered
-    const unanswered = container.querySelectorAll('.interview-question:not(.answered)');
-    if (unanswered.length === 0) {
-        // All done — submit to API
-        submitInterviewFromProcess(processId, false);
-    }
+    setProcessInterviewQuestionSubmittedState(questionEl, true);
 }
 
 /**

@@ -775,8 +775,15 @@
 }
 
 .kickstart-question.answered {
-    opacity: 0.5;
+    opacity: 0.7;
+}
+
+.kickstart-question.answered .answer-options {
     pointer-events: none;
+}
+
+.kickstart-question.answered .kickstart-freetext-input {
+    opacity: 1;
 }
 
 .kickstart-question-freetext {
@@ -874,17 +881,6 @@
 .answer-option.selected {
     background: var(--secondary-12);
     border-color: var(--color-secondary);
-}
-
-.answer-option.recommended {
-    border-color: var(--color-success-dim);
-}
-
-.answer-option.recommended::after {
-    content: '★';
-    color: var(--color-success);
-    font-size: 10px;
-    margin-left: auto;
 }
 
 .answer-key {

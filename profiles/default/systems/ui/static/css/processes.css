@@ -481,10 +481,6 @@
     background: var(--primary-10);
 }
 
-.interview-option.recommended {
-    border-left: 2px solid var(--color-success);
-}
-
 .interview-option-key {
     font-size: 10px;
     font-weight: 700;
@@ -516,7 +512,10 @@
 }
 
 .interview-question.answered {
-    opacity: 0.5;
+    opacity: 0.7;
+}
+
+.interview-question.answered .interview-options {
     pointer-events: none;
 }
 
