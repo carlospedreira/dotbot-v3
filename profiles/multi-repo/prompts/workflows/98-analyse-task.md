@@ -98,7 +98,7 @@ mcp__dotbot__task_mark_analysing({ task_id: "{{TASK_ID}}" })
 Read the initiative document for all context needed by the research methodology:
 
 ```
-read_files({ files: [{ path: ".bot/workspace/product/briefing/jira-context.md" }] })
+Read({ file_path: ".bot/workspace/product/briefing/jira-context.md" })
 ```
 
 Extract from `jira-context.md`:
@@ -117,7 +117,7 @@ These values will be substituted into the research methodology prompt.
 Load the research prompt specified in the task's `research_prompt` field:
 
 ```
-read_files({ files: [{ path: ".bot/prompts/research/{{TASK.research_prompt}}" }] })
+Read({ file_path: ".bot/prompts/research/{{TASK.research_prompt}}" })
 ```
 
 The research prompt is a **methodology document** — it defines:
@@ -189,7 +189,7 @@ When the task is NOT a research task, use the standard 10-phase analysis protoco
 
 Before extracting product context, also read:
 ```
-read_files({ files: [{ path: ".bot/workspace/product/briefing/jira-context.md" }] })
+Read({ file_path: ".bot/workspace/product/briefing/jira-context.md" })
 ```
 
 Include the initiative's Jira key, business objective, and reference implementation in the `product_context` section of the analysis output.

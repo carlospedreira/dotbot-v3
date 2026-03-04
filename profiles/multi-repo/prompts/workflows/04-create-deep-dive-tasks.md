@@ -18,10 +18,8 @@ This workflow runs after the foundational research (Phase 1) completes. It reads
 ### Step 1: Read Source Documents
 
 ```
-read_files({ files: [
-  { path: ".bot/workspace/product/research-repos.md" },
-  { path: ".bot/workspace/product/briefing/jira-context.md" }
-]})
+Read({ file_path: ".bot/workspace/product/research-repos.md" })
+Read({ file_path: ".bot/workspace/product/briefing/jira-context.md" })
 ```
 
 ### Step 2: Parse Repo Tables
