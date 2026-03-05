@@ -769,7 +769,7 @@ Write-Host "  WORKSPACE INSTANCE ID" -ForegroundColor Cyan
 Write-Host "  ────────────────────────────────────────────" -ForegroundColor DarkGray
 
 $defaultSettingsPath = Join-Path $repoRoot "profiles\default\defaults\settings.default.json"
-$multiRepoSettingsPath = Join-Path $repoRoot "profiles\multi-repo\defaults\settings.default.json"
+$kickstartViaJiraSettingsPath = Join-Path $repoRoot "profiles\kickstart-via-jira\defaults\settings.default.json"
 $stateBuilderPath = Join-Path $repoRoot "profiles\default\systems\ui\modules\StateBuilder.psm1"
 $uiIndexPath = Join-Path $repoRoot "profiles\default\systems\ui\static\index.html"
 $uiUpdatesPath = Join-Path $repoRoot "profiles\default\systems\ui\static\modules\ui-updates.js"
@@ -777,8 +777,8 @@ $uiUpdatesPath = Join-Path $repoRoot "profiles\default\systems\ui\static\modules
 Assert-FileContains -Name "default settings template has instance_id placeholder" `
     -Path $defaultSettingsPath `
     -Pattern '"instance_id"\s*:\s*null'
-Assert-FileContains -Name "multi-repo settings template has instance_id placeholder" `
-    -Path $multiRepoSettingsPath `
+Assert-FileContains -Name "kickstart-via-jira settings template has instance_id placeholder" `
+    -Path $kickstartViaJiraSettingsPath `
     -Pattern '"instance_id"\s*:\s*null'
 Assert-FileContains -Name "StateBuilder includes workspace instance_id in state" `
     -Path $stateBuilderPath `
