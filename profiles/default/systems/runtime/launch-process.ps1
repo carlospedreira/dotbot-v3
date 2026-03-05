@@ -93,6 +93,7 @@ if (-not (Test-Path $processesDir)) {
 Import-Module "$PSScriptRoot\ProviderCLI\ProviderCLI.psm1" -Force
 Import-Module "$PSScriptRoot\ClaudeCLI\ClaudeCLI.psm1" -Force
 Import-Module "$PSScriptRoot\modules\DotBotTheme.psm1" -Force
+Import-Module "$PSScriptRoot\modules\InstanceId.psm1" -Force
 $t = Get-DotBotTheme
 
 . "$PSScriptRoot\modules\ui-rendering.ps1"
@@ -129,6 +130,12 @@ $settingsPath = Join-Path $botRoot "defaults\settings.default.json"
 $settings = @{ execution = @{ model = 'Opus' }; analysis = @{ model = 'Opus' } }
 if (Test-Path $settingsPath) {
     try { $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json } catch {}
+}
+# Workspace instance ID (stable per .bot workspace).
+# For legacy projects missing this field, create and persist one.
+$instanceId = Get-OrCreateWorkspaceInstanceId -SettingsPath $settingsPath
+if (-not $instanceId) {
+    $instanceId = ""
 }
 
 # Load provider config
@@ -932,7 +939,8 @@ if ($Type -in @('analysis', 'execution')) {
                     -SessionId $sessionId `
                     -ProductMission $productMission `
                     -EntityModel $entityModel `
-                    -StandardsList $standardsList
+                    -StandardsList $standardsList `
+                    -InstanceId $instanceId
 
                 $branchForPrompt = if ($branchName) { $branchName } else { "main" }
                 $prompt = $prompt -replace '\{\{BRANCH_NAME\}\}', $branchForPrompt
@@ -1684,7 +1692,8 @@ Do NOT implement the task. Your job is research and preparation only.
                 -SessionId $sessionId `
                 -ProductMission $productMission `
                 -EntityModel $entityModel `
-                -StandardsList $standardsList
+                -StandardsList $standardsList `
+                -InstanceId $instanceId
 
             $branchForPrompt = if ($branchName) { $branchName } else { "main" }
             $executionPrompt = $executionPrompt -replace '\{\{BRANCH_NAME\}\}', $branchForPrompt
