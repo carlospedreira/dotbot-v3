@@ -320,9 +320,10 @@ if (-not $dotbotInstalled) {
                 $relativePath = [System.IO.Path]::GetRelativePath(
                     [System.IO.Path]::GetFullPath($dotnetProfile),
                     [System.IO.Path]::GetFullPath($firstFile.FullName)
-                ) -replace '/', '\'
+                )
+                $relativePathKey = $relativePath -replace '\\', '/'
                 $expectedPath = Join-Path $botDir3 $relativePath
-                Assert-PathExists -Name "-Profile: dotnet overlay file present ($relativePath)" -Path $expectedPath
+                Assert-PathExists -Name "-Profile: dotnet overlay file present ($relativePathKey)" -Path $expectedPath
             }
 
         } finally {
@@ -483,8 +484,9 @@ if (-not $dotbotInstalled) {
                 $relPath = [System.IO.Path]::GetRelativePath(
                     [System.IO.Path]::GetFullPath($kickstartViaJiraProfile),
                     [System.IO.Path]::GetFullPath($ps1.FullName)
-                ) -replace '/', '\'
-                Assert-ValidPowerShell -Name "-Profile kickstart-via-jira: $relPath valid syntax" -Path $ps1.FullName
+                )
+                $relPathKey = $relPath -replace '\\', '/'
+                Assert-ValidPowerShell -Name "-Profile kickstart-via-jira: $relPathKey valid syntax" -Path $ps1.FullName
             }
 
         } finally {
@@ -685,8 +687,9 @@ foreach ($script in $allScripts) {
         $relativePath = [System.IO.Path]::GetRelativePath(
             [System.IO.Path]::GetFullPath($profilesDir),
             [System.IO.Path]::GetFullPath($script.FullName)
-        ) -replace '/', '\'
-        Assert-True -Name "$relativePath sets DotbotProjectRoot" `
+        )
+        $relativePathKey = $relativePath -replace '\\', '/'
+        Assert-True -Name "$relativePathKey sets DotbotProjectRoot" `
             -Condition $setsGlobal `
             -Message "File dot-sources tool scripts but never sets `$global:DotbotProjectRoot"
     }

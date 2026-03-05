@@ -460,17 +460,18 @@ foreach ($profileName in $resolvedOrder) {
     # Copy profile files (overlay on top of default)
     Get-ChildItem -Path $profileDir -Recurse -File | ForEach-Object {
         $sourceFileFull = [System.IO.Path]::GetFullPath($_.FullName)
-        $relativePath = [System.IO.Path]::GetRelativePath($profileDirFull, $sourceFileFull) -replace '/', '\'
+        $relativePath = [System.IO.Path]::GetRelativePath($profileDirFull, $sourceFileFull)
+        $relativePathKey = $relativePath -replace '\\', '/'
         $destPath = Join-Path $BotDir $relativePath
         $destDir = Split-Path $destPath -Parent
 
         # Skip profile metadata files (not copied to .bot/)
-        if ($relativePath -eq "profile-init.ps1") { return }
-        if ($relativePath -eq "profile.yaml") { return }
+        if ($relativePathKey -eq "profile-init.ps1") { return }
+        if ($relativePathKey -eq "profile.yaml") { return }
 
         # Handle config.json merging for hooks/verify
-        if ($relativePath -eq "hooks\verify\config.json") {
-            $baseConfigPath = Join-Path $BotDir "hooks\verify\config.json"
+        if ($relativePathKey -eq "hooks/verify/config.json") {
+            $baseConfigPath = [System.IO.Path]::Combine($BotDir, "hooks", "verify", "config.json")
             if (Test-Path $baseConfigPath) {
                 $baseConfig = Get-Content $baseConfigPath -Raw | ConvertFrom-Json
                 $profileConfig = Get-Content $_.FullName -Raw | ConvertFrom-Json
@@ -492,8 +493,8 @@ foreach ($profileName in $resolvedOrder) {
         }
 
         # Handle settings.default.json deep-merge
-        if ($relativePath -eq "defaults\settings.default.json") {
-            $baseSettingsPath = Join-Path $BotDir "defaults\settings.default.json"
+        if ($relativePathKey -eq "defaults/settings.default.json") {
+            $baseSettingsPath = [System.IO.Path]::Combine($BotDir, "defaults", "settings.default.json")
             if (Test-Path $baseSettingsPath) {
                 $baseSettings = Get-Content $baseSettingsPath -Raw | ConvertFrom-Json
                 $profileSettings = Get-Content $_.FullName -Raw | ConvertFrom-Json
