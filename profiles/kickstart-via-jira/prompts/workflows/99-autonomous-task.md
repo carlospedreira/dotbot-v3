@@ -199,7 +199,8 @@ Follow the research methodology prompt as your primary guide. The methodology de
    git add {analysis.output_path}
    git commit -m "Research: {task_name}
 
-   [task:XXXXXXXX]
+   [task:{{TASK_ID_SHORT}}]
+   [bot:{{INSTANCE_ID_SHORT}}]
    Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
    ```
 
