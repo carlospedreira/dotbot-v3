@@ -8,7 +8,7 @@
  * @param {Object} state - State object from server
  */
 function updateUI(state) {
-    updateTimestamp();
+    updateTimestamp(state.instance_id);
     updateTaskCounts(state.tasks);
     updateProgressPercent(state.tasks);
     updateSessionInfo(state.session);
@@ -51,8 +51,9 @@ function updateUI(state) {
 /**
  * Update timestamp display
  */
-function updateTimestamp() {
+function updateTimestamp(instanceId) {
     setElementText('last-update', new Date().toLocaleTimeString());
+    setElementText('instance-id', instanceId || '--');
     // Update footer mission on each poll to ensure it's current
     updateFooterMission();
 }
@@ -819,3 +820,4 @@ function updateSteeringPanel(instances) {
     if (priority) priority.disabled = !canSend;
     if (sendBtn) sendBtn.disabled = !canSend;
 }
+

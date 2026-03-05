@@ -77,6 +77,117 @@ if (-not (Test-Path $botDir)) {
 }
 
 # ═══════════════════════════════════════════════════════════════════
+# WORKSPACE INSTANCE ID
+# ═══════════════════════════════════════════════════════════════════
+
+Write-Host "  WORKSPACE INSTANCE ID" -ForegroundColor Cyan
+Write-Host "  ────────────────────────────────────────────" -ForegroundColor DarkGray
+
+$settingsPath = Join-Path $botDir "defaults\settings.default.json"
+Assert-PathExists -Name "settings.default.json exists" -Path $settingsPath
+if (Test-Path $settingsPath) {
+    $settingsJson = Get-Content $settingsPath -Raw | ConvertFrom-Json
+    $parsedGuid = [guid]::Empty
+    $hasInitGuid = $settingsJson.PSObject.Properties['instance_id'] -and [guid]::TryParse("$($settingsJson.instance_id)", [ref]$parsedGuid)
+    Assert-True -Name "settings.instance_id is valid after init" `
+        -Condition $hasInitGuid `
+        -Message "Expected a valid GUID in settings.instance_id"
+}
+
+$instanceIdModule = Join-Path $botDir "systems\runtime\modules\InstanceId.psm1"
+if (Test-Path $instanceIdModule) {
+    Import-Module $instanceIdModule -Force
+
+    # Simulate legacy project: remove instance_id then ensure it is recreated and persisted
+    $legacySettings = Get-Content $settingsPath -Raw | ConvertFrom-Json
+    [void]$legacySettings.PSObject.Properties.Remove('instance_id')
+    $legacySettings | ConvertTo-Json -Depth 10 | Set-Content -Path $settingsPath
+
+    $generatedInstanceId = Get-OrCreateWorkspaceInstanceId -SettingsPath $settingsPath
+    $generatedGuid = [guid]::Empty
+    Assert-True -Name "legacy settings missing instance_id gets backfilled" `
+        -Condition ([guid]::TryParse("$generatedInstanceId", [ref]$generatedGuid)) `
+        -Message "Expected Get-OrCreateWorkspaceInstanceId to create a valid GUID"
+
+    $settingsAfterBackfill = Get-Content $settingsPath -Raw | ConvertFrom-Json
+    Assert-Equal -Name "backfilled instance_id is persisted to settings" `
+        -Expected "$generatedGuid" `
+        -Actual "$($settingsAfterBackfill.instance_id)"
+
+    $sameInstanceId = Get-OrCreateWorkspaceInstanceId -SettingsPath $settingsPath
+    Assert-Equal -Name "Get-OrCreateWorkspaceInstanceId is stable when already set" `
+        -Expected "$generatedGuid" `
+        -Actual "$sameInstanceId"
+} else {
+    Write-TestResult -Name "InstanceId module exists" -Status Fail -Message "Module not found at $instanceIdModule"
+}
+
+$promptBuilderScript = Join-Path $botDir "systems\runtime\modules\prompt-builder.ps1"
+if (Test-Path $promptBuilderScript) {
+    . $promptBuilderScript
+    $promptTask = [PSCustomObject]@{
+        id = "7b012fb8-d6fa-45e8-b89e-062b4bcb16ae"
+        name = "Prompt Builder Test"
+        category = "feature"
+        priority = 10
+        description = "Validate short ID interpolation"
+        applicable_standards = @()
+        applicable_agents = @()
+        acceptance_criteria = @()
+        steps = @()
+        questions_resolved = @()
+    }
+
+    $promptTemplate = "[task:{{TASK_ID_SHORT}}] [bot:{{INSTANCE_ID_SHORT}}] [bot-full:{{INSTANCE_ID}}]"
+    $promptResult = Build-TaskPrompt -PromptTemplate $promptTemplate -Task $promptTask -SessionId "sess-1" -InstanceId "A1B2C3D4-1111-2222-3333-444455556666"
+
+    Assert-True -Name "Build-TaskPrompt replaces TASK_ID_SHORT" `
+        -Condition ($promptResult -match '\[task:7b012fb8\]') `
+        -Message "Expected [task:7b012fb8] in prompt output"
+    Assert-True -Name "Build-TaskPrompt replaces INSTANCE_ID_SHORT" `
+        -Condition ($promptResult -match '\[bot:a1b2c3d4\]') `
+        -Message "Expected [bot:a1b2c3d4] in prompt output"
+    Assert-True -Name "Build-TaskPrompt keeps full INSTANCE_ID available" `
+        -Condition ($promptResult -match '\[bot-full:A1B2C3D4-1111-2222-3333-444455556666\]') `
+        -Message "Expected full INSTANCE_ID replacement"
+} else {
+    Write-TestResult -Name "prompt-builder script exists" -Status Fail -Message "Script not found at $promptBuilderScript"
+}
+
+$extractCommitInfoScript = Join-Path $botDir "systems\mcp\modules\Extract-CommitInfo.ps1"
+if (Test-Path $extractCommitInfoScript) {
+    . $extractCommitInfoScript
+
+    $parserTaskShort = "feedc0de"
+    Push-Location $testProject
+    try {
+        "short" | Set-Content -Path (Join-Path $testProject "parser-short.txt")
+        & git add parser-short.txt 2>&1 | Out-Null
+        & git commit -m "Parser short tag test" -m "[task:$parserTaskShort]" -m "[bot:a1b2c3d4]" --quiet 2>&1 | Out-Null
+
+        "full" | Set-Content -Path (Join-Path $testProject "parser-full.txt")
+        & git add parser-full.txt 2>&1 | Out-Null
+        & git commit -m "Parser full tag test" -m "[task:$parserTaskShort]" -m "[bot:a1b2c3d4-1111-2222-3333-444455556666]" --quiet 2>&1 | Out-Null
+    } finally {
+        Pop-Location
+    }
+
+    $commitInfo = Get-TaskCommitInfo -TaskId $parserTaskShort -ProjectRoot $testProject -MaxCommits 20
+    $shortTagCommit = @($commitInfo | Where-Object { $_.commit_subject -eq "Parser short tag test" }) | Select-Object -First 1
+    $fullTagCommit = @($commitInfo | Where-Object { $_.commit_subject -eq "Parser full tag test" }) | Select-Object -First 1
+
+    Assert-True -Name "Get-TaskCommitInfo finds short [bot:XXXXXXXX] tags" `
+        -Condition ($null -ne $shortTagCommit -and $shortTagCommit.workspace_short_id -eq "a1b2c3d4") `
+        -Message "Expected workspace_short_id a1b2c3d4 from short bot tag"
+    Assert-True -Name "Get-TaskCommitInfo derives short ID from full bot GUID tag" `
+        -Condition ($null -ne $fullTagCommit -and $fullTagCommit.workspace_short_id -eq "a1b2c3d4") `
+        -Message "Expected workspace_short_id a1b2c3d4 from full GUID bot tag"
+} else {
+    Write-TestResult -Name "Extract-CommitInfo module exists" -Status Fail -Message "Module not found at $extractCommitInfoScript"
+}
+
+Write-Host ""
+
 # MCP SERVER BOOT
 # ═══════════════════════════════════════════════════════════════════
 
@@ -513,6 +624,11 @@ if (Test-Path $notifModule) {
         -Condition ($settings.poll_interval_seconds -eq 30) `
         -Message "Expected 30, got $($settings.poll_interval_seconds)"
 
+
+    $parsedNotifGuid = [guid]::Empty
+    Assert-True -Name "Get-NotificationSettings includes workspace instance_id" `
+        -Condition ([guid]::TryParse("$($settings.instance_id)", [ref]$parsedNotifGuid)) `
+        -Message "Expected settings.instance_id to be a valid GUID"
     # Test Test-NotificationServer returns false when no server configured
     $reachable = Test-NotificationServer -Settings $settings
     Assert-True -Name "Test-NotificationServer returns false when no URL" `
@@ -795,3 +911,5 @@ $allPassed = Write-TestSummary -LayerName "Layer 2: Components"
 if (-not $allPassed) {
     exit 1
 }
+
+

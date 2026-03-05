@@ -178,7 +178,22 @@ if ($DryRun) {
 # ---------------------------------------------------------------------------
 # Handle existing .bot with -Force (preserve workspace data)
 # ---------------------------------------------------------------------------
+$existingInstanceId = $null
 if ((Test-Path $BotDir) -and $Force) {
+    # Preserve instance_id before replacing defaults/
+    $existingSettingsPath = Join-Path $BotDir "defaults\settings.default.json"
+    if (Test-Path $existingSettingsPath) {
+        try {
+            $existingSettings = Get-Content $existingSettingsPath -Raw | ConvertFrom-Json
+            if ($existingSettings.PSObject.Properties['instance_id'] -and $existingSettings.instance_id) {
+                $parsedGuid = [guid]::Empty
+                if ([guid]::TryParse("$($existingSettings.instance_id)", [ref]$parsedGuid)) {
+                    $existingInstanceId = $parsedGuid.ToString()
+                }
+            }
+        } catch {}
+    }
+
     Write-Status "Updating .bot system files (preserving workspace data)"
     # Remove only system/config directories and root files -- never workspace/ or .control/
     $systemDirs = @("systems", "prompts", "hooks", "defaults")
@@ -515,6 +530,29 @@ if ($resolvedOrder.Count -gt 0) {
     }
 }
 
+# Ensure workspace instance GUID exists (preserve on -Force re-init)
+$workspaceSettingsPath = Join-Path $BotDir "defaults\settings.default.json"
+if (Test-Path $workspaceSettingsPath) {
+    try {
+        $settings = Get-Content $workspaceSettingsPath -Raw | ConvertFrom-Json
+        $currentInstanceId = if ($settings.PSObject.Properties['instance_id']) { "$($settings.instance_id)" } else { "" }
+        $parsedCurrentGuid = [guid]::Empty
+
+        if ([guid]::TryParse($currentInstanceId, [ref]$parsedCurrentGuid)) {
+            $finalInstanceId = $parsedCurrentGuid.ToString()
+        } elseif ($existingInstanceId) {
+            $finalInstanceId = $existingInstanceId
+        } else {
+            $finalInstanceId = [guid]::NewGuid().ToString()
+        }
+
+        $settings | Add-Member -NotePropertyName "instance_id" -NotePropertyValue $finalInstanceId -Force
+        $settings | ConvertTo-Json -Depth 10 | Set-Content $workspaceSettingsPath
+        Write-Success "Workspace instance: $($finalInstanceId.Substring(0,8))"
+    } catch {
+        Write-DotbotWarning "Failed to set workspace instance ID: $($_.Exception.Message)"
+    }
+}
 # Run .bot/init.ps1 to set up .claude integration
 $initScript = Join-Path $BotDir "init.ps1"
 if (Test-Path $initScript) {

@@ -477,6 +477,18 @@ function Get-BotState {
         }
     }
 
+
+    # Read workspace instance ID from settings.default.json
+    $workspaceInstanceId = $null
+    $settingsPath = Join-Path $botRoot "defaults\settings.default.json"
+    if (Test-Path $settingsPath) {
+        try {
+            $settingsJson = Get-Content $settingsPath -Raw | ConvertFrom-Json
+            if ($settingsJson.PSObject.Properties['instance_id'] -and $settingsJson.instance_id) {
+                $workspaceInstanceId = "$($settingsJson.instance_id)"
+            }
+        } catch { }
+    }
     # Get steering status (for operator whisper channel) - legacy support
     $steeringStatus = $null
     $steeringStatusFile = Join-Path $controlDir "steering-status.json"
@@ -490,6 +502,7 @@ function Get-BotState {
 
     $state = @{
         timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+        instance_id = $workspaceInstanceId
         tasks = @{
             todo = $todoTasks.Count
             analysing = $analysingTasks.Count

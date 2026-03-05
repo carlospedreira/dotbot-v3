@@ -223,6 +223,18 @@ if (-not $dotbotInstalled) {
         $claudeDir = Join-Path $testProject ".claude"
         Assert-PathExists -Name ".claude directory created" -Path $claudeDir
 
+        # settings.default.json contains workspace instance GUID
+        $settingsDefault = Join-Path $botDir "defaults\settings.default.json"
+        Assert-PathExists -Name "settings.default.json exists" -Path $settingsDefault
+        if (Test-Path $settingsDefault) {
+            $settingsJson = Get-Content $settingsDefault -Raw | ConvertFrom-Json
+            $parsedInitGuid = [guid]::Empty
+            $hasValidInitGuid = $settingsJson.PSObject.Properties['instance_id'] -and [guid]::TryParse("$($settingsJson.instance_id)", [ref]$parsedInitGuid)
+            Assert-True -Name "init creates valid settings.instance_id GUID" `
+                -Condition $hasValidInitGuid `
+                -Message "Expected valid GUID in settings.instance_id"
+        }
+
     } finally {
         Remove-TestProject -Path $testProject
     }
@@ -251,6 +263,18 @@ if (-not $dotbotInstalled) {
         $dummySettings = Join-Path $controlDir "settings.json"
         @{ anthropic_api_key = "sk-test-dummy" } | ConvertTo-Json | Set-Content -Path $dummySettings
 
+        # Capture instance_id before re-init; it must be preserved on -Force
+        $settingsPath2 = Join-Path $botDir2 "defaults\settings.default.json"
+        $initialInstanceId = $null
+        if (Test-Path $settingsPath2) {
+            try {
+                $settingsBeforeForce = Get-Content $settingsPath2 -Raw | ConvertFrom-Json
+                if ($settingsBeforeForce.PSObject.Properties['instance_id']) {
+                    $initialInstanceId = "$($settingsBeforeForce.instance_id)"
+                }
+            } catch {}
+        }
+
         # Re-init with -Force
         Push-Location $testProject2
         & pwsh -NoProfile -ExecutionPolicy Bypass -File (Join-Path $dotbotDir "scripts\init-project.ps1") -Force 2>&1 | Out-Null
@@ -260,6 +284,13 @@ if (-not $dotbotInstalled) {
         Assert-PathExists -Name "-Force: workspace task preserved" -Path $dummyFile
         Assert-PathExists -Name "-Force: .control/settings.json preserved" -Path $dummySettings
         Assert-PathExists -Name "-Force: system files refreshed" -Path (Join-Path $botDir2 "systems\mcp\dotbot-mcp.ps1")
+
+        if ($initialInstanceId) {
+            $settingsAfterForce = Get-Content $settingsPath2 -Raw | ConvertFrom-Json
+            Assert-Equal -Name "-Force: preserves existing settings.instance_id" `
+                -Expected $initialInstanceId `
+                -Actual "$($settingsAfterForce.instance_id)"
+        }
 
     } finally {
         Remove-TestProject -Path $testProject2
@@ -381,6 +412,11 @@ if (-not $dotbotInstalled) {
                 -Path (Join-Path $botDir4 "systems\mcp\tools\repo-clone\script.ps1")
             Assert-PathExists -Name "-Profile multi-repo: settings.default.json (replacement)" `
                 -Path (Join-Path $botDir4 "defaults\settings.default.json")
+
+            $mrWorkflow99 = Join-Path $botDir4 "prompts\workflows\99-autonomous-task.md"
+            Assert-FileContains -Name "-Profile multi-repo: workflow 99 uses interpolated bot short ID tag" `
+                -Path $mrWorkflow99 `
+                -Pattern "\[bot:\{\{INSTANCE_ID_SHORT\}\}\]"
 
             # profile-init.ps1 should NOT be copied to .bot/
             Assert-PathNotExists -Name "-Profile multi-repo: profile-init.ps1 not copied" `
@@ -684,6 +720,37 @@ foreach ($parserName in @("Claude", "Codex", "Gemini")) {
 Write-Host ""
 
 # ═══════════════════════════════════════════════════════════════════
+# WORKSPACE INSTANCE ID INTEGRATION
+# ═══════════════════════════════════════════════════════════════════
+
+Write-Host "  WORKSPACE INSTANCE ID" -ForegroundColor Cyan
+Write-Host "  ────────────────────────────────────────────" -ForegroundColor DarkGray
+
+$defaultSettingsPath = Join-Path $repoRoot "profiles\default\defaults\settings.default.json"
+$multiRepoSettingsPath = Join-Path $repoRoot "profiles\multi-repo\defaults\settings.default.json"
+$stateBuilderPath = Join-Path $repoRoot "profiles\default\systems\ui\modules\StateBuilder.psm1"
+$uiIndexPath = Join-Path $repoRoot "profiles\default\systems\ui\static\index.html"
+$uiUpdatesPath = Join-Path $repoRoot "profiles\default\systems\ui\static\modules\ui-updates.js"
+
+Assert-FileContains -Name "default settings template has instance_id placeholder" `
+    -Path $defaultSettingsPath `
+    -Pattern '"instance_id"\s*:\s*null'
+Assert-FileContains -Name "multi-repo settings template has instance_id placeholder" `
+    -Path $multiRepoSettingsPath `
+    -Pattern '"instance_id"\s*:\s*null'
+Assert-FileContains -Name "StateBuilder includes workspace instance_id in state" `
+    -Path $stateBuilderPath `
+    -Pattern 'instance_id\s*=\s*\$workspaceInstanceId'
+Assert-FileContains -Name "UI footer has instance-id field" `
+    -Path $uiIndexPath `
+    -Pattern 'id="instance-id"'
+Assert-FileContains -Name "UI updates bind state instance_id to footer" `
+    -Path $uiUpdatesPath `
+    -Pattern "setElementText\('instance-id',\s*instanceId\s*\|\|\s*'--'\)"
+
+Write-Host ""
+
+# ═══════════════════════════════════════════════════════════════════
 # SUMMARY
 # ═══════════════════════════════════════════════════════════════════
 
@@ -692,3 +759,4 @@ $allPassed = Write-TestSummary -LayerName "Layer 1: Structure"
 if (-not $allPassed) {
     exit 1
 }
+
