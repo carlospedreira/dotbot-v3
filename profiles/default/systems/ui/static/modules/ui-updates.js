@@ -348,7 +348,7 @@ function updateUpcomingTasks(tasks) {
     }
 
     container.innerHTML = taskList.map(task => `
-        <div class="task-list-item" data-task-id="${escapeHtml(task.id || '')}">
+        <div class="task-list-item" data-task-id="${escapeHtml(task.id || '')}" data-task-source="todo">
             <span class="task-list-item-name">${escapeHtml(task.name || task.id || 'Unknown')}</span>
             <span class="task-list-item-meta">${escapeHtml(task.category || '')}</span>
         </div>
@@ -378,7 +378,7 @@ function updateCompletedTasks(tasks, skippedTasks) {
         const isSkipped = task.status === 'skipped';
         const meta = isSkipped ? 'skipped' : (task.category || '');
         return `
-            <div class="task-list-item done" data-task-id="${escapeHtml(task.id || '')}">
+            <div class="task-list-item done" data-task-id="${escapeHtml(task.id || '')}" data-task-source="${isSkipped ? 'skipped' : 'done'}">
                 <span class="task-list-item-name">${escapeHtml(task.name || task.id || 'Unknown')}</span>
                 <span class="task-list-item-meta">${escapeHtml(meta)}</span>
             </div>
@@ -482,7 +482,7 @@ function updatePipelineColumn(containerId, tasks, type) {
             : '';
 
         return `
-            <div class="pipeline-task ${type === 'active' ? 'active' : ''} ${priorityClass} ${roadmapClasses}" data-task-id="${escapeHtml(task.id || '')}">
+            <div class="pipeline-task ${type === 'active' ? 'active' : ''} ${priorityClass} ${roadmapClasses}" data-task-id="${escapeHtml(task.id || '')}" data-task-source="${escapeHtml(task._phase || type)}">
                 <div class="task-id">${escapeHtml(task.id || '')}</div>
                 <div class="task-title">${escapeHtml(task.name || task.id || 'Unknown')}</div>
                 <div class="task-tags">
@@ -840,4 +840,3 @@ function updateSteeringPanel(instances) {
     if (priority) priority.disabled = !canSend;
     if (sendBtn) sendBtn.disabled = !canSend;
 }
-

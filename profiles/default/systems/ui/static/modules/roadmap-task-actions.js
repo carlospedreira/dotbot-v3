@@ -536,7 +536,8 @@ function openRoadmapTaskEditModal(taskId, options = {}) {
     roadmapTaskEditReturnTarget = options.returnToTaskModal
         ? {
             task: options.returnTaskSnapshot || task,
-            section: options.returnSection || 'overview'
+            section: options.returnSection || 'overview',
+            source: typeof taskModalCurrentSource === 'string' ? taskModalCurrentSource : null
         }
         : null;
 
@@ -592,9 +593,12 @@ function closeRoadmapTaskEditModal(options = {}) {
     }
 
     const refreshedTask = typeof findTaskById === 'function'
-        ? findTaskById(returnTarget.task.id)
+        ? findTaskById(returnTarget.task.id, returnTarget.source)
         : null;
-    showTaskModal(refreshedTask || returnTarget.task, { initialSection: returnTarget.section });
+    showTaskModal(refreshedTask || returnTarget.task, {
+        initialSection: returnTarget.section,
+        source: returnTarget.source
+    });
 }
 
 function getTaskListItemText(item) {
@@ -960,4 +964,3 @@ function refreshRoadmapState(delayMs = 0) {
         }
     }, delayMs);
 }
-

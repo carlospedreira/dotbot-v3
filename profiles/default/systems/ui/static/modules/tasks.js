@@ -5,6 +5,7 @@
 
 let taskModalCurrentTask = null;
 let taskModalCurrentSection = 'overview';
+let taskModalCurrentSource = null;
 
 /**
  * Initialize task click handlers
@@ -13,7 +14,7 @@ function initTaskClicks() {
     // Current task click
     document.getElementById('current-task')?.addEventListener('click', (e) => {
         if (lastState?.tasks?.current) {
-            showTaskModal(lastState.tasks.current);
+            showTaskModal(lastState.tasks.current, { source: 'current' });
         }
     });
 
@@ -25,9 +26,10 @@ function initTaskClicks() {
 
         const taskItem = e.target.closest('.task-list-item, .pipeline-task');
         if (taskItem && taskItem.dataset.taskId) {
-            const task = findTaskById(taskItem.dataset.taskId);
+            const taskSource = taskItem.dataset.taskSource || null;
+            const task = findTaskById(taskItem.dataset.taskId, taskSource);
             if (task) {
-                showTaskModal(task);
+                showTaskModal(task, { source: taskSource });
             }
         }
     });
@@ -36,15 +38,32 @@ function initTaskClicks() {
 /**
  * Find task by ID in the current state
  * @param {string} id - Task ID
+ * @param {string|null} source - Optional task source hint
  * @returns {Object|null} Task object or null
  */
-function findTaskById(id) {
+function findTaskById(id, source = null) {
     if (!lastState?.tasks) return null;
 
-    if (lastState.tasks.current?.id === id) return lastState.tasks.current;
+    const lookups = {
+        current: () => lastState.tasks.current?.id === id ? lastState.tasks.current : null,
+        executing: () => lastState.tasks.current?.id === id ? lastState.tasks.current : null,
+        todo: () => lastState.tasks.upcoming?.find(t => t.id === id) || null,
+        analysing: () => lastState.tasks.analysing_list?.find(t => t.id === id) || null,
+        ready: () => lastState.tasks.analysed_list?.find(t => t.id === id) || null,
+        analysed: () => lastState.tasks.analysed_list?.find(t => t.id === id) || null,
+        'needs-input': () => lastState.tasks.needs_input_list?.find(t => t.id === id) || null,
+        done: () => lastState.tasks.recent_completed?.find(t => t.id === id) || lastState.tasks.skipped_list?.find(t => t.id === id) || null,
+        skipped: () => lastState.tasks.skipped_list?.find(t => t.id === id) || null
+    };
 
-    const upcoming = lastState.tasks.upcoming?.find(t => t.id === id);
-    if (upcoming) return upcoming;
+    if (source && typeof lookups[source] === 'function') {
+        const sourceMatch = lookups[source]();
+        if (sourceMatch) {
+            return sourceMatch;
+        }
+    }
+
+    if (lastState.tasks.current?.id === id) return lastState.tasks.current;
 
     const analysing = lastState.tasks.analysing_list?.find(t => t.id === id);
     if (analysing) return analysing;
@@ -55,6 +74,9 @@ function findTaskById(id) {
     const analysed = lastState.tasks.analysed_list?.find(t => t.id === id);
     if (analysed) return analysed;
 
+    const upcoming = lastState.tasks.upcoming?.find(t => t.id === id);
+    if (upcoming) return upcoming;
+
     const completed = lastState.tasks.recent_completed?.find(t => t.id === id);
     if (completed) return completed;
 
@@ -64,8 +86,8 @@ function findTaskById(id) {
     return null;
 }
 
-function getEditableRoadmapTask(task) {
-    if (!task?.id || !Array.isArray(lastState?.tasks?.upcoming)) {
+function getEditableRoadmapTask(task, source) {
+    if (source !== 'todo' || !task?.id || !Array.isArray(lastState?.tasks?.upcoming)) {
         return null;
     }
 
@@ -89,6 +111,7 @@ function getEditableRoadmapTask(task) {
 function closeTaskModal() {
     taskModalCurrentTask = null;
     taskModalCurrentSection = 'overview';
+    taskModalCurrentSource = null;
     document.getElementById('task-modal')?.classList.remove('visible');
     const editButton = document.getElementById('task-modal-edit-btn');
     if (editButton) {
@@ -97,13 +120,13 @@ function closeTaskModal() {
     }
 }
 
-function setTaskModalEditButton(task) {
+function setTaskModalEditButton(task, source) {
     const editButton = document.getElementById('task-modal-edit-btn');
     if (!editButton) {
         return;
     }
 
-    const editableTask = getEditableRoadmapTask(task);
+    const editableTask = getEditableRoadmapTask(task, source);
     if (!editableTask) {
         editButton.hidden = true;
         editButton.dataset.taskId = '';
@@ -226,7 +249,8 @@ function showTaskModal(task, options = {}) {
     contentEl.innerHTML = html;
     taskModalCurrentTask = task;
     taskModalCurrentSection = activeSection;
-    setTaskModalEditButton(task);
+    taskModalCurrentSource = options.source || null;
+    setTaskModalEditButton(task, taskModalCurrentSource);
 
     // Setup navigation click handlers
     contentEl.querySelectorAll('.task-modal-nav-item:not(.disabled)').forEach(item => {
