@@ -320,6 +320,8 @@ function initRoadmapTaskActions() {
     document.getElementById('task-edit-modal-close')?.addEventListener('click', closeRoadmapTaskEditModal);
     document.getElementById('task-edit-cancel')?.addEventListener('click', closeRoadmapTaskEditModal);
     document.getElementById('task-edit-save')?.addEventListener('click', submitRoadmapTaskEdit);
+    document.getElementById('task-edit-category')?.addEventListener('change', markRoadmapTaskEditSelectModified);
+    document.getElementById('task-edit-effort')?.addEventListener('change', markRoadmapTaskEditSelectModified);
     document.getElementById('task-edit-refresh-history')?.addEventListener('click', () => {
         if (roadmapEditingTaskId) {
             loadRoadmapTaskHistory(roadmapEditingTaskId);
@@ -359,6 +361,169 @@ function initRoadmapTaskActions() {
     });
 }
 
+function normalizeRoadmapTaskEditValue(value) {
+    return `${value ?? ''}`.trim();
+}
+
+function markRoadmapTaskEditSelectModified(event) {
+    if (!event?.target) {
+        return;
+    }
+
+    event.target.dataset.userModified = 'true';
+}
+
+function resetRoadmapTaskEditSelectModifiedState() {
+    ['task-edit-category', 'task-edit-effort'].forEach((id) => {
+        const select = document.getElementById(id);
+        if (!select) {
+            return;
+        }
+
+        delete select.dataset.userModified;
+    });
+}
+
+function getRoadmapTaskEditDefaultMeta() {
+    const stateTaskMeta = lastState?.task_metadata || {};
+    const fallbackMeta = {
+        success: true,
+        default_mode: 'direct',
+        categories: Array.isArray(stateTaskMeta.categories) && stateTaskMeta.categories.length > 0
+            ? stateTaskMeta.categories
+            : ['core', 'feature', 'enhancement', 'bugfix', 'infrastructure', 'ui-ux'],
+        efforts: Array.isArray(stateTaskMeta.efforts) && stateTaskMeta.efforts.length > 0
+            ? stateTaskMeta.efforts
+            : ['XS', 'S', 'M', 'L', 'XL']
+    };
+
+    if (typeof getDefaultTaskCreateMeta === 'function') {
+        return {
+            ...getDefaultTaskCreateMeta(),
+            ...fallbackMeta
+        };
+    }
+
+    return fallbackMeta;
+}
+
+function populateRoadmapTaskEditSelect(selectEl, values, selectedValue) {
+    if (!selectEl) {
+        return;
+    }
+
+    const normalizedSelectedValue = normalizeRoadmapTaskEditValue(selectedValue);
+    const options = Array.isArray(values)
+        ? values
+            .map(value => normalizeRoadmapTaskEditValue(value))
+            .filter(Boolean)
+        : [];
+
+    selectEl.innerHTML = '';
+
+    const blankOption = document.createElement('option');
+    blankOption.value = '';
+    blankOption.textContent = 'Unspecified';
+    blankOption.selected = normalizedSelectedValue === '';
+    selectEl.appendChild(blankOption);
+
+    if (normalizedSelectedValue && !options.includes(normalizedSelectedValue)) {
+        options.push(normalizedSelectedValue);
+    }
+
+    options.forEach(value => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = value;
+        option.selected = value === normalizedSelectedValue;
+        selectEl.appendChild(option);
+    });
+}
+
+function getRoadmapTaskEditSelectedValue(selectId, fallbackValue, preserveCurrentSelection) {
+    const normalizedFallbackValue = normalizeRoadmapTaskEditValue(fallbackValue);
+    const select = document.getElementById(selectId);
+    if (!select) {
+        return normalizedFallbackValue;
+    }
+
+    if (preserveCurrentSelection && select.dataset.userModified === 'true') {
+        return normalizeRoadmapTaskEditValue(select.value);
+    }
+
+    return normalizedFallbackValue;
+}
+
+function applyRoadmapTaskEditMetadata(task, meta, options = {}) {
+    const categorySelect = document.getElementById('task-edit-category');
+    const effortSelect = document.getElementById('task-edit-effort');
+    const defaultMeta = getRoadmapTaskEditDefaultMeta();
+    const liveTaskMeta = lastState?.task_metadata || {};
+    const preferFetchedMetadata = options.preferFetchedMetadata === true;
+    const safeMeta = {
+        ...defaultMeta,
+        ...(meta || {}),
+        categories: preferFetchedMetadata && Array.isArray(meta?.categories) && meta.categories.length > 0
+            ? meta.categories
+            : Array.isArray(liveTaskMeta.categories) && liveTaskMeta.categories.length > 0
+                ? liveTaskMeta.categories
+                : Array.isArray(meta?.categories) && meta.categories.length > 0
+                    ? meta.categories
+                    : defaultMeta.categories,
+        efforts: preferFetchedMetadata && Array.isArray(meta?.efforts) && meta.efforts.length > 0
+            ? meta.efforts
+            : Array.isArray(liveTaskMeta.efforts) && liveTaskMeta.efforts.length > 0
+                ? liveTaskMeta.efforts
+                : Array.isArray(meta?.efforts) && meta.efforts.length > 0
+                    ? meta.efforts
+                    : defaultMeta.efforts
+    };
+    const preserveCurrentSelection = options.preserveCurrentSelection === true;
+    const categoryValue = getRoadmapTaskEditSelectedValue('task-edit-category', task?.category, preserveCurrentSelection);
+    const effortValue = getRoadmapTaskEditSelectedValue('task-edit-effort', task?.effort, preserveCurrentSelection);
+
+    populateRoadmapTaskEditSelect(categorySelect, safeMeta.categories, categoryValue);
+    populateRoadmapTaskEditSelect(effortSelect, safeMeta.efforts, effortValue);
+}
+
+function shouldPreferFetchedTaskCreateMetadata() {
+    const fetchedAt = Number(globalThis.taskCreateMetaFetchedAt) || 0;
+    if (fetchedAt <= 0) {
+        return false;
+    }
+
+    const stateTimestamp = Date.parse(lastState?.timestamp || '');
+    if (Number.isNaN(stateTimestamp)) {
+        return true;
+    }
+
+    return fetchedAt > stateTimestamp;
+}
+
+async function hydrateRoadmapTaskEditMetadata(task) {
+    applyRoadmapTaskEditMetadata(task, typeof taskCreateMeta === 'object' ? taskCreateMeta : null, {
+        preferFetchedMetadata: shouldPreferFetchedTaskCreateMetadata()
+    });
+
+    if (typeof loadTaskCreateMetadata !== 'function') {
+        return;
+    }
+
+    try {
+        const meta = await loadTaskCreateMetadata();
+        if (roadmapEditingTaskId !== task?.id) {
+            return;
+        }
+
+        applyRoadmapTaskEditMetadata(task, meta, {
+            preserveCurrentSelection: true,
+            preferFetchedMetadata: shouldPreferFetchedTaskCreateMetadata()
+        });
+    } catch (error) {
+        console.warn('Falling back to default task edit metadata:', error);
+    }
+}
+
 function openRoadmapTaskEditModal(taskId, options = {}) {
     const task = getRoadmapTaskById(taskId);
     if (!task) {
@@ -374,13 +539,14 @@ function openRoadmapTaskEditModal(taskId, options = {}) {
             section: options.returnSection || 'overview'
         }
         : null;
+
+    resetRoadmapTaskEditSelectModifiedState();
+    hydrateRoadmapTaskEditMetadata(task);
     document.getElementById('task-edit-modal-title').textContent = `Edit Task: ${task.name || task.id}`;
     document.getElementById('task-edit-id').value = task.id || '';
     document.getElementById('task-edit-name').value = task.name || '';
     document.getElementById('task-edit-description').value = task.description || '';
-    document.getElementById('task-edit-category').value = task.category || '';
     document.getElementById('task-edit-priority').value = task.priority || '';
-    document.getElementById('task-edit-effort').value = task.effort || '';
     document.getElementById('task-edit-dependencies').value = formatTaskListForTextarea(task.dependencies);
     document.getElementById('task-edit-steps').value = formatTaskListForTextarea(task.steps);
     document.getElementById('task-edit-criteria').value = formatTaskListForTextarea(task.acceptance_criteria);
@@ -396,13 +562,13 @@ function resetRoadmapTaskEditModal() {
     document.getElementById('task-edit-id').value = '';
     document.getElementById('task-edit-name').value = '';
     document.getElementById('task-edit-description').value = '';
-    document.getElementById('task-edit-category').value = '';
     document.getElementById('task-edit-priority').value = '';
-    document.getElementById('task-edit-effort').value = '';
     document.getElementById('task-edit-dependencies').value = '';
     document.getElementById('task-edit-steps').value = '';
     document.getElementById('task-edit-criteria').value = '';
     document.getElementById('task-edit-history-list').innerHTML = '<div class="empty-state">No task selected.</div>';
+    resetRoadmapTaskEditSelectModifiedState();
+    applyRoadmapTaskEditMetadata({ category: '', effort: '' }, typeof taskCreateMeta === 'object' ? taskCreateMeta : null);
 
     const saveButton = document.getElementById('task-edit-save');
     if (saveButton) {
@@ -794,10 +960,4 @@ function refreshRoadmapState(delayMs = 0) {
         }
     }, delayMs);
 }
-
-
-
-
-
-
 

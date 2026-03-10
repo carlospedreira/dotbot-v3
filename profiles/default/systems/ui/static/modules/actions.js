@@ -10,6 +10,7 @@ let taskCreateMode = 'direct';
 let taskCreateMeta = null;
 let taskCreateMetaPromise = null;
 let taskCreateModeTouched = false;
+globalThis.taskCreateMetaFetchedAt = Number(globalThis.taskCreateMetaFetchedAt) || 0;
 
 function getDefaultTaskCreateMeta() {
     return {
@@ -65,6 +66,7 @@ async function loadTaskCreateMetadata(forceRefresh = false) {
                 ...getDefaultTaskCreateMeta(),
                 ...(meta || {})
             };
+            globalThis.taskCreateMetaFetchedAt = Date.now();
             applyTaskCreateMetadata(taskCreateMeta);
             return taskCreateMeta;
         })

@@ -551,14 +551,22 @@ function Get-BotState {
     }
 
 
-    # Read workspace instance ID from settings.default.json
+    # Read workspace metadata from settings.default.json
     $workspaceInstanceId = $null
+    $defaultTaskCategories = @('core', 'feature', 'enhancement', 'bugfix', 'infrastructure', 'ui-ux')
+    $taskMetadata = @{
+        categories = $defaultTaskCategories
+        efforts = @('XS', 'S', 'M', 'L', 'XL')
+    }
     $settingsPath = Join-Path $botRoot "defaults\settings.default.json"
     if (Test-Path $settingsPath) {
         try {
             $settingsJson = Get-Content $settingsPath -Raw | ConvertFrom-Json
             if ($settingsJson.PSObject.Properties['instance_id'] -and $settingsJson.instance_id) {
                 $workspaceInstanceId = "$($settingsJson.instance_id)"
+            }
+            if ($settingsJson.PSObject.Properties['task_categories'] -and $settingsJson.task_categories) {
+                $taskMetadata.categories = @(@($settingsJson.task_categories) + $defaultTaskCategories | Select-Object -Unique)
             }
         } catch { }
     }
@@ -576,6 +584,7 @@ function Get-BotState {
     $state = @{
         timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
         instance_id = $workspaceInstanceId
+        task_metadata = $taskMetadata
         tasks = @{
             todo = $todoTasks.Count
             analysing = $analysingTasks.Count
