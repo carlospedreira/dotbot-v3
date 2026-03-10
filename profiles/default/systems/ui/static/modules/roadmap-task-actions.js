@@ -349,7 +349,7 @@ function openRoadmapTaskEditModal(taskId) {
     const task = getRoadmapTaskById(taskId);
     if (!task) {
         showToast('Task not found in roadmap state', 'error');
-        return;
+        return false;
     }
 
     roadmapEditingTaskId = taskId;
@@ -368,6 +368,7 @@ function openRoadmapTaskEditModal(taskId) {
 
     document.getElementById('task-edit-modal')?.classList.add('visible');
     loadRoadmapTaskHistory(taskId);
+    return true;
 }
 
 function closeRoadmapTaskEditModal() {
@@ -739,7 +740,6 @@ function refreshRoadmapState(delayMs = 0) {
         }
     }, delayMs);
 }
-
 
 
 

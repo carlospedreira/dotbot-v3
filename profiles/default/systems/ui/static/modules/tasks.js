@@ -61,6 +61,14 @@ function findTaskById(id) {
     return null;
 }
 
+function getEditableRoadmapTask(taskId) {
+    if (!taskId || !Array.isArray(lastState?.tasks?.upcoming)) {
+        return null;
+    }
+
+    return lastState.tasks.upcoming.find(task => task.id === taskId) || null;
+}
+
 /**
  * Show task details modal with sidebar navigation
  * @param {Object} task - Task object to display
@@ -164,6 +172,17 @@ function showTaskModal(task) {
         });
     });
 
+    contentEl.querySelector('[data-task-detail-action="edit-task"]')?.addEventListener('click', () => {
+        if (typeof openRoadmapTaskEditModal !== 'function') {
+            showToast('Roadmap editor is unavailable', 'error');
+            return;
+        }
+
+        if (openRoadmapTaskEditModal(task.id)) {
+            modal.classList.remove('visible');
+        }
+    });
+
     modal.classList.add('visible');
 }
 
@@ -172,6 +191,7 @@ function showTaskModal(task) {
  */
 function buildOverviewSection(task) {
     let html = '';
+    const canEditTask = !!getEditableRoadmapTask(task.id);
 
     // Task identity
     html += `<div class="task-identity">`;
@@ -181,6 +201,13 @@ function buildOverviewSection(task) {
         html += `<div class="task-identity-description">${escapeHtml(task.description)}</div>`;
     }
     html += `</div>`;
+
+    if (canEditTask) {
+        html += `<div class="task-overview-actions">`;
+        html += `<button class="ctrl-btn-sm primary" type="button" data-task-detail-action="edit-task">Edit Task</button>`;
+        html += `<span class="task-overview-actions-note">Uses the roadmap editor with version history.</span>`;
+        html += `</div>`;
+    }
 
     // Metadata grid
     html += `<div class="task-meta-grid">`;
@@ -878,8 +905,5 @@ function initPlanModalClose() {
         }
     });
 }
-
-
-
 
 

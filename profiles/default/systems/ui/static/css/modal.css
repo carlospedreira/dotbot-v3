@@ -862,6 +862,19 @@
     margin-top: 12px;
 }
 
+.task-overview-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+}
+
+.task-overview-actions-note {
+    font-size: 11px;
+    color: var(--label-color);
+}
+
 /* Metadata grid */
 .task-meta-grid {
     display: grid;
