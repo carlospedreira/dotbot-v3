@@ -69,20 +69,21 @@ function getEditableRoadmapTask(task) {
         return null;
     }
 
-    if (lastState?.tasks?.current?.id === task.id) {
+    const taskId = task.id;
+    const isTaskOutsideTodo = [
+        lastState?.tasks?.current?.id === taskId,
+        Array.isArray(lastState?.tasks?.analysing_list) && lastState.tasks.analysing_list.some(item => item?.id === taskId),
+        Array.isArray(lastState?.tasks?.analysed_list) && lastState.tasks.analysed_list.some(item => item?.id === taskId),
+        Array.isArray(lastState?.tasks?.needs_input_list) && lastState.tasks.needs_input_list.some(item => item?.id === taskId),
+        Array.isArray(lastState?.tasks?.recent_completed) && lastState.tasks.recent_completed.some(item => item?.id === taskId),
+        Array.isArray(lastState?.tasks?.skipped_list) && lastState.tasks.skipped_list.some(item => item?.id === taskId)
+    ].some(Boolean);
+
+    if (isTaskOutsideTodo) {
         return null;
     }
 
-    if (task.status !== 'todo') {
-        return null;
-    }
-
-    const editableTask = lastState.tasks.upcoming.find(upcomingTask => upcomingTask.id === task.id) || null;
-    if (!editableTask || editableTask.status !== 'todo') {
-        return null;
-    }
-
-    return editableTask;
+    return lastState.tasks.upcoming.find(upcomingTask => upcomingTask.id === taskId) || null;
 }
 
 function closeTaskModal() {
