@@ -116,6 +116,8 @@ function closeTaskModal() {
     const editButton = document.getElementById('task-modal-edit-btn');
     if (editButton) {
         editButton.hidden = true;
+        editButton.disabled = true;
+        editButton.style.display = 'none';
         editButton.dataset.taskId = '';
     }
 }
@@ -126,9 +128,23 @@ function setTaskModalEditButton(task, source) {
         return;
     }
 
+    const isTodoSource = source === 'todo';
+    const isTodoStatus = task?.status === 'todo';
+    if (!isTodoSource || !isTodoStatus) {
+        editButton.hidden = true;
+        editButton.disabled = true;
+        editButton.style.display = 'none';
+        editButton.dataset.taskId = '';
+        editButton.title = '';
+        editButton.setAttribute('aria-hidden', 'true');
+        return;
+    }
+
     const editableTask = getEditableRoadmapTask(task, source);
     if (!editableTask) {
         editButton.hidden = true;
+        editButton.disabled = true;
+        editButton.style.display = 'none';
         editButton.dataset.taskId = '';
         editButton.title = '';
         editButton.setAttribute('aria-hidden', 'true');
@@ -136,6 +152,8 @@ function setTaskModalEditButton(task, source) {
     }
 
     editButton.hidden = false;
+    editButton.disabled = false;
+    editButton.style.display = '';
     editButton.dataset.taskId = editableTask.id || '';
     editButton.title = `Edit ${editableTask.name || editableTask.id || 'task'}`;
     editButton.setAttribute('aria-hidden', 'false');
