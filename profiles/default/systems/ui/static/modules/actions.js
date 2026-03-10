@@ -6,7 +6,7 @@
 // State for action items
 let actionItems = [];
 let selectedAnswers = {};  // { taskId: [selectedKeys] }
-let taskCreateMode = 'direct';
+let taskCreateMode = 'sonnet';
 let taskCreateMeta = null;
 let taskCreateMetaPromise = null;
 let taskCreateModeTouched = false;
@@ -15,7 +15,7 @@ globalThis.taskCreateMetaFetchedAt = Number(globalThis.taskCreateMetaFetchedAt) 
 function getDefaultTaskCreateMeta() {
     return {
         success: true,
-        default_mode: 'direct',
+        default_mode: 'sonnet',
         categories: ['core', 'feature', 'enhancement', 'bugfix', 'infrastructure', 'ui-ux'],
         efforts: ['XS', 'S', 'M', 'L', 'XL']
     };
@@ -194,7 +194,7 @@ async function openTaskCreateModal() {
             return;
         }
         if (!taskCreateModeTouched) {
-            setTaskCreateMode(meta.default_mode || 'direct');
+            setTaskCreateMode(meta.default_mode || 'sonnet');
         }
         // Focus the active primary input after a brief delay for the modal animation
         setTimeout(() => {
@@ -230,7 +230,7 @@ function closeTaskCreateModal() {
         if (categorySelect) categorySelect.value = 'feature';
         if (effortSelect) effortSelect.value = 'M';
         taskCreateModeTouched = false;
-        setTaskCreateMode((taskCreateMeta?.default_mode) || 'direct');
+        setTaskCreateMode((taskCreateMeta?.default_mode) || 'sonnet');
         // Reset button state
         if (submitBtn) {
             submitBtn.classList.remove('loading');

@@ -171,7 +171,7 @@ function Get-TaskCreationCategories {
 function Get-TaskCreationMetadata {
     return @{
         success = $true
-        default_mode = "direct"
+        default_mode = "sonnet"
         categories = @(Get-TaskCreationCategories)
         efforts = @('XS', 'S', 'M', 'L', 'XL')
     }
