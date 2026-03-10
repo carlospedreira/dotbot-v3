@@ -206,25 +206,33 @@ function showToast(message, type = 'info', duration = 5000) {
     }
 }
 
-let notificationAudioContext = null;
+const NOTIFICATION_SAMPLE_RATE = 22050;
+const NOTIFICATION_AUDIO_CHANNEL_COUNT = 12;
+const notificationAudioCache = new Map();
+const activeNotificationAudio = new Set();
+const notificationAudioChannels = [];
+const primedNotificationAudioChannels = new Set();
+let notificationSilentAudioSrc = null;
 let notificationAudioUnlockBound = false;
+let notificationAudioUnlocked = false;
+let notificationAudioPrimed = false;
+let notificationAudioPriming = null;
+let notificationAudioChannelCursor = 0;
 
 /**
- * Prepare the notification audio context and unlock it on first user gesture.
+ * Prepare notification audio and unlock it on first user gesture.
  */
 function initNotificationAudio() {
     if (notificationAudioUnlockBound) return;
     notificationAudioUnlockBound = true;
 
-    const unlock = () => {
-        const ctx = getNotificationAudioContext();
-        if (!ctx) return;
+    const unlock = async () => {
+        const primed = await primeNotificationAudio();
+        if (!primed) return;
 
-        ctx.resume().catch(() => {});
-        if (ctx.state === 'running') {
-            document.removeEventListener('pointerdown', unlock);
-            document.removeEventListener('keydown', unlock);
-        }
+        notificationAudioUnlocked = true;
+        document.removeEventListener('pointerdown', unlock);
+        document.removeEventListener('keydown', unlock);
     };
 
     document.addEventListener('pointerdown', unlock, { passive: true });
@@ -234,81 +242,307 @@ function initNotificationAudio() {
 /**
  * Play a short synthesized cue for in-app notifications.
  * @param {string} cue - Cue name: start, success, horn, warning, error, skipped, movement, session
+ * @param {Object} options - Playback options
  */
-function playNotificationSound(cue = 'movement') {
-    const ctx = getNotificationAudioContext();
-    if (!ctx || ctx.state !== 'running') return;
+function playNotificationSound(cue = 'movement', options = {}) {
+    if (!notificationAudioUnlocked) return;
 
-    const now = ctx.currentTime + 0.01;
+    const delayMs = Number(options.delayMs) || 0;
+    const play = () => {
+        const audio = getNotificationAudioChannel();
+        if (!audio) return;
 
-    const tone = ({ start = 0, duration = 0.16, frequency = 440, endFrequency = null, type = 'sine', gain = 0.035 }) => {
-        const oscillator = ctx.createOscillator();
-        const envelope = ctx.createGain();
-        const startTime = now + start;
-        const endTime = startTime + duration;
-
-        oscillator.type = type;
-        oscillator.frequency.setValueAtTime(frequency, startTime);
-        if (endFrequency !== null) {
-            oscillator.frequency.exponentialRampToValueAtTime(Math.max(endFrequency, 1), endTime);
-        }
-
-        envelope.gain.setValueAtTime(0.0001, startTime);
-        envelope.gain.exponentialRampToValueAtTime(gain, startTime + 0.02);
-        envelope.gain.exponentialRampToValueAtTime(0.0001, endTime);
-
-        oscillator.connect(envelope);
-        envelope.connect(ctx.destination);
-        oscillator.start(startTime);
-        oscillator.stop(endTime + 0.02);
+        audio.pause();
+        audio.currentTime = 0;
+        audio.src = getNotificationSoundSrc(cue);
+        audio.volume = getNotificationSoundVolume(cue);
+        activeNotificationAudio.add(audio);
+        audio.play().catch(() => {
+            activeNotificationAudio.delete(audio);
+        });
     };
 
-    switch (cue) {
-        case 'start':
-            tone({ frequency: 440, endFrequency: 660, type: 'triangle', duration: 0.12, gain: 0.03 });
-            tone({ start: 0.13, frequency: 660, endFrequency: 880, type: 'triangle', duration: 0.12, gain: 0.026 });
-            break;
-        case 'success':
-            tone({ frequency: 523.25, type: 'sine', duration: 0.14, gain: 0.035 });
-            tone({ start: 0.1, frequency: 659.25, type: 'sine', duration: 0.16, gain: 0.03 });
-            tone({ start: 0.22, frequency: 783.99, type: 'sine', duration: 0.22, gain: 0.028 });
-            break;
-        case 'horn':
-            tone({ frequency: 220, endFrequency: 196, type: 'sawtooth', duration: 0.28, gain: 0.045 });
-            tone({ frequency: 277.18, endFrequency: 246.94, type: 'square', duration: 0.28, gain: 0.028 });
-            tone({ start: 0.2, frequency: 220, endFrequency: 196, type: 'sawtooth', duration: 0.3, gain: 0.04 });
-            tone({ start: 0.2, frequency: 277.18, endFrequency: 246.94, type: 'square', duration: 0.3, gain: 0.025 });
-            break;
-        case 'warning':
-            tone({ frequency: 392, type: 'triangle', duration: 0.13, gain: 0.03 });
-            tone({ start: 0.16, frequency: 392, type: 'triangle', duration: 0.13, gain: 0.03 });
-            break;
-        case 'error':
-            tone({ frequency: 180, endFrequency: 120, type: 'sawtooth', duration: 0.32, gain: 0.045 });
-            tone({ start: 0.08, frequency: 130, endFrequency: 90, type: 'square', duration: 0.28, gain: 0.03 });
-            break;
-        case 'skipped':
-            tone({ frequency: 523.25, endFrequency: 440, type: 'triangle', duration: 0.12, gain: 0.025 });
-            tone({ start: 0.11, frequency: 392, endFrequency: 329.63, type: 'triangle', duration: 0.16, gain: 0.022 });
-            break;
-        case 'session':
-            tone({ frequency: 349.23, type: 'sine', duration: 0.12, gain: 0.022 });
-            tone({ start: 0.1, frequency: 466.16, type: 'sine', duration: 0.14, gain: 0.02 });
-            break;
-        default:
-            tone({ frequency: 740, type: 'triangle', duration: 0.09, gain: 0.02 });
-            break;
+    if (delayMs > 0) {
+        setTimeout(play, delayMs);
+    } else {
+        play();
     }
 }
 
-function getNotificationAudioContext() {
-    if (notificationAudioContext) return notificationAudioContext;
+function primeNotificationAudio() {
+    if (notificationAudioPrimed) return Promise.resolve(true);
+    if (notificationAudioPriming) return notificationAudioPriming;
 
-    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextCtor) return null;
+    const silentSrc = getSilentNotificationSoundSrc();
+    const channels = getNotificationAudioChannels();
+    notificationAudioPriming = Promise.allSettled(channels.map(audio => {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.src = silentSrc;
+        audio.volume = 0;
+        return audio.play().then(() => {
+            audio.pause();
+            audio.currentTime = 0;
+            primedNotificationAudioChannels.add(audio);
+            return audio;
+        });
+    }))
+        .then(results => {
+            const succeeded = results.filter(result => result.status === 'fulfilled').length;
+            notificationAudioPrimed = succeeded > 0;
+            notificationAudioPriming = null;
+            return notificationAudioPrimed;
+        });
 
-    notificationAudioContext = new AudioContextCtor();
-    return notificationAudioContext;
+    return notificationAudioPriming;
+}
+
+function getNotificationAudioChannels() {
+    if (notificationAudioChannels.length > 0) return notificationAudioChannels;
+
+    for (let i = 0; i < NOTIFICATION_AUDIO_CHANNEL_COUNT; i++) {
+        const audio = new Audio();
+        audio.preload = 'auto';
+        audio.addEventListener('play', () => activeNotificationAudio.add(audio));
+        audio.addEventListener('ended', () => activeNotificationAudio.delete(audio));
+        audio.addEventListener('pause', () => {
+            if (audio.ended || audio.currentTime === 0) {
+                activeNotificationAudio.delete(audio);
+            }
+        });
+        notificationAudioChannels.push(audio);
+    }
+
+    return notificationAudioChannels;
+}
+
+function getNotificationAudioChannel() {
+    const channels = primedNotificationAudioChannels.size > 0
+        ? Array.from(primedNotificationAudioChannels)
+        : getNotificationAudioChannels();
+    const idleChannel = channels.find(audio => !activeNotificationAudio.has(audio));
+    if (idleChannel) return idleChannel;
+
+    const channel = channels[notificationAudioChannelCursor % channels.length];
+    notificationAudioChannelCursor = (notificationAudioChannelCursor + 1) % channels.length;
+    activeNotificationAudio.delete(channel);
+    return channel;
+}
+
+function getNotificationSoundSrc(cue) {
+    if (!notificationAudioCache.has(cue)) {
+        const samples = synthesizeNotificationCue(cue);
+        const wavBuffer = buildWavBuffer(samples, NOTIFICATION_SAMPLE_RATE);
+        const src = URL.createObjectURL(new Blob([wavBuffer], { type: 'audio/wav' }));
+        notificationAudioCache.set(cue, src);
+    }
+
+    return notificationAudioCache.get(cue);
+}
+
+function getSilentNotificationSoundSrc() {
+    if (notificationSilentAudioSrc) return notificationSilentAudioSrc;
+
+    const silentSamples = new Float32Array(Math.ceil(NOTIFICATION_SAMPLE_RATE * 0.05));
+    const wavBuffer = buildWavBuffer(silentSamples, NOTIFICATION_SAMPLE_RATE);
+    notificationSilentAudioSrc = URL.createObjectURL(new Blob([wavBuffer], { type: 'audio/wav' }));
+    return notificationSilentAudioSrc;
+}
+
+function getNotificationSoundVolume(cue) {
+    if (cue === 'horn') return 1;
+    if (cue === 'error') return 0.95;
+    return 0.9;
+}
+
+function synthesizeNotificationCue(cue) {
+    switch (cue) {
+        case 'start':
+            return renderNotificationCue(0.52, [
+                { wave: 'triangle', start: 0, duration: 0.18, frequency: 480, endFrequency: 660, gain: 0.42 },
+                { wave: 'sine', start: 0.16, duration: 0.24, frequency: 660, endFrequency: 920, gain: 0.35 },
+                { wave: 'triangle', start: 0.18, duration: 0.22, frequency: 990, endFrequency: 1100, gain: 0.16 }
+            ], { echoDelay: 0.1, echoGain: 0.14, drive: 1.18 });
+        case 'success':
+            return renderNotificationCue(0.8, [
+                { wave: 'sine', start: 0, duration: 0.22, frequency: 523.25, gain: 0.45 },
+                { wave: 'sine', start: 0.16, duration: 0.24, frequency: 659.25, gain: 0.42 },
+                { wave: 'sine', start: 0.34, duration: 0.32, frequency: 783.99, gain: 0.4 },
+                { wave: 'triangle', start: 0.34, duration: 0.28, frequency: 1046.5, gain: 0.16 }
+            ], { echoDelay: 0.13, echoGain: 0.18, drive: 1.16 });
+        case 'horn':
+            return renderNotificationCue(0.95, [
+                { wave: 'sawtooth', start: 0, duration: 0.32, frequency: 196, endFrequency: 174, gain: 0.42, attack: 0.04, release: 0.2 },
+                { wave: 'square', start: 0, duration: 0.32, frequency: 246.94, endFrequency: 220, gain: 0.28, attack: 0.04, release: 0.18 },
+                { wave: 'sawtooth', start: 0.28, duration: 0.4, frequency: 196, endFrequency: 164.81, gain: 0.44, attack: 0.03, release: 0.22 },
+                { wave: 'square', start: 0.28, duration: 0.4, frequency: 246.94, endFrequency: 207.65, gain: 0.3, attack: 0.03, release: 0.22 },
+                { wave: 'noise', start: 0, duration: 0.08, gain: 0.05, attack: 0.01, release: 0.7 },
+                { wave: 'noise', start: 0.28, duration: 0.1, gain: 0.05, attack: 0.01, release: 0.7 }
+            ], { echoDelay: 0.16, echoGain: 0.14, drive: 1.35 });
+        case 'warning':
+            return renderNotificationCue(0.55, [
+                { wave: 'triangle', start: 0, duration: 0.16, frequency: 420, gain: 0.34 },
+                { wave: 'triangle', start: 0.2, duration: 0.18, frequency: 420, gain: 0.34 }
+            ], { echoDelay: 0.11, echoGain: 0.12, drive: 1.08 });
+        case 'error':
+            return renderNotificationCue(0.82, [
+                { wave: 'sawtooth', start: 0, duration: 0.46, frequency: 180, endFrequency: 112, gain: 0.42, attack: 0.03, release: 0.18 },
+                { wave: 'square', start: 0.06, duration: 0.38, frequency: 120, endFrequency: 80, gain: 0.25, attack: 0.03, release: 0.2 },
+                { wave: 'noise', start: 0, duration: 0.16, gain: 0.04, attack: 0.02, release: 0.7 }
+            ], { echoDelay: 0.12, echoGain: 0.1, drive: 1.25 });
+        case 'skipped':
+            return renderNotificationCue(0.62, [
+                { wave: 'triangle', start: 0, duration: 0.18, frequency: 523.25, endFrequency: 440, gain: 0.33 },
+                { wave: 'triangle', start: 0.15, duration: 0.2, frequency: 392, endFrequency: 329.63, gain: 0.28 }
+            ], { echoDelay: 0.1, echoGain: 0.1, drive: 1.08 });
+        case 'session':
+            return renderNotificationCue(0.5, [
+                { wave: 'sine', start: 0, duration: 0.16, frequency: 349.23, gain: 0.26 },
+                { wave: 'sine', start: 0.14, duration: 0.2, frequency: 466.16, gain: 0.22 },
+                { wave: 'triangle', start: 0.14, duration: 0.18, frequency: 698.46, gain: 0.08 }
+            ], { echoDelay: 0.1, echoGain: 0.08, drive: 1.04 });
+        default:
+            return renderNotificationCue(0.34, [
+                { wave: 'triangle', start: 0, duration: 0.12, frequency: 720, gain: 0.26 },
+                { wave: 'triangle', start: 0.08, duration: 0.12, frequency: 960, gain: 0.2 }
+            ], { echoDelay: 0.08, echoGain: 0.08, drive: 1.02 });
+    }
+}
+
+function renderNotificationCue(durationSeconds, layers, options = {}) {
+    const frameCount = Math.max(1, Math.ceil(durationSeconds * NOTIFICATION_SAMPLE_RATE));
+    const samples = new Float32Array(frameCount);
+
+    for (const layer of layers) {
+        mixNotificationLayer(samples, layer);
+    }
+
+    if (options.echoDelay && options.echoGain) {
+        applyNotificationEcho(samples, options.echoDelay, options.echoGain);
+    }
+
+    applyNotificationDrive(samples, options.drive || 1);
+    normalizeNotificationSamples(samples, 0.92);
+    return samples;
+}
+
+function mixNotificationLayer(samples, layer) {
+    const startIndex = Math.max(0, Math.floor((layer.start || 0) * NOTIFICATION_SAMPLE_RATE));
+    const frameCount = Math.max(1, Math.floor((layer.duration || 0.2) * NOTIFICATION_SAMPLE_RATE));
+    const endIndex = Math.min(samples.length, startIndex + frameCount);
+    const totalFrames = Math.max(1, endIndex - startIndex);
+    const attack = layer.attack || 0.08;
+    const release = layer.release || 0.22;
+    const gain = layer.gain || 0.25;
+    const startFrequency = layer.frequency || 440;
+    const endFrequency = layer.endFrequency || startFrequency;
+    const frequencyRatio = Math.max(endFrequency, 1) / Math.max(startFrequency, 1);
+    let phase = 0;
+
+    for (let i = 0; i < totalFrames; i++) {
+        const sampleIndex = startIndex + i;
+        const progress = totalFrames <= 1 ? 1 : i / (totalFrames - 1);
+        const frequency = startFrequency * Math.pow(frequencyRatio, progress);
+        const amplitude = getNotificationEnvelope(progress, attack, release) * gain;
+
+        phase += (Math.PI * 2 * frequency) / NOTIFICATION_SAMPLE_RATE;
+        samples[sampleIndex] += sampleNotificationWave(layer.wave || 'sine', phase) * amplitude;
+    }
+}
+
+function getNotificationEnvelope(progress, attack, release) {
+    const safeAttack = Math.max(0.001, Math.min(0.95, attack));
+    const safeRelease = Math.max(0.001, Math.min(0.95, release));
+
+    if (progress < safeAttack) {
+        return progress / safeAttack;
+    }
+
+    if (progress > 1 - safeRelease) {
+        return Math.max(0, (1 - progress) / safeRelease);
+    }
+
+    return 1;
+}
+
+function sampleNotificationWave(type, phase) {
+    if (type === 'triangle') {
+        return (2 / Math.PI) * Math.asin(Math.sin(phase));
+    }
+    if (type === 'square') {
+        return Math.sin(phase) >= 0 ? 1 : -1;
+    }
+    if (type === 'sawtooth') {
+        const cycle = phase / (Math.PI * 2);
+        return 2 * (cycle - Math.floor(cycle + 0.5));
+    }
+    if (type === 'noise') {
+        return (Math.random() * 2) - 1;
+    }
+
+    return Math.sin(phase);
+}
+
+function applyNotificationEcho(samples, delaySeconds, gain) {
+    const delayFrames = Math.max(1, Math.floor(delaySeconds * NOTIFICATION_SAMPLE_RATE));
+    for (let i = delayFrames; i < samples.length; i++) {
+        samples[i] += samples[i - delayFrames] * gain;
+    }
+}
+
+function applyNotificationDrive(samples, drive) {
+    if (drive <= 1) return;
+    for (let i = 0; i < samples.length; i++) {
+        samples[i] = Math.tanh(samples[i] * drive);
+    }
+}
+
+function normalizeNotificationSamples(samples, peakTarget) {
+    let peak = 0;
+    for (let i = 0; i < samples.length; i++) {
+        peak = Math.max(peak, Math.abs(samples[i]));
+    }
+
+    if (peak <= 0) return;
+
+    const scale = peakTarget / peak;
+    for (let i = 0; i < samples.length; i++) {
+        samples[i] *= scale;
+    }
+}
+
+function buildWavBuffer(samples, sampleRate) {
+    const buffer = new ArrayBuffer(44 + samples.length * 2);
+    const view = new DataView(buffer);
+
+    writeWavString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + samples.length * 2, true);
+    writeWavString(view, 8, 'WAVE');
+    writeWavString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeWavString(view, 36, 'data');
+    view.setUint32(40, samples.length * 2, true);
+
+    let offset = 44;
+    for (let i = 0; i < samples.length; i++) {
+        const sample = Math.max(-1, Math.min(1, samples[i]));
+        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+        offset += 2;
+    }
+
+    return buffer;
+}
+
+function writeWavString(view, offset, text) {
+    for (let i = 0; i < text.length; i++) {
+        view.setUint8(offset + i, text.charCodeAt(i));
+    }
 }
 
 /**

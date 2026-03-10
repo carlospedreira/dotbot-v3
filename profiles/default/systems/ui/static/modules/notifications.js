@@ -39,7 +39,7 @@ function checkNotifications(state) {
 
     const prev = prevNotifyState;
     const curr = snapshotState(state);
-    let playedEventCue = false;
+    const taskMoves = getTaskMoves(prev, curr);
 
     // Task completed
     if (curr.done > prev.done) {
@@ -50,23 +50,17 @@ function checkNotifications(state) {
         } else {
             showToast(`${count} task${count > 1 ? 's' : ''} completed`, 'success', 6000);
         }
-        playNotificationSound('success');
-        playedEventCue = true;
     }
 
     // Task needs input (action required increased)
     if (curr.needsInput > prev.needsInput) {
         const count = curr.needsInput - prev.needsInput;
         showToast(`${count} task${count > 1 ? 's' : ''} need${count === 1 ? 's' : ''} your input`, 'warning', 8000);
-        playNotificationSound('horn');
-        playedEventCue = true;
     }
 
     // New task started (in-progress increased)
     if (curr.inProgress > prev.inProgress && curr.currentTaskName && curr.currentTaskName !== prev.currentTaskName) {
         showToast(`Started: ${curr.currentTaskName}`, 'info', 5000);
-        playNotificationSound('start');
-        playedEventCue = true;
     }
 
     // Session status changes
@@ -74,15 +68,12 @@ function checkNotifications(state) {
         if (curr.sessionStatus === 'running' && prev.sessionStatus !== 'running') {
             showToast('Session started', 'info', 4000);
             playNotificationSound('session');
-            playedEventCue = true;
         } else if (curr.sessionStatus === 'paused' && prev.sessionStatus === 'running') {
             showToast('Session paused', 'warning', 4000);
             playNotificationSound('warning');
-            playedEventCue = true;
         } else if (curr.sessionStatus === 'stopped' && prev.sessionStatus === 'running') {
             showToast('Session stopped', 'info', 4000);
             playNotificationSound('warning');
-            playedEventCue = true;
         }
     }
 
@@ -90,17 +81,16 @@ function checkNotifications(state) {
     if (curr.failures > prev.failures && curr.failures > 0) {
         showToast(`Consecutive failure #${curr.failures}`, 'error', 6000);
         playNotificationSound('error');
-        playedEventCue = true;
     }
 
     // Task skipped
     if (curr.skipped > prev.skipped) {
         showToast('Task skipped', 'warning', 5000);
-        playNotificationSound('skipped');
-        playedEventCue = true;
     }
 
-    if (!playedEventCue && hasTaskMovement(prev, curr)) {
+    if (taskMoves.length > 0) {
+        playTaskMoveSounds(taskMoves);
+    } else if (hasTaskMovement(prev, curr)) {
         playNotificationSound('movement');
     }
 
@@ -124,6 +114,7 @@ function snapshotState(state) {
         currentTaskName: state.tasks?.current?.name || null,
         sessionStatus: state.session?.status || null,
         failures: state.session?.consecutive_failures || 0,
+        taskStages: buildTaskStageMap(state.tasks),
         // Store completed task IDs for diff
         completedIds: (state.tasks?.recent_completed || []).map(t => t.id)
     };
@@ -155,6 +146,87 @@ function hasTaskMovement(prev, curr) {
         prev.inProgress !== curr.inProgress ||
         prev.needsInput !== curr.needsInput ||
         prev.skipped !== curr.skipped;
+}
+
+function buildTaskStageMap(tasks) {
+    const stageMap = {};
+
+    for (const task of tasks?.upcoming || []) {
+        if (task?.id) stageMap[task.id] = 'todo';
+    }
+    for (const task of tasks?.analysing_list || []) {
+        if (task?.id) stageMap[task.id] = 'analysing';
+    }
+    for (const task of tasks?.analysed_list || []) {
+        if (task?.id) stageMap[task.id] = 'analysed';
+    }
+    for (const task of tasks?.needs_input_list || []) {
+        if (task?.id) stageMap[task.id] = 'needs_input';
+    }
+    if (tasks?.current?.id) {
+        stageMap[tasks.current.id] = 'in_progress';
+    }
+    for (const task of tasks?.recent_completed || []) {
+        if (task?.id) stageMap[task.id] = 'done';
+    }
+    for (const task of tasks?.skipped_list || []) {
+        if (task?.id) stageMap[task.id] = 'skipped';
+    }
+
+    return stageMap;
+}
+
+function getTaskMoves(prev, curr) {
+    const moves = [];
+    const prevStages = prev.taskStages || {};
+    const currStages = curr.taskStages || {};
+
+    for (const [taskId, toStage] of Object.entries(currStages)) {
+        const fromStage = prevStages[taskId];
+        if ((fromStage && fromStage !== toStage) || (!fromStage && toStage !== 'todo')) {
+            moves.push({ taskId, fromStage, toStage });
+        }
+    }
+
+    return moves;
+}
+
+function playTaskMoveSounds(moves) {
+    const maxQueuedMoves = 8;
+    const queue = moves
+        .map((move, index) => ({ move, index }))
+        .sort((a, b) => {
+            const priorityDiff = getTaskMovePriority(b.move) - getTaskMovePriority(a.move);
+            return priorityDiff !== 0 ? priorityDiff : a.index - b.index;
+        })
+        .slice(0, maxQueuedMoves)
+        .map(entry => entry.move);
+
+    queue.forEach((move, index) => {
+        playNotificationSound(getCueForTaskMove(move), { delayMs: index * 240 });
+    });
+
+    if (moves.length > maxQueuedMoves) {
+        playNotificationSound('warning', { delayMs: queue.length * 240 });
+    }
+}
+
+function getCueForTaskMove(move) {
+    if (move.toStage === 'needs_input') return 'horn';
+    if (move.toStage === 'done') return 'success';
+    if (move.toStage === 'in_progress') return 'start';
+    if (move.toStage === 'skipped') return 'skipped';
+    if (move.toStage === 'todo' && move.fromStage !== 'todo') return 'warning';
+    return 'movement';
+}
+
+function getTaskMovePriority(move) {
+    if (move.toStage === 'needs_input') return 5;
+    if (move.toStage === 'done') return 4;
+    if (move.toStage === 'in_progress') return 3;
+    if (move.toStage === 'skipped') return 2;
+    if (move.toStage === 'todo' && move.fromStage !== 'todo') return 1;
+    return 0;
 }
 
 /**
