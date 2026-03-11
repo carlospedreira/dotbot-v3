@@ -293,7 +293,8 @@ function Start-ProductKickstart {
         [Parameter(Mandatory)] [string]$UserPrompt,
         [array]$Files = @(),
         [bool]$NeedsInterview = $true,
-        [bool]$AutoWorkflow = $true
+        [bool]$AutoWorkflow = $true,
+        [string[]]$SkipPhases = @()
     )
     $botRoot = $script:Config.BotRoot
     $projectRoot = Split-Path -Parent $botRoot
@@ -347,9 +348,10 @@ function Start-ProductKickstart {
     $wrapperPath = Join-Path $launchersDir "kickstart-launcher.ps1"
     $interviewLine = if ($NeedsInterview) { " -NeedsInterview" } else { "" }
     $autoWorkflowLine = if ($AutoWorkflow) { " -AutoWorkflow" } else { "" }
+    $skipLine = if ($SkipPhases.Count -gt 0) { " -SkipPhases '$($SkipPhases -join ',')'" } else { "" }
     @"
 `$prompt = Get-Content -LiteralPath '$promptFile' -Raw
-& '$launcherPath' -Type kickstart -Prompt `$prompt -Description 'Kickstart: project setup'$interviewLine$autoWorkflowLine
+& '$launcherPath' -Type kickstart -Prompt `$prompt -Description 'Kickstart: project setup'$interviewLine$autoWorkflowLine$skipLine
 "@ | Set-Content -Path $wrapperPath -Encoding UTF8
 
     $proc = Start-Process pwsh -ArgumentList "-NoProfile", "-File", $wrapperPath -WindowStyle Normal -PassThru

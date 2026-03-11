@@ -344,6 +344,13 @@ try {
                         } catch {}
                     }
 
+                    $kickstartPhases = $null
+                    if ($settingsData.kickstart.phases) {
+                        $kickstartPhases = @($settingsData.kickstart.phases | ForEach-Object {
+                            @{ id = $_.id; name = $_.name; optional = [bool]$_.optional }
+                        })
+                    }
+
                     $content = @{
                         project_name = $projectName
                         project_root = $projectRoot
@@ -352,6 +359,7 @@ try {
                         has_existing_code = $hasExistingCode
                         profile = $profileName
                         kickstart_dialog = $kickstartDialog
+                        kickstart_phases = $kickstartPhases
                     } | ConvertTo-Json -Depth 5 -Compress
                     break
                 }
@@ -882,7 +890,7 @@ try {
                                 $statusCode = 400
                                 $content = @{ success = $false; error = "Missing required 'prompt' field" } | ConvertTo-Json -Compress
                             } else {
-                                $result = Start-ProductKickstart -UserPrompt $body.prompt -Files @($body.files) -NeedsInterview ($body.needs_interview -eq $true) -AutoWorkflow ($body.auto_workflow -eq $true)
+                                $result = Start-ProductKickstart -UserPrompt $body.prompt -Files @($body.files) -NeedsInterview ($body.needs_interview -eq $true) -AutoWorkflow ($body.auto_workflow -eq $true) -SkipPhases @($body.skip_phases)
                                 if ($result._statusCode) { $statusCode = $result._statusCode; $result.Remove('_statusCode') }
                                 $content = $result | ConvertTo-Json -Compress
                             }
