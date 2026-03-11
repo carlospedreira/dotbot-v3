@@ -118,7 +118,7 @@
     "phases": [
       {
         "id": "jira-context",
-        "name": "Jira Context",
+        "name": "Fetch Jira Context",
         "workflow": "00-kickstart-interview.md",
         "required_outputs": ["briefing/jira-context.md"],
         "commit_paths": ["workspace/product/"],
@@ -126,30 +126,52 @@
       },
       {
         "id": "product-docs",
-        "name": "Product Documents",
+        "name": "Generate Product Documents",
         "workflow": "01-plan-product.md",
         "required_outputs": ["mission.md"],
-        "front_matter_docs": ["mission.md", "roadmap-overview.md"],
+        "front_matter_docs": ["mission.md", "roadmap-overview.md", "research-repos.md"],
         "commit_paths": ["workspace/product/"],
         "commit_message": "chore(kickstart): phase 1 — product documents"
       },
       {
-        "id": "plan-research",
-        "name": "Research Tasks",
-        "workflow": "02-plan-research.md",
+        "id": "plan-internet-research",
+        "name": "Create Internet Research Task",
+        "workflow": "02a-plan-internet-research.md",
+        "optional": true,
         "required_outputs_dir": "tasks/todo",
         "min_output_count": 1,
-        "commit_paths": ["workspace/tasks/", "workspace/product/"],
-        "commit_message": "chore(kickstart): phase 2 — research tasks created"
+        "commit_paths": ["workspace/tasks/"],
+        "commit_message": "chore(kickstart): phase 2a — internet research task created"
+      },
+      {
+        "id": "plan-atlassian-research",
+        "name": "Create Atlassian Research Task",
+        "workflow": "02b-plan-atlassian-research.md",
+        "optional": true,
+        "required_outputs_dir": "tasks/todo",
+        "min_output_count": 1,
+        "commit_paths": ["workspace/tasks/"],
+        "commit_message": "chore(kickstart): phase 2b — atlassian research task created"
+      },
+      {
+        "id": "plan-sourcebot-research",
+        "name": "Create Sourcebot Research Task",
+        "workflow": "02c-plan-sourcebot-research.md",
+        "optional": true,
+        "required_outputs_dir": "tasks/todo",
+        "min_output_count": 1,
+        "commit_paths": ["workspace/tasks/"],
+        "commit_message": "chore(kickstart): phase 2c — sourcebot research task created"
       },
       {
         "id": "execute-research",
         "name": "Execute Research",
-        "type": "workflow"
+        "type": "workflow",
+        "optional": true
       },
       {
         "id": "create-deep-dives",
-        "name": "Deep Dive Tasks",
+        "name": "Create Deep-Dive Tasks",
         "workflow": "03-create-deep-dive-tasks.md",
         "required_outputs_dir": "tasks/todo",
         "min_output_count": 1,
@@ -161,11 +183,12 @@
         "id": "execute-deep-dives",
         "name": "Execute Deep Dives",
         "type": "workflow",
+        "optional": true,
         "condition": "file_exists:workspace/product/research-repos.md"
       },
       {
         "id": "post-research-review",
-        "name": "Post-Research Review",
+        "name": "Synthesise Research",
         "type": "llm",
         "workflow": "04-post-research-review.md",
         "required_outputs": ["research-summary.md"],
@@ -181,7 +204,7 @@
       },
       {
         "id": "implementation-research",
-        "name": "Implementation Research",
+        "name": "Research Repositories",
         "type": "llm",
         "workflow": "05-implementation-research.md",
         "condition": "file_exists:workspace/product/research-repos.md",
@@ -191,7 +214,7 @@
       },
       {
         "id": "refine-artifacts",
-        "name": "Refine Artifacts",
+        "name": "Refine Dependencies",
         "type": "llm",
         "workflow": "07-refine-artifacts.md",
         "condition": "file_exists:workspace/product/briefing/04_IMPLEMENTATION_RESEARCH.md",
@@ -201,7 +224,7 @@
       },
       {
         "id": "plan-implementation",
-        "name": "Implementation Plans",
+        "name": "Generate Implementation Plans",
         "type": "llm",
         "workflow": "06-plan-implementation.md",
         "condition": "file_exists:workspace/product/briefing/04_IMPLEMENTATION_RESEARCH.md",
@@ -210,9 +233,9 @@
       },
       {
         "id": "create-impl-tasks",
-        "name": "Implementation Tasks",
+        "name": "Create Implementation Tasks",
         "type": "llm",
-        "workflow": "09-implement-changes.md",
+        "workflow": "09-create-impl-tasks.md",
         "condition": "file_exists:workspace/product/briefing/04_IMPLEMENTATION_RESEARCH.md",
         "required_outputs_dir": "tasks/todo",
         "min_output_count": 1,
@@ -223,6 +246,7 @@
         "id": "execute-implementation",
         "name": "Execute Implementation",
         "type": "workflow",
+        "optional": true,
         "condition": "file_exists:workspace/product/briefing/04_IMPLEMENTATION_RESEARCH.md"
       },
       {
@@ -236,7 +260,7 @@
       },
       {
         "id": "draft-handoff",
-        "name": "Handoff & Draft PRs",
+        "name": "Draft Handoff & PRs",
         "type": "llm",
         "workflow": "11-draft-system-docs.md",
         "condition": "file_exists:workspace/product/briefing/04_IMPLEMENTATION_RESEARCH.md",
