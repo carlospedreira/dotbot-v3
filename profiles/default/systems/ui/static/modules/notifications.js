@@ -6,6 +6,7 @@
 
 // Previous state for change detection
 let prevNotifyState = null;
+let notificationSoundEnabled = false;
 
 // Git status polling interval (slower than main poll since git is heavier)
 const GIT_POLL_INTERVAL = 10000; // 10 seconds
@@ -23,6 +24,18 @@ function initNotifications() {
     // Start git status polling
     pollGitStatus();
     gitPollTimer = setInterval(pollGitStatus, GIT_POLL_INTERVAL);
+}
+
+function setNotificationSoundEnabled(enabled) {
+    notificationSoundEnabled = !!enabled;
+    if (!notificationSoundEnabled && typeof stopNotificationAudio === 'function') {
+        stopNotificationAudio();
+    }
+}
+
+function playConfiguredNotificationSound(cue, options = {}) {
+    if (!notificationSoundEnabled || typeof playNotificationSound !== 'function') return;
+    playNotificationSound(cue, options);
 }
 
 /**
@@ -67,20 +80,20 @@ function checkNotifications(state) {
     if (curr.sessionStatus !== prev.sessionStatus && prev.sessionStatus) {
         if (curr.sessionStatus === 'running' && prev.sessionStatus !== 'running') {
             showToast('Session started', 'info', 4000);
-            playNotificationSound('session');
+            playConfiguredNotificationSound('session');
         } else if (curr.sessionStatus === 'paused' && prev.sessionStatus === 'running') {
             showToast('Session paused', 'warning', 4000);
-            playNotificationSound('warning');
+            playConfiguredNotificationSound('warning');
         } else if (curr.sessionStatus === 'stopped' && prev.sessionStatus === 'running') {
             showToast('Session stopped', 'info', 4000);
-            playNotificationSound('warning');
+            playConfiguredNotificationSound('warning');
         }
     }
 
     // Consecutive failures increased
     if (curr.failures > prev.failures && curr.failures > 0) {
         showToast(`Consecutive failure #${curr.failures}`, 'error', 6000);
-        playNotificationSound('error');
+        playConfiguredNotificationSound('error');
     }
 
     // Task skipped
@@ -91,7 +104,7 @@ function checkNotifications(state) {
     if (taskMoves.length > 0) {
         playTaskMoveSounds(taskMoves);
     } else if (hasTaskMovement(prev, curr)) {
-        playNotificationSound('movement');
+        playConfiguredNotificationSound('movement');
     }
 
     prevNotifyState = curr;
@@ -203,11 +216,11 @@ function playTaskMoveSounds(moves) {
         .map(entry => entry.move);
 
     queue.forEach((move, index) => {
-        playNotificationSound(getCueForTaskMove(move), { delayMs: index * 240 });
+        playConfiguredNotificationSound(getCueForTaskMove(move), { delayMs: index * 240 });
     });
 
     if (moves.length > maxQueuedMoves) {
-        playNotificationSound('warning', { delayMs: queue.length * 240 });
+        playConfiguredNotificationSound('warning', { delayMs: queue.length * 240 });
     }
 }
 

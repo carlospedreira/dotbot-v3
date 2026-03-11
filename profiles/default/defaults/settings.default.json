@@ -26,6 +26,7 @@
   },
   "notifications": {
     "enabled": false,
+    "sound_enabled": false,
     "server_url": "",
     "api_key": "",
     "channel": "teams",

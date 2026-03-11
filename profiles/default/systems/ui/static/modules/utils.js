@@ -210,6 +210,7 @@ const NOTIFICATION_SAMPLE_RATE = 22050;
 const NOTIFICATION_AUDIO_CHANNEL_COUNT = 12;
 const notificationAudioCache = new Map();
 const activeNotificationAudio = new Set();
+const queuedNotificationAudioTimers = new Set();
 const notificationAudioChannels = [];
 const primedNotificationAudioChannels = new Set();
 let notificationSilentAudioSrc = null;
@@ -263,7 +264,11 @@ function playNotificationSound(cue = 'movement', options = {}) {
     };
 
     if (delayMs > 0) {
-        setTimeout(play, delayMs);
+        const timerId = setTimeout(() => {
+            queuedNotificationAudioTimers.delete(timerId);
+            play();
+        }, delayMs);
+        queuedNotificationAudioTimers.add(timerId);
     } else {
         play();
     }
@@ -353,6 +358,19 @@ function getNotificationSoundVolume(cue) {
     if (cue === 'horn') return 1;
     if (cue === 'error') return 0.95;
     return 0.9;
+}
+
+function stopNotificationAudio() {
+    for (const timerId of Array.from(queuedNotificationAudioTimers)) {
+        clearTimeout(timerId);
+        queuedNotificationAudioTimers.delete(timerId);
+    }
+
+    for (const audio of Array.from(activeNotificationAudio)) {
+        audio.pause();
+        audio.currentTime = 0;
+        activeNotificationAudio.delete(audio);
+    }
 }
 
 function synthesizeNotificationCue(cue) {

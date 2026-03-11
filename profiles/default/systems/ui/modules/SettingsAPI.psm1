@@ -604,6 +604,7 @@ function Get-NotificationConfig {
 
     $defaults = @{
         enabled               = $false
+        sound_enabled         = $false
         server_url            = ""
         api_key               = ""
         channel               = "teams"
@@ -648,6 +649,7 @@ function Get-NotificationConfig {
 
         return @{
             enabled               = $defaults.enabled
+            sound_enabled         = if ($null -ne $defaults.sound_enabled) { [bool]$defaults.sound_enabled } else { $false }
             server_url            = $defaults.server_url
             api_key_masked        = $maskedKey
             api_key_set           = [bool]$defaults.api_key
@@ -679,6 +681,7 @@ function Set-NotificationConfig {
     if (-not $settingsData.PSObject.Properties['notifications']) {
         $settingsData | Add-Member -NotePropertyName "notifications" -NotePropertyValue ([PSCustomObject]@{
             enabled               = $false
+            sound_enabled         = $false
             server_url            = ""
             api_key               = ""
             channel               = "teams"
@@ -692,6 +695,7 @@ function Set-NotificationConfig {
     $notif = $settingsData.notifications
 
     if ($null -ne $Body.enabled) { $notif.enabled = [bool]$Body.enabled }
+    if ($null -ne $Body.sound_enabled) { $notif.sound_enabled = [bool]$Body.sound_enabled }
     if ($null -ne $Body.server_url) { $notif.server_url = [string]$Body.server_url }
     if ($null -ne $Body.channel) {
         $validChannels = @("teams", "email", "jira")
