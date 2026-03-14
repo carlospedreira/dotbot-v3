@@ -30,8 +30,8 @@ Read({ file_path: ".bot/workspace/product/briefing/jira-context.md" })
 ```
 
 Extract:
-- **JIRA_KEY** (e.g., `BS-9817`)
-- **INITIATIVE_NAME** (e.g., `Pakistan E-Invoicing`)
+- **JIRA_KEY** (e.g., `PROJ-1234`)
+- **INITIATIVE_NAME** (e.g., `Payment Gateway Upgrade`)
 - **ADO_ORG_URL** (from .env.local)
 
 Check repo status:

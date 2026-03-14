@@ -102,8 +102,8 @@ Read({ file_path: ".bot/workspace/product/briefing/jira-context.md" })
 ```
 
 Extract from `jira-context.md`:
-- **Jira Key** (e.g., `BS-9817`)
-- **Initiative Name** (e.g., `Pakistan E-Invoicing`)
+- **Jira Key** (e.g., `PROJ-1234`)
+- **Initiative Name** (e.g., `Payment Gateway Upgrade`)
 - **Business Objective**
 - **Parent Programme**
 - **Reference Implementation** (if identified)
@@ -145,7 +145,7 @@ Only load what exists and is relevant to this task's methodology.
 
 Check if the task has a `working_dir` field:
 
-- If `working_dir` is set (e.g., `repos/EInvoiceUpload`): the execution phase should operate in that directory relative to the project root
+- If `working_dir` is set (e.g., `repos/OrderService`): the execution phase should operate in that directory relative to the project root
 - If not set: the execution phase operates in the project root as normal
 
 For deep dive tasks with `external_repo` field:
