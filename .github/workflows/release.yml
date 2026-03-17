@@ -170,6 +170,7 @@ jobs:
           $manifest = Get-Content bucket/dotbot.json | ConvertFrom-Json
           $manifest.version = $version
           $manifest.url = "https://github.com/andresharpe/dotbot-v3/releases/download/v${version}/dotbot-v3-${version}.zip"
+          $manifest.extract_dir = "dotbot-v3-${version}"
           $manifest.hash = $hash
           $manifest | ConvertTo-Json -Depth 10 | Set-Content bucket/dotbot.json
 
