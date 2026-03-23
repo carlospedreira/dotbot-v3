@@ -45,7 +45,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     initActions();
     initProcesses();
     await initKickstart();
-    initErrors();
     initNotifications();
     await initDecisions();
 

@@ -42,11 +42,6 @@ function updateUI(state) {
         if (typeof initProjectName === 'function') initProjectName();
     }
 
-    // Update error badge from state
-    if (typeof updateErrorBadgeFromState === 'function') {
-        updateErrorBadgeFromState(state);
-    }
-
     // Update active processes widget on Overview tab
     updateActiveProcessesWidget();
 
