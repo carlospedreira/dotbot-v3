@@ -642,6 +642,12 @@
 /* Workflow Section (one per installed workflow) */
 .wf-section {
     margin-bottom: 2px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--primary-08);
+}
+
+.wf-section:last-child {
+    border-bottom: none;
 }
 
 .wf-section.collapsed .wf-detail {

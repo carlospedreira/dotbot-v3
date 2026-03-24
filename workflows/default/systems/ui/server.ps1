@@ -1620,25 +1620,25 @@ try {
                             $installedList += @{
                                 name = "$($manifest.name)"
                                 description = "$($manifest.description)"
-                                icon = if ($manifest.PSObject.Properties['icon']) { "$($manifest.icon)" } else { '' }
-                                version = if ($manifest.PSObject.Properties['version']) { "$($manifest.version)" } else { '' }
-                                author = if ($manifest.PSObject.Properties['author']) { $manifest.author } else { @{} }
-                                rerun = if ($manifest.PSObject.Properties['rerun']) { "$($manifest.rerun)" } else { '' }
-                                license = if ($manifest.PSObject.Properties['license']) { "$($manifest.license)" } else { '' }
-                                tags = if ($manifest.PSObject.Properties['tags']) { @($manifest.tags | Where-Object { $_ }) } else { @() }
-                                categories = if ($manifest.PSObject.Properties['categories']) { @($manifest.categories | Where-Object { $_ }) } else { @() }
-                                repository = if ($manifest.PSObject.Properties['repository']) { "$($manifest.repository)" } else { '' }
-                                homepage = if ($manifest.PSObject.Properties['homepage']) { "$($manifest.homepage)" } else { '' }
-                                agents = if ($manifest.PSObject.Properties['agents'] -and $manifest.agents) { @($manifest.agents | Where-Object { $_ }) } else {
+                                icon = if ($manifest['icon']) { "$($manifest['icon'])" } else { '' }
+                                version = if ($manifest['version']) { "$($manifest['version'])" } else { '' }
+                                author = if ($manifest['author']) { $manifest['author'] } else { @{} }
+                                rerun = if ($manifest['rerun']) { "$($manifest['rerun'])" } else { '' }
+                                license = if ($manifest['license']) { "$($manifest['license'])" } else { '' }
+                                tags = if ($manifest['tags']) { @($manifest['tags'] | Where-Object { $_ }) } else { @() }
+                                categories = if ($manifest['categories']) { @($manifest['categories'] | Where-Object { $_ }) } else { @() }
+                                repository = if ($manifest['repository']) { "$($manifest['repository'])" } else { '' }
+                                homepage = if ($manifest['homepage']) { "$($manifest['homepage'])" } else { '' }
+                                agents = if ($manifest['agents'] -and $manifest['agents'].Count -gt 0) { @($manifest['agents'] | Where-Object { $_ }) } else {
                                     # Fallback: discover from prompts directory
                                     $wfAgentsDir = Join-Path $wfDir "prompts\agents"
                                     if (Test-Path $wfAgentsDir) { @(Get-ChildItem $wfAgentsDir -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }) } else { @() }
                                 }
-                                skills = if ($manifest.PSObject.Properties['skills'] -and $manifest.skills) { @($manifest.skills | Where-Object { $_ }) } else {
+                                skills = if ($manifest['skills'] -and $manifest['skills'].Count -gt 0) { @($manifest['skills'] | Where-Object { $_ }) } else {
                                     $wfSkillsDir = Join-Path $wfDir "prompts\skills"
                                     if (Test-Path $wfSkillsDir) { @(Get-ChildItem $wfSkillsDir -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }) } else { @() }
                                 }
-                                tools = if ($manifest.PSObject.Properties['tools'] -and $manifest.tools) { @($manifest.tools | Where-Object { $_ }) } else { @() }
+                                tools = if ($manifest['tools'] -and $manifest['tools'].Count -gt 0) { @($manifest['tools'] | Where-Object { $_ }) } else { @() }
                                 status = if ($hasRunning) { 'running' } else { 'idle' }
                                 tasks = $wfTasks
                                 has_running_process = [bool]$hasRunning
