@@ -471,7 +471,7 @@ function Invoke-ClaudeStream {
 
     $cliArgs = @(
         "--model", $Model
-        "--enable-auto-mode"
+        "--permission-mode", "auto"
     )
 
     # Only add --no-session-persistence when NOT persisting sessions
@@ -1193,7 +1193,7 @@ function Invoke-Claude {
     Optional session ID for conversation continuity.
     
     .PARAMETER NoPermissions
-    Enable Claude auto mode.
+    Start Claude in auto permission mode.
     
     .EXAMPLE
     Invoke-Claude -Prompt "What is 2+2?"
@@ -1220,7 +1220,7 @@ function Invoke-Claude {
     )
     
     if ($NoPermissions) {
-        $cliArgs += "--enable-auto-mode"
+        $cliArgs += "--permission-mode", "auto"
     }
     
     if ($SessionId) {
