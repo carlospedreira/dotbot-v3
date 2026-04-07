@@ -149,9 +149,10 @@ function updateRelationshipTree(chain, selectedType, selectedFile) {
             const renderItem = (item) => {
                 const isSelected = item.type === selectedType && item.file === selectedFile;
                 const displayName = item.file.split('/').pop().replace(/\.md$/, '');
+                const safeType = (item.type || '').replace(/[^a-zA-Z0-9_-]/g, '');
                 return `
-                    <div class="chain-layer-item${isSelected ? ' selected' : ''}" data-type="${item.type}" data-file="${escapeHtml(item.file)}">
-                        <span class="item-icon ${item.type}">${layer.icon}</span>
+                    <div class="chain-layer-item${isSelected ? ' selected' : ''}" data-type="${escapeHtml(item.type)}" data-file="${escapeHtml(item.file)}">
+                        <span class="item-icon ${safeType}">${layer.icon}</span>
                         <span class="item-name">${escapeHtml(displayName)}</span>
                     </div>
                 `;
@@ -167,22 +168,32 @@ function updateRelationshipTree(chain, selectedType, selectedFile) {
             `;
 
             if (hasFolders) {
+                const renderTreeItems = (node) => {
+                    let out = node.items.map(renderItem).join('');
+                    for (const sub of Object.keys(node.folders).sort()) {
+                        const subFolder = node.folders[sub];
+                        out += renderFolderGroup(sub, renderTreeItems(subFolder), countTreeItems(subFolder));
+                    }
+                    return out;
+                };
+
                 // Render root-level items first
                 html += tree.items.map(renderItem).join('');
 
-                // Render folder groups
+                // Render folder groups (recursively for nested subfolders)
                 for (const folderName of Object.keys(tree.folders).sort()) {
                     const folder = tree.folders[folderName];
-                    const contentHtml = folder.items.map(renderItem).join('');
-                    html += renderFolderGroup(folderName, contentHtml, folder.items.length);
+                    const contentHtml = renderTreeItems(folder);
+                    html += renderFolderGroup(folderName, contentHtml, countTreeItems(folder));
                 }
             } else {
                 // Render flat (no folders) — use original name for display
                 html += items.map(item => {
                     const isSelected = item.type === selectedType && item.file === selectedFile;
+                    const safeType = (item.type || '').replace(/[^a-zA-Z0-9_-]/g, '');
                     return `
-                        <div class="chain-layer-item${isSelected ? ' selected' : ''}" data-type="${item.type}" data-file="${escapeHtml(item.file)}">
-                            <span class="item-icon ${item.type}">${layer.icon}</span>
+                        <div class="chain-layer-item${isSelected ? ' selected' : ''}" data-type="${escapeHtml(item.type)}" data-file="${escapeHtml(item.file)}">
+                            <span class="item-icon ${safeType}">${layer.icon}</span>
                             <span class="item-name">${escapeHtml(item.name)}</span>
                         </div>
                     `;

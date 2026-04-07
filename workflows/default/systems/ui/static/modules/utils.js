@@ -655,7 +655,10 @@ function buildFolderTree(items, pathKey) {
     const root = { items: [], folders: {} };
 
     for (const item of items) {
-        const parts = (item[pathKey] || '').split('/');
+        const itemPath = item[pathKey];
+        if (!itemPath) continue;
+        const parts = String(itemPath).split('/').filter(Boolean);
+        if (parts.length === 0) continue;
         if (parts.length === 1) {
             root.items.push(item);
         } else {

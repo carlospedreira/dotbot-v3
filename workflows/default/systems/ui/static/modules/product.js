@@ -7,49 +7,7 @@
  * Initialize product navigation
  */
 async function initProductNav() {
-    const navContainer = document.querySelector('.product-nav');
-    const viewer = document.getElementById('doc-viewer');
-
-    if (!navContainer) return;
-
-    // Fetch available docs from API
-    try {
-        const response = await fetch(`${API_BASE}/api/product/list`);
-        if (!response.ok) throw new Error('Failed to fetch product docs');
-
-        const data = await response.json();
-        const docs = data.docs || [];
-
-        if (docs.length === 0) {
-            navContainer.innerHTML = '<div class="empty-state">No product docs</div>';
-            return;
-        }
-
-        // Build nav items dynamically
-        navContainer.innerHTML = docs.map((doc, index) => `
-            <div class="product-nav-item${index === 0 ? ' active' : ''}" data-doc="${escapeHtml(doc.name)}">
-                <span class="item-icon doc">${escapeHtml(doc.name.charAt(0).toUpperCase())}</span>
-                <span>${escapeHtml(doc.filename)}</span>
-            </div>
-        `).join('');
-
-        // Add click handlers
-        navContainer.querySelectorAll('.product-nav-item').forEach(item => {
-            item.addEventListener('click', () => {
-                navContainer.querySelectorAll('.product-nav-item').forEach(i => i.classList.remove('active'));
-                item.classList.add('active');
-                loadProductDoc(item.dataset.doc);
-            });
-        });
-
-        // Load first doc
-        if (docs.length > 0) {
-            loadProductDoc(docs[0].name);
-        }
-    } catch (error) {
-        console.error('Failed to load product docs:', error);
-        navContainer.innerHTML = '<div class="empty-state">Error loading docs</div>';
-    }
+    await updateProductFileNav();
 }
 
 /**
@@ -157,11 +115,12 @@ function renderProductTree(tree) {
  * @returns {string} - HTML string
  */
 function renderProductFileItem(doc) {
-    const isBinary = doc.type !== 'md';
+    const type = doc.type || 'md';
+    const isBinary = type !== 'md';
     const binaryClass = isBinary ? ' binary' : '';
     const displayName = doc.filename.split('/').pop().replace(/\.md$/, '');
     const icon = isBinary ? '&#x1F4C4;' : escapeHtml(displayName.charAt(0).toUpperCase());
-    return `<div class="file-nav-item${binaryClass}" data-doc="${escapeHtml(doc.name)}" data-type="${escapeHtml(doc.type || 'md')}" data-filename="${escapeHtml(doc.filename)}" data-size="${doc.size || 0}">
+    return `<div class="file-nav-item${binaryClass}" data-doc="${escapeHtml(doc.name)}" data-type="${escapeHtml(type)}" data-filename="${escapeHtml(doc.filename)}" data-size="${doc.size || 0}">
         <span class="item-icon doc">${icon}</span>
         <span>${escapeHtml(displayName)}</span>
     </div>`;
