@@ -199,11 +199,12 @@ $processApiModule = Join-Path $botDir "systems\ui\modules\ProcessAPI.psm1"
 $stateBuilderModule = Join-Path $botDir "systems\ui\modules\StateBuilder.psm1"
 $steeringHeartbeatScript = Join-Path $botDir "systems\mcp\tools\steering-heartbeat\script.ps1"
 $dotBotLogModule = Join-Path $botDir "systems\runtime\modules\DotBotLog.psm1"
+$consoleSanitizerModule = Join-Path $botDir "systems\runtime\modules\ConsoleSequenceSanitizer.psm1"
 $testControlDir = Join-Path $botDir ".control"
 $testProcessesDir = Join-Path $testControlDir "processes"
 $testLogsDir = Join-Path $testControlDir "logs"
 
-if ((Test-Path $fileWatcherModule) -and (Test-Path $processApiModule) -and (Test-Path $stateBuilderModule) -and (Test-Path $steeringHeartbeatScript) -and (Test-Path $dotBotLogModule)) {
+if ((Test-Path $fileWatcherModule) -and (Test-Path $processApiModule) -and (Test-Path $stateBuilderModule) -and (Test-Path $steeringHeartbeatScript) -and (Test-Path $dotBotLogModule) -and (Test-Path $consoleSanitizerModule)) {
     Import-Module $dotBotLogModule -Force
     Import-Module $fileWatcherModule -Force
     Import-Module $processApiModule -Force
@@ -258,6 +259,25 @@ if ((Test-Path $fileWatcherModule) -and (Test-Path $processApiModule) -and (Test
             -Expected "Wait" `
             -Actual $storedProc.heartbeat_next_action
 
+        $heartbeatBlankResult = Invoke-SteeringHeartbeat -Arguments @{
+            session_id = "test-session-ansi"
+            process_id = $testProcId
+            status = "${esc}[0m"
+            next_action = "${esc}[0m"
+        }
+
+        Assert-True -Name "steering_heartbeat accepts control-only heartbeat updates" `
+            -Condition ($heartbeatBlankResult.success -eq $true) `
+            -Message "Expected heartbeat tool to succeed"
+
+        $storedProc = Get-Content $testProcFile -Raw | ConvertFrom-Json
+        Assert-True -Name "steering_heartbeat normalizes empty heartbeat_status to null" `
+            -Condition ($null -eq $storedProc.heartbeat_status) `
+            -Message "Expected heartbeat_status to be null after sanitization"
+        Assert-True -Name "steering_heartbeat normalizes empty heartbeat_next_action to null" `
+            -Condition ($null -eq $storedProc.heartbeat_next_action) `
+            -Message "Expected heartbeat_next_action to be null after sanitization"
+
         $storedProc.heartbeat_status = "[38;2;56;52;44mIdle[0m"
         $storedProc.heartbeat_next_action = "[38;2;112;104;92mWait[0m"
         $storedProc | ConvertTo-Json -Depth 10 | Set-Content -Path $testProcFile -Encoding utf8NoBOM
@@ -270,6 +290,7 @@ if ((Test-Path $fileWatcherModule) -and (Test-Path $processApiModule) -and (Test
             -Expected "Wait" `
             -Actual $listedProc.heartbeat_next_action
 
+        Clear-StateCache
         $state = Get-BotState
         Assert-Equal -Name "Get-BotState exposes sanitized execution status" `
             -Expected "Idle" `
@@ -277,6 +298,27 @@ if ((Test-Path $fileWatcherModule) -and (Test-Path $processApiModule) -and (Test
         Assert-Equal -Name "Get-BotState exposes sanitized execution next_action" `
             -Expected "Wait" `
             -Actual $state.instances.execution.next_action
+
+        $storedProc.heartbeat_status = "[0m"
+        $storedProc.heartbeat_next_action = "[0m"
+        $storedProc | ConvertTo-Json -Depth 10 | Set-Content -Path $testProcFile -Encoding utf8NoBOM
+
+        $listedProc = @((Get-ProcessList).processes | Where-Object { $_.id -eq $testProcId }) | Select-Object -First 1
+        Assert-True -Name "Get-ProcessList normalizes empty heartbeat_status to null" `
+            -Condition ($null -eq $listedProc.heartbeat_status) `
+            -Message "Expected heartbeat_status to be null after sanitization"
+        Assert-True -Name "Get-ProcessList normalizes empty heartbeat_next_action to null" `
+            -Condition ($null -eq $listedProc.heartbeat_next_action) `
+            -Message "Expected heartbeat_next_action to be null after sanitization"
+
+        Clear-StateCache
+        $state = Get-BotState
+        Assert-True -Name "Get-BotState normalizes empty execution status to null" `
+            -Condition ($null -eq $state.instances.execution.status) `
+            -Message "Expected execution status to be null after sanitization"
+        Assert-True -Name "Get-BotState normalizes empty execution next_action to null" `
+            -Condition ($null -eq $state.instances.execution.next_action) `
+            -Message "Expected execution next_action to be null after sanitization"
     } finally {
         if (Test-Path $testProcFile) {
             Remove-Item $testProcFile -Force -ErrorAction SilentlyContinue

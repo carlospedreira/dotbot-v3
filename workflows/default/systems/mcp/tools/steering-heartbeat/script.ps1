@@ -1,18 +1,4 @@
-$script:ConsoleSequencePattern = "(\x1B\[[0-9;?]*[ -/]*[@-~])|(\[[0-9;?]*[ -/]*[@-~])"
-
-function Remove-ConsoleSequences {
-    param(
-        [AllowNull()]
-        [object]$Text
-    )
-
-    if ($null -eq $Text) {
-        return $null
-    }
-
-    $clean = [regex]::Replace([string]$Text, $script:ConsoleSequencePattern, "")
-    return $clean.Trim()
-}
+Import-Module (Join-Path $PSScriptRoot "..\..\..\runtime\modules\ConsoleSequenceSanitizer.psm1") -Force
 
 function Invoke-SteeringHeartbeat {
     <#
@@ -120,13 +106,13 @@ function Invoke-SteeringHeartbeat {
     }
 
     # Update process file with heartbeat info (atomic write)
-    $sanitizedStatus = Remove-ConsoleSequences $status
-    $sanitizedNextAction = Remove-ConsoleSequences $nextAction
+    $sanitizedStatus = Normalize-ConsoleSequenceText $status
+    $sanitizedNextAction = Normalize-ConsoleSequenceText $nextAction
 
     $processData.last_heartbeat = (Get-Date).ToUniversalTime().ToString("o")
     $processData.last_whisper_index = $currentIndex
     $processData.heartbeat_status = $sanitizedStatus
-    $processData.heartbeat_next_action = if ([string]::IsNullOrWhiteSpace($sanitizedNextAction)) { $null } else { $sanitizedNextAction }
+    $processData.heartbeat_next_action = $sanitizedNextAction
 
     try {
         $tempFile = "$processFile.tmp"

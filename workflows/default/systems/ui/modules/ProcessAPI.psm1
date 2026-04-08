@@ -14,21 +14,7 @@ $script:Config = @{
     ControlDir = $null
 }
 
-$script:ConsoleSequencePattern = "(\x1B\[[0-9;?]*[ -/]*[@-~])|(\[[0-9;?]*[ -/]*[@-~])"
-
-function Remove-ConsoleSequences {
-    param(
-        [AllowNull()]
-        [object]$Text
-    )
-
-    if ($null -eq $Text) {
-        return $null
-    }
-
-    $clean = [regex]::Replace([string]$Text, $script:ConsoleSequencePattern, "")
-    return $clean.Trim()
-}
+Import-Module (Join-Path $PSScriptRoot "..\..\runtime\modules\ConsoleSequenceSanitizer.psm1") -Force
 
 function Sanitize-ProcessDisplayFields {
     param(
@@ -37,12 +23,11 @@ function Sanitize-ProcessDisplayFields {
     )
 
     if ($Process.PSObject.Properties['heartbeat_status']) {
-        $Process.heartbeat_status = Remove-ConsoleSequences $Process.heartbeat_status
+        $Process.heartbeat_status = Normalize-ConsoleSequenceText $Process.heartbeat_status
     }
 
     if ($Process.PSObject.Properties['heartbeat_next_action']) {
-        $cleanNextAction = Remove-ConsoleSequences $Process.heartbeat_next_action
-        $Process.heartbeat_next_action = if ([string]::IsNullOrWhiteSpace($cleanNextAction)) { $null } else { $cleanNextAction }
+        $Process.heartbeat_next_action = Normalize-ConsoleSequenceText $Process.heartbeat_next_action
     }
 
     return $Process
