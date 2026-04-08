@@ -28,7 +28,8 @@ jobs:
             }
 
             const body = pr.body || '';
-            const hasLink = /(?:closes|fixes|resolves)\s+#\d+/i.test(body);
+            // Match: Closes #123, Fixes: #123, Resolves owner/repo#123
+            const hasLink = /(?:closes|fixes|resolves):?\s+(?:[\w.-]+\/[\w.-]+)?#\d+/i.test(body);
 
             if (hasLink) {
               core.info('Linked issue found.');

@@ -24,22 +24,22 @@ jobs:
               return;
             }
 
-            // Issues labelled needs-triage, older than 2 days
+            // Issues labelled needs-triage with no activity for 2+ days
             const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
             const { data: issues } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
               labels: 'needs-triage',
               state: 'open',
-              sort: 'created',
+              sort: 'updated',
               direction: 'asc',
               per_page: 100,
             });
 
-            // Filter out PRs (listForRepo returns both issues and PRs)
+            // Filter out PRs and issues with recent activity
             const stale = issues
               .filter(i => !i.pull_request)
-              .filter(i => new Date(i.created_at) < twoDaysAgo);
+              .filter(i => new Date(i.updated_at) < twoDaysAgo);
             if (stale.length === 0) {
               core.info('No untriaged issues older than 2 days.');
               return;
