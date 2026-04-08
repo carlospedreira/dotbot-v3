@@ -1244,6 +1244,13 @@ function Invoke-Claude {
         [string[]]$PermissionArgs
     )
 
+    # Resolve claude CLI executable (handles .exe, .cmd, and non-Windows platforms)
+    $claudeCmd = Get-Command claude -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $claudeCmd) {
+        $claudeCmd = Get-Command claude.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
+    }
+    $claudeExePath = $claudeCmd.Source
+
     # Prompt delivered via stdin to avoid Windows cmd-line length limit (#167)
     $cliArgs = @(
         "--model", $Model
@@ -1255,7 +1262,7 @@ function Invoke-Claude {
     } elseif ($NoPermissions) {
         $cliArgs += "--dangerously-skip-permissions"
     }
-    
+
     if ($SessionId) {
         $cliArgs += "--session-id", $SessionId
     }
@@ -1270,7 +1277,7 @@ function Invoke-Claude {
         [Console]::InputEncoding = $utf8Encoding
         [Console]::OutputEncoding = $utf8Encoding
 
-        $Prompt | & claude.exe @cliArgs
+        $Prompt | & $claudeExePath @cliArgs
     }
     finally {
         $OutputEncoding = $previousOutputEncoding
