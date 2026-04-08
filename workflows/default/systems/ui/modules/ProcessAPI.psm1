@@ -65,6 +65,7 @@ function Get-ProcessList {
                     $proc.status = 'stopped'
                     $proc.failed_at = $now.ToString("o")
                     $proc | Add-Member -NotePropertyName 'error' -NotePropertyValue "Process terminated unexpectedly" -Force
+                    $proc = Update-ProcessHeartbeatFields -Process $proc
                     $proc | ConvertTo-Json -Depth 10 | Set-Content -Path $pf.FullName -Force -ErrorAction Stop
 
                     # Write activity log so the PROCESSES tab output shows what happened

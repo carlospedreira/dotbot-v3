@@ -1766,8 +1766,13 @@ function updateSteeringStatus(instances) {
     } else if (inst.status) {
         const statusText = stripConsoleSequences(inst.status);
         const nextActionText = stripConsoleSequences(inst.next_action);
-        textEl.textContent = statusText + (nextActionText ? `\n→ ${nextActionText}` : '');
-        textEl.className = 'steering-text';
+        if (statusText) {
+            textEl.textContent = statusText + (nextActionText ? `\n→ ${nextActionText}` : '');
+            textEl.className = 'steering-text';
+        } else {
+            textEl.textContent = 'Awaiting heartbeat...';
+            textEl.className = 'steering-text muted';
+        }
     } else {
         textEl.textContent = 'Awaiting heartbeat...';
         textEl.className = 'steering-text muted';

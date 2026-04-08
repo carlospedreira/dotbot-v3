@@ -205,6 +205,7 @@ $testProcessesDir = Join-Path $testControlDir "processes"
 $testLogsDir = Join-Path $testControlDir "logs"
 
 if ((Test-Path $fileWatcherModule) -and (Test-Path $processApiModule) -and (Test-Path $stateBuilderModule) -and (Test-Path $steeringHeartbeatScript) -and (Test-Path $dotBotLogModule) -and (Test-Path $consoleSanitizerModule)) {
+    Import-Module $consoleSanitizerModule -Force
     Import-Module $dotBotLogModule -Force
     Import-Module $fileWatcherModule -Force
     Import-Module $processApiModule -Force
@@ -258,6 +259,9 @@ if ((Test-Path $fileWatcherModule) -and (Test-Path $processApiModule) -and (Test
         Assert-Equal -Name "steering_heartbeat strips ANSI from stored heartbeat_next_action" `
             -Expected "Wait" `
             -Actual $storedProc.heartbeat_next_action
+        Assert-Equal -Name "Console sanitizer preserves plain bracketed text" `
+            -Expected "[1]" `
+            -Actual (ConvertTo-SanitizedConsoleText "[1]")
 
         $heartbeatBlankResult = Invoke-SteeringHeartbeat -Arguments @{
             session_id = "test-session-ansi"
@@ -319,6 +323,26 @@ if ((Test-Path $fileWatcherModule) -and (Test-Path $processApiModule) -and (Test
         Assert-True -Name "Get-BotState normalizes empty execution next_action to null" `
             -Condition ($null -eq $state.instances.execution.next_action) `
             -Message "Expected execution next_action to be null after sanitization"
+
+        $storedProc.status = "running"
+        $storedProc.pid = 999999
+        $storedProc | Add-Member -NotePropertyName failed_at -NotePropertyValue $null -Force
+        $storedProc | Add-Member -NotePropertyName error -NotePropertyValue $null -Force
+        $storedProc.heartbeat_status = "[38;2;56;52;44mIdle[0m"
+        $storedProc.heartbeat_next_action = "[0m"
+        $storedProc | ConvertTo-Json -Depth 10 | Set-Content -Path $testProcFile -Encoding utf8NoBOM
+
+        $listedProc = @((Get-ProcessList).processes | Where-Object { $_.id -eq $testProcId }) | Select-Object -First 1
+        $rewrittenProc = Get-Content $testProcFile -Raw | ConvertFrom-Json
+        Assert-Equal -Name "dead PID rewrite persists sanitized heartbeat_status" `
+            -Expected "Idle" `
+            -Actual $rewrittenProc.heartbeat_status
+        Assert-True -Name "dead PID rewrite persists null heartbeat_next_action" `
+            -Condition ($null -eq $rewrittenProc.heartbeat_next_action) `
+            -Message "Expected heartbeat_next_action to be null after dead PID rewrite"
+        Assert-Equal -Name "dead PID rewrite returns stopped process" `
+            -Expected "stopped" `
+            -Actual $listedProc.status
     } finally {
         if (Test-Path $testProcFile) {
             Remove-Item $testProcFile -Force -ErrorAction SilentlyContinue
