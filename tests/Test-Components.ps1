@@ -226,6 +226,7 @@ if ((Test-Path $fileWatcherModule) -and (Test-Path $processApiModule) -and (Test
 
     $testProcId = "proc-ansi-sanitize"
     $testProcFile = Join-Path $testProcessesDir "$testProcId.json"
+    $testActivityFile = Join-Path $testProcessesDir "$testProcId.activity.jsonl"
     $esc = [char]27
 
     try {
@@ -349,9 +350,25 @@ if ((Test-Path $fileWatcherModule) -and (Test-Path $processApiModule) -and (Test
         Assert-Equal -Name "dead PID rewrite returns stopped process" `
             -Expected "stopped" `
             -Actual $listedProc.status
+
+        @(
+            (@{
+                timestamp = (Get-Date).ToUniversalTime().ToString("o")
+                type = "text"
+                message = "[38;2;56;52;44m[12:28:39][0m [38;2;112;104;92mGET[0m [kickstart]"
+            } | ConvertTo-Json -Compress)
+        ) | Set-Content -Path $testActivityFile -Encoding utf8NoBOM
+
+        $outputData = Get-ProcessOutput -ProcessId $testProcId -Position 0 -Tail 50
+        Assert-Equal -Name "Get-ProcessOutput strips ANSI fragments from activity messages" `
+            -Expected "[12:28:39] GET [kickstart]" `
+            -Actual $outputData.events[0].message
     } finally {
         if (Test-Path $testProcFile) {
             Remove-Item $testProcFile -Force -ErrorAction SilentlyContinue
+        }
+        if (Test-Path $testActivityFile) {
+            Remove-Item $testActivityFile -Force -ErrorAction SilentlyContinue
         }
     }
 } else {

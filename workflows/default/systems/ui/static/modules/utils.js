@@ -189,7 +189,7 @@ function getActivityIcon(type) {
  */
 function formatActivityEntry(entry) {
     const type = entry.type || '';
-    const message = entry.message || '';
+    const message = stripConsoleSequences(entry.message || '');
     
     // Handle MCP tool calls: mcp__server__tool_name or mcp_server__tool_name
     if (type.startsWith('mcp__') || type.startsWith('mcp_')) {

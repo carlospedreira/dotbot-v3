@@ -298,10 +298,11 @@ function renderOutputHtml(events) {
     for (const evt of events) {
         const ts = evt.timestamp ? new Date(evt.timestamp).toLocaleTimeString() : '';
         const typeClass = evt.type === 'rate_limit' ? 'warning' : (evt.type === 'text' ? 'text' : 'tool');
+        const messageText = stripConsoleSequences(evt.message || '');
         html += `<div class="process-output-line ${typeClass}">`;
         html += `  <span class="output-time">${ts}</span>`;
         html += `  <span class="output-type">${escapeHtml(evt.type || '')}</span>`;
-        html += `  <span class="output-msg">${escapeHtml(evt.message || '')}</span>`;
+        html += `  <span class="output-msg">${escapeHtml(messageText)}</span>`;
         html += `</div>`;
     }
     return html;

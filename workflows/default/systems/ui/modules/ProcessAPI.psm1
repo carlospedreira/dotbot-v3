@@ -16,6 +16,19 @@ $script:Config = @{
 
 Import-Module (Join-Path $PSScriptRoot "..\..\runtime\modules\ConsoleSequenceSanitizer.psm1")
 
+function Update-ActivityEventFields {
+    param(
+        [Parameter(Mandatory)]
+        [object]$Event
+    )
+
+    if ($Event.PSObject.Properties['message']) {
+        $Event.message = ConvertTo-SanitizedConsoleText $Event.message
+    }
+
+    return $Event
+}
+
 function Initialize-ProcessAPI {
     param(
         [Parameter(Mandatory)] [string]$ProcessesDir,
@@ -110,7 +123,7 @@ function Get-ProcessOutput {
             $events = @()
             $startIdx = if ($Position -gt 0) { $Position } else { [Math]::Max(0, $totalLines - $Tail) }
             for ($li = $startIdx; $li -lt $totalLines; $li++) {
-                try { $events += ($allLines[$li] | ConvertFrom-Json) } catch { Write-BotLog -Level Debug -Message "Malformed JSONL line in activity log" -Exception $_ }
+                try { $events += (Update-ActivityEventFields -Event ($allLines[$li] | ConvertFrom-Json)) } catch { Write-BotLog -Level Debug -Message "Malformed JSONL line in activity log" -Exception $_ }
             }
 
             return @{
