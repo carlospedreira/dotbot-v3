@@ -9,9 +9,9 @@ rendering paths.
 #>
 
 # The second alternative intentionally strips orphaned CSI fragments after the
-# ESC byte is lost, but limits the final byte to letters so plain text like
-# "[1]" is preserved. Keep this sanitizer scoped to process heartbeat text.
-$script:ConsoleSequencePattern = "(\x1B\[[0-9;?]*[ -/]*[@-~])|(\[[0-9;?]*[ -/]*[A-Za-z])"
+# ESC byte is lost, but requires CSI-like parameter content or the common
+# parameterless "[m" reset fragment so plain bracketed words are preserved.
+$script:ConsoleSequencePattern = "(\x1B\[[0-9;?]*[ -/]*[@-~])|(\[(?:[0-9?][0-9;?]*[ -/]*[A-Za-z]|m))"
 
 function Remove-ConsoleSequences {
     param(

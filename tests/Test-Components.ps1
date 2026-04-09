@@ -262,6 +262,12 @@ if ((Test-Path $fileWatcherModule) -and (Test-Path $processApiModule) -and (Test
         Assert-Equal -Name "Console sanitizer preserves plain bracketed text" `
             -Expected "[1]" `
             -Actual (ConvertTo-SanitizedConsoleText "[1]")
+        Assert-Equal -Name "Console sanitizer preserves bracketed words" `
+            -Expected "[kickstart] phase 1" `
+            -Actual (ConvertTo-SanitizedConsoleText "[kickstart] phase 1")
+        Assert-True -Name "Console sanitizer strips parameterless orphaned reset fragment" `
+            -Condition ($null -eq (ConvertTo-SanitizedConsoleText "[m")) `
+            -Message "Expected parameterless reset fragment to be removed"
 
         $heartbeatBlankResult = Invoke-SteeringHeartbeat -Arguments @{
             session_id = "test-session-ansi"

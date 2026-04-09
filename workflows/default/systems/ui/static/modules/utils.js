@@ -34,8 +34,8 @@ function escapeAttr(text) {
 /**
  * Remove ANSI/control-sequence fragments from text before rendering.
  * Handles both real ESC-prefixed sequences and orphaned CSI fragments.
- * The orphaned fallback only removes letter-terminated fragments so text like
- * "[1]" is preserved.
+ * The orphaned fallback requires CSI-like parameter content or the common
+ * parameterless "[m" reset fragment so bracketed words are preserved.
  * @param {string} text - Text to clean
  * @returns {string} Cleaned text
  */
@@ -43,7 +43,7 @@ function stripConsoleSequences(text) {
     if (text == null) return '';
     return String(text)
         .replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, '')
-        .replace(/\[[0-9;?]*[ -/]*[A-Za-z]/g, '')
+        .replace(/\[(?:[0-9?][0-9;?]*[ -/]*[A-Za-z]|m)/g, '')
         .trim();
 }
 
