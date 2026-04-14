@@ -392,7 +392,7 @@ function renderTaskQuestionsItem(item) {
                             <textarea class="kickstart-freetext-input" placeholder="Or type a custom answer..."></textarea>
                         </div>
                         <div class="interview-question-submit">
-                            <button class="ctrl-btn-sm primary" onclick="submitTaskQuestion('${escapeHtml(taskId)}', '${escapeHtml(q.id)}')">Submit Q${idx + 1}</button>
+                            <button class="ctrl-btn-sm primary submit-task-question" data-task-id="${escapeHtml(taskId)}" data-question-id="${escapeHtml(q.id)}">Submit Q${idx + 1}</button>
                         </div>
                     </div>
                 `).join('')}
@@ -407,14 +407,14 @@ function renderTaskQuestionsItem(item) {
  * @param {string} questionId - Question ID
  */
 async function submitTaskQuestion(taskId, questionId) {
-    const container = document.querySelector(`.action-item[data-task-id="${taskId}"][data-type="task-questions"]`);
+    const container = document.querySelector(`.action-item[data-task-id="${CSS.escape(taskId)}"][data-type="task-questions"]`);
     if (!container) return;
 
-    const questionBlock = container.querySelector(`.task-question-block[data-question-id="${questionId}"]`);
+    const questionBlock = container.querySelector(`.task-question-block[data-question-id="${CSS.escape(questionId)}"]`);
     if (!questionBlock) return;
 
     // Get selected option for this question
-    const selectedOption = questionBlock.querySelector(`.answer-option.selected[data-question-key="${questionId}"]`);
+    const selectedOption = questionBlock.querySelector(`.answer-option.selected[data-question-key="${CSS.escape(questionId)}"]`);
     const freetextEl = questionBlock.querySelector('.kickstart-freetext-input');
     const freetext = freetextEl ? freetextEl.value.trim() : '';
 
@@ -790,6 +790,11 @@ function attachActionHandlers(container) {
                 }
             }
         });
+    });
+
+    // Task batch questions: per-question submit
+    container.querySelectorAll('.submit-task-question').forEach(btn => {
+        btn.addEventListener('click', () => submitTaskQuestion(btn.dataset.taskId, btn.dataset.questionId));
     });
 
     // Kickstart interview: per-question submit

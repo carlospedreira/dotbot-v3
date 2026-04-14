@@ -287,6 +287,32 @@ try {
             # Fall through to normal analysis+execution below (treated as 'prompt')
             $taskTypeVal = 'prompt'
         }
+        # Recover task_gen tasks that reference a prompt template but have no script_path.
+        # Must run before the auto-dispatch gate so a recovered task falls through to the
+        # normal analysis+execution path instead of being dispatched (and skipped).
+        if ($taskTypeVal -eq 'task_gen' -and -not $task.script_path -and $task.workflow) {
+            try {
+                $wfManifestPath = Join-Path $botRoot "workflows\$($task.workflow)\workflow.yaml"
+                if (Test-Path $wfManifestPath) {
+                    if (-not (Get-Command Read-WorkflowManifest -ErrorAction SilentlyContinue)) {
+                        . (Join-Path $botRoot "systems\runtime\modules\workflow-manifest.ps1")
+                    }
+                    $wfManifest = Read-WorkflowManifest -WorkflowDir (Join-Path $botRoot "workflows\$($task.workflow)")
+                    $matchingPhase = $wfManifest.tasks | Where-Object { $_['name'] -eq $task.name } | Select-Object -First 1
+                    if ($matchingPhase -and $matchingPhase['workflow']) {
+                        $recoveredPromptPath = "recipes/prompts/$($matchingPhase['workflow'])"
+                        $tplPath = Join-Path (Join-Path $botRoot "workflows\$($task.workflow)") $recoveredPromptPath
+                        if (-not (Test-Path $tplPath)) { $tplPath = Join-Path $botRoot $recoveredPromptPath }
+                        if (Test-Path $tplPath) {
+                            Write-Status "Recovering task_gen '$($task.name)' as prompt_template: $recoveredPromptPath" -Type Info
+                            Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Recovered prompt template: $recoveredPromptPath"
+                            $executionPromptTemplate = Get-Content $tplPath -Raw
+                            $taskTypeVal = 'prompt'
+                        }
+                    }
+                }
+            } catch { Write-BotLog -Level Debug -Message "Manifest recovery failed" -Exception $_ }
+        }
         if ($taskTypeVal -notin @('prompt')) {
             Write-Status "Auto-dispatching $taskTypeVal task: $($task.name)" -Type Process
             Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Auto-dispatch $taskTypeVal task: $($task.name)"
@@ -308,43 +334,15 @@ try {
             # Pre-flight: verify script exists before attempting execution
             if ($taskTypeVal -in @('script', 'task_gen')) {
                 if (-not $task.script_path) {
-                    # Attempt recovery: task_gen tasks created before the prompt_template
-                    # mapping fix may have no script_path but reference a prompt template
-                    # via the workflow manifest. Look up the manifest to recover the prompt.
-                    $recoveredPrompt = $null
-                    if ($taskTypeVal -eq 'task_gen' -and $task.workflow) {
-                        try {
-                            $wfManifestPath = Join-Path $botRoot "workflows\$($task.workflow)\workflow.yaml"
-                            if (Test-Path $wfManifestPath) {
-                                if (-not (Get-Command Read-WorkflowManifest -ErrorAction SilentlyContinue)) {
-                                    . (Join-Path $botRoot "systems\runtime\modules\workflow-manifest.ps1")
-                                }
-                                $wfManifest = Read-WorkflowManifest -WorkflowDir (Join-Path $botRoot "workflows\$($task.workflow)")
-                                $matchingPhase = $wfManifest.tasks | Where-Object { $_['name'] -eq $task.name } | Select-Object -First 1
-                                if ($matchingPhase -and $matchingPhase['workflow']) {
-                                    $recoveredPrompt = "recipes/prompts/$($matchingPhase['workflow'])"
-                                }
-                            }
-                        } catch { Write-BotLog -Level Debug -Message "Manifest recovery failed" -Exception $_ }
-                    }
-                    if ($recoveredPrompt) {
-                        Write-Status "Recovering task_gen '$($task.name)' as prompt_template: $recoveredPrompt" -Type Info
-                        Write-ProcessActivity -Id $procId -ActivityType "text" -Message "Recovered prompt template: $recoveredPrompt"
-                        $taskTypeVal = 'prompt'
-                        $templatePath = Join-Path (Join-Path $botRoot "workflows\$($task.workflow)") $recoveredPrompt
-                        if (-not (Test-Path $templatePath)) { $templatePath = Join-Path $botRoot $recoveredPrompt }
-                        if (Test-Path $templatePath) { $executionPromptTemplate = Get-Content $templatePath -Raw }
-                    } else {
-                        $typeError = "Task type '$taskTypeVal' requires script_path but none was provided"
-                        Write-Status $typeError -Type Error
-                        Write-ProcessActivity -Id $procId -ActivityType "error" -Message "$($task.name): $typeError"
-                        try {
-                            Invoke-TaskMarkSkipped -Arguments @{ task_id = $task.id; skip_reason = $typeError } | Out-Null
-                        } catch { Write-BotLog -Level Debug -Message "Logging operation failed" -Exception $_ }
-                        $TaskId = $null; $processData.task_id = $null; $processData.task_name = $null
-                        Start-Sleep -Seconds 3
-                        continue
-                    }
+                    $typeError = "Task type '$taskTypeVal' requires script_path but none was provided"
+                    Write-Status $typeError -Type Error
+                    Write-ProcessActivity -Id $procId -ActivityType "error" -Message "$($task.name): $typeError"
+                    try {
+                        Invoke-TaskMarkSkipped -Arguments @{ task_id = $task.id; skip_reason = $typeError } | Out-Null
+                    } catch { Write-BotLog -Level Debug -Message "Logging operation failed" -Exception $_ }
+                    $TaskId = $null; $processData.task_id = $null; $processData.task_name = $null
+                    Start-Sleep -Seconds 3
+                    continue
                 }
                 $resolvedScript = Join-Path $scriptBase $task.script_path
                 # Fall back to systems/runtime/ for shared scripts not bundled in the workflow dir

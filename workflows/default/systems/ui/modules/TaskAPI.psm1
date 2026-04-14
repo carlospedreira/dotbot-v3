@@ -420,32 +420,36 @@ function Submit-TaskAnswer {
                 }
             }
 
-            $attachDir = Join-Path $script:Config.BotRoot "workspace\attachments\$TaskId\$resolvedQuestionId"
-            if (-not (Test-Path $attachDir)) {
-                New-Item -ItemType Directory -Force -Path $attachDir | Out-Null
-            }
-
-            foreach ($att in @($Attachments)) {
-                $safeName = [System.IO.Path]::GetFileName($att.name)
-                $ext = [System.IO.Path]::GetExtension($safeName).ToLower()
-                if ($ext -notin $allowedExtensions) {
-                    Write-DotbotWarning "Skipping attachment '$safeName': unsupported extension '$ext'"
-                    continue
+            if (-not $resolvedQuestionId) {
+                Write-DotbotWarning "Skipping attachments for task '$TaskId': no pending question could be resolved"
+            } else {
+                $attachDir = Join-Path $script:Config.BotRoot "workspace\attachments\$TaskId\$resolvedQuestionId"
+                if (-not (Test-Path $attachDir)) {
+                    New-Item -ItemType Directory -Force -Path $attachDir | Out-Null
                 }
 
-                try {
-                    $bytes = [System.Convert]::FromBase64String($att.content)
-                    $filePath = Join-Path $attachDir $safeName
-                    [System.IO.File]::WriteAllBytes($filePath, $bytes)
-                    $relPath = ".bot/workspace/attachments/$TaskId/$resolvedQuestionId/$safeName"
-
-                    $attachmentMeta += @{
-                        name = $safeName
-                        size = $att.size
-                        path = $relPath
+                foreach ($att in @($Attachments)) {
+                    $safeName = [System.IO.Path]::GetFileName($att.name)
+                    $ext = [System.IO.Path]::GetExtension($safeName).ToLower()
+                    if ($ext -notin $allowedExtensions) {
+                        Write-DotbotWarning "Skipping attachment '$safeName': unsupported extension '$ext'"
+                        continue
                     }
-                } catch {
-                    Write-DotbotWarning "Failed to save attachment '$($att.name)': $($_.Exception.Message)"
+
+                    try {
+                        $bytes = [System.Convert]::FromBase64String($att.content)
+                        $filePath = Join-Path $attachDir $safeName
+                        [System.IO.File]::WriteAllBytes($filePath, $bytes)
+                        $relPath = ".bot/workspace/attachments/$TaskId/$resolvedQuestionId/$safeName"
+
+                        $attachmentMeta += @{
+                            name = $safeName
+                            size = $att.size
+                            path = $relPath
+                        }
+                    } catch {
+                        Write-DotbotWarning "Failed to save attachment '$($att.name)': $($_.Exception.Message)"
+                    }
                 }
             }
         }
@@ -467,8 +471,8 @@ function Submit-TaskAnswer {
         task_id = $TaskId
         answer  = $Answer
     }
-    if ($QuestionId) {
-        $toolArgs['question_id'] = $QuestionId
+    if ($resolvedQuestionId) {
+        $toolArgs['question_id'] = $resolvedQuestionId
     }
     if ($attachmentMeta.Count -gt 0) {
         $toolArgs['attachments'] = $attachmentMeta

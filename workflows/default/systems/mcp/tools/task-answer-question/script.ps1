@@ -137,7 +137,7 @@ function Invoke-TaskAnswerQuestion {
             answer       = $resolvedAnswer
             answered_at  = $answeredAt
         }
-        Write-InterviewAnswer -BotRoot $global:DotbotProjectRoot -Entry $interviewEntry
+        Write-InterviewAnswer -BotRoot (Join-Path $global:DotbotProjectRoot '.bot') -Entry $interviewEntry
 
         # Add to questions_resolved
         if (-not $taskContent.PSObject.Properties['questions_resolved']) {
@@ -289,7 +289,7 @@ function Invoke-TaskAnswerQuestion {
     $singularMatchingOption = if ($answerType -eq 'option') {
         $pendingQuestion.options | Where-Object { $_.key -eq $answerKey } | Select-Object -First 1
     } else { $null }
-    Write-InterviewAnswer -BotRoot $global:DotbotProjectRoot -Entry @{
+    Write-InterviewAnswer -BotRoot (Join-Path $global:DotbotProjectRoot '.bot') -Entry @{
         question_id  = $pendingQuestion.id
         question     = $pendingQuestion.question
         context      = $pendingQuestion.context

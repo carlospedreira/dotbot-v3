@@ -42,6 +42,15 @@ function Invoke-TaskMarkNeedsInput {
             $existingPending = @($found.Content.pending_questions)
         }
 
+        # Migrate legacy single pending_question into pending_questions before clearing it
+        if ($found.Content.PSObject.Properties['pending_question'] -and $found.Content.pending_question) {
+            $legacyQ = $found.Content.pending_question
+            $alreadyMigrated = $existingPending | Where-Object { $_.id -eq $legacyQ.id }
+            if (-not $alreadyMigrated) {
+                $existingPending = @($legacyQ) + $existingPending
+            }
+        }
+
         $askedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
         $baseCount = $questionsResolved.Count + $existingPending.Count
         $newPending = @()
@@ -167,7 +176,7 @@ function Invoke-TaskMarkNeedsInput {
     # Build result
     $output = @{
         success    = $true
-        message    = if ($question) { "Task paused for human input - question pending" } else { "Task paused for human input - split proposal pending" }
+        message    = if ($questionsArg) { "Task paused for human input - $(@($questionsArg).Count) question(s) pending" } elseif ($question) { "Task paused for human input - question pending" } else { "Task paused for human input - split proposal pending" }
         task_id    = $taskId
         task_name  = $result.task_name
         old_status = $result.old_status
