@@ -118,6 +118,7 @@ Import-Module (Join-Path $PSScriptRoot "modules\ProcessAPI.psm1") -Force
 Import-Module (Join-Path $PSScriptRoot "modules\StateBuilder.psm1") -Force
 Import-Module (Join-Path $PSScriptRoot "modules\NotificationPoller.psm1") -Force
 Import-Module (Join-Path $PSScriptRoot "modules\DecisionAPI.psm1") -Force
+Import-Module (Join-Path $PSScriptRoot "modules\InboxWatcher.psm1") -Force
 
 # Import workflow manifest utilities (for installed workflows API)
 . (Join-Path $botRoot "systems\runtime\modules\workflow-manifest.ps1")
@@ -135,6 +136,7 @@ Initialize-ProcessAPI -ProcessesDir $processesDir -BotRoot $botRoot -ControlDir 
 Initialize-StateBuilder -BotRoot $botRoot -ControlDir $controlDir -ProcessesDir $processesDir
 Initialize-NotificationPoller -BotRoot $botRoot
 Initialize-DecisionAPI -BotRoot $botRoot
+Initialize-InboxWatcher -BotRoot $botRoot
 
 # Request counter for single-line logging
 $script:requestCount = 0
@@ -2396,6 +2398,13 @@ $docContext
         Stop-FileWatchers
     } catch {
         Write-BotLog -Level Debug -Message "Cleanup: failed to stop file watchers" -Exception $_
+    }
+
+    # Stop inbox watchers
+    try {
+        Stop-InboxWatcher
+    } catch {
+        Write-BotLog -Level Warn -Message "Cleanup: failed to stop inbox watcher: $_"
     }
 
     # Safely stop listener if it's still running

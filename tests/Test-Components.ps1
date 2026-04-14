@@ -3300,6 +3300,342 @@ if (Test-Path $dotBotLogModule) {
 }
 
 # ═══════════════════════════════════════════════════════════════════
+# INBOX WATCHER MODULE TESTS
+# ═══════════════════════════════════════════════════════════════════
+Write-Host ""
+Write-Host "--- InboxWatcher Module ---" -ForegroundColor Cyan
+
+$inboxWatcherModule = Join-Path $botDir "systems\ui\modules\InboxWatcher.psm1"
+
+if (Test-Path $inboxWatcherModule) {
+    # DotBotLog may have been removed by the preceding DotBotLog test section — re-import it
+    if (-not (Get-Module DotBotLog)) {
+        if (Test-Path $dotBotLogModule) { Import-Module $dotBotLogModule -Force }
+    }
+
+    $inboxTestRoot = Join-Path ([IO.Path]::GetTempPath()) "inbox-watcher-test-$([guid]::NewGuid().ToString('N').Substring(0,8))"
+    try {
+        # ── Scaffolding ──────────────────────────────────────────────────
+        $inboxBotRoot  = Join-Path $inboxTestRoot ".bot"
+        $settingsDir   = Join-Path $inboxBotRoot "settings"
+        $controlDir    = Join-Path $inboxBotRoot ".control"
+        $inboxFolder   = Join-Path $inboxBotRoot "workspace" "inbox"
+        $logPath       = Join-Path $controlDir "logs" "inbox-watcher.log"
+
+        foreach ($dir in @($settingsDir, $controlDir, $inboxFolder)) {
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        }
+
+        $defaultSettingsPath  = Join-Path $settingsDir "settings.default.json"
+        $overrideSettingsPath = Join-Path $controlDir "settings.json"
+
+        function Write-InboxSettings {
+            param([object]$Config)
+            $Config | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $defaultSettingsPath -Encoding UTF8
+        }
+
+        function Reset-InboxWatcher {
+            try { Stop-InboxWatcher } catch {}
+            Remove-Module InboxWatcher -ErrorAction SilentlyContinue
+            Import-Module $inboxWatcherModule -Force
+        }
+
+        # Test 1. Config guard-rails — missing file, disabled, empty watchers, malformed JSON ─
+        # None of these reach initialization so $Initialized never flips; one Reset at the end suffices.
+        Import-Module $inboxWatcherModule -Force
+
+        $threw = $false
+        try { Initialize-InboxWatcher -BotRoot $inboxBotRoot } catch { $threw = $true }
+        Assert-True -Name "Guard-rail: no-op when settings file is missing" -Condition (-not $threw)
+
+        Write-InboxSettings @{ file_listener = @{ enabled = $false; watchers = @() } }
+        $threw = $false
+        try { Initialize-InboxWatcher -BotRoot $inboxBotRoot } catch { $threw = $true }
+        Assert-True -Name "Guard-rail: no-op when file_listener is disabled" -Condition (-not $threw)
+
+        Write-InboxSettings @{ file_listener = @{ enabled = $true; watchers = @() } }
+        $threw = $false
+        try { Initialize-InboxWatcher -BotRoot $inboxBotRoot } catch { $threw = $true }
+        Assert-True -Name "Guard-rail: no-op when watchers list is empty" -Condition (-not $threw)
+
+        "{ not valid json" | Set-Content -LiteralPath $defaultSettingsPath -Encoding UTF8
+        $threw = $false
+        try { Initialize-InboxWatcher -BotRoot $inboxBotRoot } catch { $threw = $true }
+        Assert-True -Name "Guard-rail: no-op on malformed settings JSON" -Condition (-not $threw)
+
+        Reset-InboxWatcher
+
+        # Test 2. Override resilience — invalid override falls back; valid override replaces defaults ─
+        Write-InboxSettings @{ file_listener = @{ enabled = $false; watchers = @() } }
+        "{ bad" | Set-Content -LiteralPath $overrideSettingsPath -Encoding UTF8
+        $threw = $false
+        try { Initialize-InboxWatcher -BotRoot $inboxBotRoot } catch { $threw = $true }
+        Assert-True -Name "Override: invalid .control/settings.json falls back to defaults without throw" `
+            -Condition (-not $threw)
+        Remove-Item -LiteralPath $overrideSettingsPath -ErrorAction SilentlyContinue
+        Reset-InboxWatcher
+
+        Write-InboxSettings @{ file_listener = @{ enabled = $false; watchers = @() } }
+        @{ file_listener = @{ enabled = $true; watchers = @() } } |
+            ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $overrideSettingsPath -Encoding UTF8
+        $threw = $false
+        try { Initialize-InboxWatcher -BotRoot $inboxBotRoot } catch { $threw = $true }
+        Assert-True -Name "Override: valid .control/settings.json overrides disabled default without throw" `
+            -Condition (-not $threw)
+        Remove-Item -LiteralPath $overrideSettingsPath -ErrorAction SilentlyContinue
+        Reset-InboxWatcher
+
+        # Test 3. Path security — rooted path and path traversal both rejected silently ─────────
+        $rootedPath = if ($IsWindows) { 'C:\Windows' } else { '/etc' }
+        Write-InboxSettings @{
+            file_listener = @{
+                enabled  = $true
+                watchers = @(
+                    @{ folder = $rootedPath; events = @('created') }
+                    @{ folder = '../../etc'; events = @('created') }
+                )
+            }
+        }
+        $threw = $false
+        try { Initialize-InboxWatcher -BotRoot $inboxBotRoot } catch { $threw = $true }
+        Assert-True -Name "Security: rooted path and path-traversal folder both rejected without throw" `
+            -Condition (-not $threw)
+        Reset-InboxWatcher
+
+        # Test 4. Folder & event validation — nonexistent folder skipped; unknown event warned ──
+        Write-InboxSettings @{
+            file_listener = @{
+                enabled  = $true
+                watchers = @(
+                    @{ folder = 'does-not-exist'; events = @('created') }
+                    @{ folder = 'inbox';          events = @('create')  }   # typo: 'create' not 'created'
+                )
+            }
+        }
+        $threw = $false
+        try { Initialize-InboxWatcher -BotRoot $inboxBotRoot } catch { $threw = $true }
+        Assert-True -Name "Validation: nonexistent folder and unknown event type both skip without throw" `
+            -Condition (-not $threw)
+        Reset-InboxWatcher
+
+        # Test 5. Config defaults — non-numeric max_concurrent and coalesce_window fall back ─────
+        Write-InboxSettings @{
+            file_listener = @{
+                enabled                 = $true
+                max_concurrent          = "bad"
+                coalesce_window_seconds = "bad"
+                watchers                = @(@{ folder = 'inbox'; events = @('created') })
+            }
+        }
+        $threw = $false
+        try { Initialize-InboxWatcher -BotRoot $inboxBotRoot } catch { $threw = $true }
+        Assert-True -Name "Defaults: non-numeric max_concurrent and coalesce_window fall back without throw" `
+            -Condition (-not $threw)
+        Reset-InboxWatcher
+
+        # Test 6. Worker startup — valid config spawns worker, creates log, writes startup entry ─
+        if (Test-Path -LiteralPath $logPath) { Remove-Item -LiteralPath $logPath -Force -ErrorAction SilentlyContinue }
+        Write-InboxSettings @{
+            file_listener = @{
+                enabled  = $true
+                watchers = @(@{ folder = 'inbox'; events = @('created') })
+            }
+        }
+        $threw = $false
+        try { Initialize-InboxWatcher -BotRoot $inboxBotRoot } catch { $threw = $true }
+        Assert-True -Name "Startup: worker starts for valid config without throw" -Condition (-not $threw)
+
+        Start-Sleep -Milliseconds 600   # let worker runspace write its startup log entry
+        Assert-True -Name "Startup: log file created by worker runspace" `
+            -Condition (Test-Path -LiteralPath $logPath)
+        if (Test-Path -LiteralPath $logPath) {
+            $startupLog = Get-Content -LiteralPath $logPath -Raw -ErrorAction SilentlyContinue
+            Assert-True -Name "Startup: log contains 'Worker started' message" `
+                -Condition ($startupLog -match 'Worker started') `
+                -Message "Expected 'Worker started' in log"
+        }
+
+        # Test 7. Lifecycle — re-entrancy guard, stop cleans up, re-init after stop ─────────────
+        # Continues with the running worker from Test 6; no reset needed.
+        $linesBefore = @(Get-Content -LiteralPath $logPath -ErrorAction SilentlyContinue).Count
+        $threw = $false
+        try { Initialize-InboxWatcher -BotRoot $inboxBotRoot } catch { $threw = $true }
+        Start-Sleep -Milliseconds 300
+        $linesAfter = @(Get-Content -LiteralPath $logPath -ErrorAction SilentlyContinue).Count
+        Assert-True -Name "Lifecycle: re-entrancy guard — second init spawns no additional workers" `
+            -Condition ($linesAfter -eq $linesBefore) `
+            -Message "Log grew after 2nd init: before=$linesBefore after=$linesAfter"
+
+        $threw = $false
+        try { Stop-InboxWatcher } catch { $threw = $true }
+        Assert-True -Name "Lifecycle: Stop-InboxWatcher cleans up without throw" -Condition (-not $threw)
+
+        $threw = $false
+        try { Initialize-InboxWatcher -BotRoot $inboxBotRoot } catch { $threw = $true }
+        Assert-True -Name "Lifecycle: re-init after stop succeeds (Initialized flag reset)" -Condition (-not $threw)
+        Stop-InboxWatcher
+
+        # ═══════════════════════════════════════════════════════════════
+        # Behavioral tests — stub launcher satisfies the Test-Path guard
+        # without needing a real dotbot install.
+        # ═══════════════════════════════════════════════════════════════
+        $stubLauncherDir = Join-Path $inboxBotRoot "systems" "runtime"
+        $null = New-Item -ItemType Directory -Force -Path $stubLauncherDir
+        "# test stub — exits immediately" |
+            Set-Content -LiteralPath (Join-Path $stubLauncherDir "launch-process.ps1") -Encoding UTF8
+
+        $launchersDir = Join-Path $controlDir "launchers"
+
+        function Get-NewLog {
+            param([int]$After = 0)
+            if (-not (Test-Path -LiteralPath $logPath)) { return '' }
+            $lines = Get-Content -LiteralPath $logPath -ErrorAction SilentlyContinue
+            if ($null -eq $lines -or $After -ge $lines.Count) { return '' }
+            ($lines[$After..($lines.Count - 1)]) -join "`n"
+        }
+        function Get-LogLineCount {
+            if (-not (Test-Path -LiteralPath $logPath)) { return 0 }
+            @(Get-Content -LiteralPath $logPath -ErrorAction SilentlyContinue).Count
+        }
+
+        $behavSettings = @{
+            file_listener = @{
+                enabled                 = $true
+                coalesce_window_seconds = 1
+                watchers                = @(@{ folder = 'inbox'; events = @('created') })
+            }
+        }
+
+        # Test 8. File detection + launcher creation ──────────────────────────────────────────
+        # Worst-case timing: 2s WaitForChanged timeout + 1s coalesce + 2s next timeout + 2s buffer = 7s
+        Write-InboxSettings $behavSettings
+        Reset-InboxWatcher
+        Initialize-InboxWatcher -BotRoot $inboxBotRoot
+        Start-Sleep -Milliseconds 600   # let runspace reach WaitForChanged before dropping file
+        $mark8 = Get-LogLineCount
+
+        'hello' | Set-Content -LiteralPath (Join-Path $inboxFolder "detect-test.txt") -Encoding UTF8
+        Start-Sleep -Seconds 7
+
+        $log8 = Get-NewLog -After $mark8
+        Assert-True -Name "Detection: worker detects and queues a newly created file" `
+            -Condition ($log8 -match 'Queued.*detect-test\.txt') `
+            -Message "Expected 'Queued.*detect-test.txt'; log: $log8"
+        Assert-True -Name "Detection: task-creation launched after coalesce window" `
+            -Condition ($log8 -match 'Launched:') `
+            -Message "Expected 'Launched:' in log; got: $log8"
+        $launchers8 = @(Get-ChildItem -Path $launchersDir -Filter "inbox-launcher-*.ps1" -File -ErrorAction SilentlyContinue)
+        Assert-True -Name "Detection: inbox-launcher-*.ps1 wrapper created in .control/launchers/" `
+            -Condition ($launchers8.Count -gt 0) `
+            -Message "Expected inbox-launcher-*.ps1 in $launchersDir"
+        if ($launchers8.Count -gt 0) {
+            $wc8 = Get-Content -LiteralPath $launchers8[0].FullName -Raw -ErrorAction SilentlyContinue
+            Assert-True -Name "Detection: launcher wrapper invokes launch-process.ps1 with -Type task-creation" `
+                -Condition ($wc8 -match 'launch-process\.ps1' -and $wc8 -match 'task-creation') `
+                -Message "Wrapper missing launch-process.ps1 or task-creation; content: $wc8"
+        }
+        Stop-InboxWatcher
+        Get-ChildItem -Path $launchersDir -Filter "inbox-*" -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+
+        # Test 9. Debounce + coalescing — shared watcher, two sequential sub-scenarios ──────────
+        Write-InboxSettings @{
+            file_listener = @{
+                enabled                 = $true
+                coalesce_window_seconds = 1
+                watchers                = @(@{ folder = 'inbox'; events = @('created', 'updated') })
+            }
+        }
+        Reset-InboxWatcher
+        Initialize-InboxWatcher -BotRoot $inboxBotRoot
+        Start-Sleep -Milliseconds 600
+
+        # Sub-case A: same file touched twice within 5 s → only one Queued entry (debounced)
+        $mark9a = Get-LogLineCount
+        $debounceFile = Join-Path $inboxFolder "dedup.txt"
+        'v1' | Set-Content -LiteralPath $debounceFile -Encoding UTF8    # first event — queued
+        Start-Sleep -Milliseconds 800                                    # well within 5 s debounce window
+        'v2' | Set-Content -LiteralPath $debounceFile -Encoding UTF8    # second event — debounced
+        Start-Sleep -Seconds 7
+        $log9a = Get-NewLog -After $mark9a
+        Assert-True -Name "Debounce: same file touched twice within 5 s produces only one Queued entry" `
+            -Condition (([regex]::Matches($log9a, 'Queued.*dedup\.txt')).Count -eq 1) `
+            -Message "Expected 1 Queued entry for dedup.txt; log: $log9a"
+
+        # Sub-case B: three files in quick succession → single batch launch for all three
+        Get-ChildItem -Path $launchersDir -Filter "inbox-*" -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+        $mark9b = Get-LogLineCount
+        'a' | Set-Content -LiteralPath (Join-Path $inboxFolder "batch-a.txt") -Encoding UTF8
+        Start-Sleep -Milliseconds 200
+        'b' | Set-Content -LiteralPath (Join-Path $inboxFolder "batch-b.txt") -Encoding UTF8
+        Start-Sleep -Milliseconds 200
+        'c' | Set-Content -LiteralPath (Join-Path $inboxFolder "batch-c.txt") -Encoding UTF8
+        Start-Sleep -Seconds 7
+        $log9b = Get-NewLog -After $mark9b
+        Assert-True -Name "Coalescing: three quick files trigger a single batch launch" `
+            -Condition (([regex]::Matches($log9b, 'Launching task-creation')).Count -eq 1) `
+            -Message "Expected 1 batch launch; log: $log9b"
+        Assert-True -Name "Coalescing: batch launch reports all three files" `
+            -Condition ($log9b -match 'Launching task-creation for 3 file') `
+            -Message "Expected 'for 3 file' in launch log; got: $log9b"
+
+        Stop-InboxWatcher
+        Get-ChildItem -Path $launchersDir -Filter "inbox-*" -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+
+        # Test 10. Filename sanitization + stop boundary ──────────────────────────────────────
+        Write-InboxSettings $behavSettings
+        Reset-InboxWatcher
+        Initialize-InboxWatcher -BotRoot $inboxBotRoot
+        Start-Sleep -Milliseconds 600
+
+        # Sub-case A: backtick and dollar in filename are replaced with underscore in wrapper
+        $mark10a = Get-LogLineCount
+        $unsafeFile = Join-Path $inboxFolder 'test`$name.txt'
+        'payload' | Set-Content -LiteralPath $unsafeFile -Encoding UTF8
+        Start-Sleep -Seconds 7
+        $log10a = Get-NewLog -After $mark10a
+        Assert-True -Name "Sanitization: file with backtick and dollar is detected and queued" `
+            -Condition ($log10a -match 'Queued') `
+            -Message "Expected file to be detected; log: $log10a"
+        $wrappers10 = @(Get-ChildItem -Path $launchersDir -Filter "inbox-launcher-*.ps1" -File -ErrorAction SilentlyContinue)
+        if ($wrappers10.Count -gt 0) {
+            $wc10 = Get-Content -LiteralPath $wrappers10[0].FullName -Raw -ErrorAction SilentlyContinue
+            Assert-True -Name "Sanitization: wrapper replaces backtick and dollar with underscore" `
+                -Condition ($wc10 -match 'test__name\.txt') `
+                -Message "Expected 'test__name.txt' in wrapper; got: $wc10"
+        } else {
+            Write-TestResult -Name "Sanitization: wrapper replaces backtick and dollar with underscore" `
+                -Status Skip -Message "No launcher wrapper found (file detection may have failed)"
+        }
+
+        # Sub-case B: no worker activity after Stop-InboxWatcher
+        Stop-InboxWatcher
+        Start-Sleep -Milliseconds 400   # let runspace fully exit
+        $mark10b = Get-LogLineCount
+        'payload' | Set-Content -LiteralPath (Join-Path $inboxFolder "after-stop.txt") -Encoding UTF8
+        Start-Sleep -Seconds 6
+        $log10b = Get-NewLog -After $mark10b
+        Assert-True -Name "Stop boundary: no file events logged after Stop-InboxWatcher" `
+            -Condition (-not ($log10b -match 'Queued|Launching')) `
+            -Message "Worker still active after stop; new log: $log10b"
+
+        Get-ChildItem -Path $launchersDir -Filter "inbox-*" -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+
+    } finally {
+        try { Stop-InboxWatcher } catch {}
+        Remove-Module InboxWatcher -ErrorAction SilentlyContinue
+        if ($inboxTestRoot -and (Test-Path $inboxTestRoot)) {
+            Remove-Item $inboxTestRoot -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+} else {
+    Write-TestResult -Name "InboxWatcher module exists" -Status Skip -Message "Module not found at $inboxWatcherModule"
+}
+
+# ═══════════════════════════════════════════════════════════════════
 # CLEANUP
 # ═══════════════════════════════════════════════════════════════════
 
