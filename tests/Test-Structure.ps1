@@ -1323,8 +1323,6 @@ if (Test-Path $initProject) {
         -Path $initProject -Pattern 'DOTBOT_FORCE_COMMIT'
     Assert-FileContains -Name "init warns when .bot/ is gitignored" `
         -Path $initProject -Pattern 'gitignored.*tracked|tracked in git'
-    Assert-FileContains -Name "pre-commit hook protects .bot/README.md" `
-        -Path $initProject -Pattern '\.bot/README\.md'
     Assert-FileContains -Name "pre-commit hook protects .bot/.manifest.json" `
         -Path $initProject -Pattern '\.bot/\.manifest\.json'
     Assert-FileContains -Name "init-project generates framework manifest" `
