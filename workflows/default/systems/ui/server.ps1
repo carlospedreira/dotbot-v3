@@ -82,6 +82,20 @@ if (Test-Path $dotBotLogPath) {
 Import-Module (Join-Path $botRoot "systems\runtime\modules\DotBotTheme.psm1") -Force
 $t = Get-DotBotTheme
 
+# Test-ManifestCondition lives in ManifestCondition.psm1 and is needed by
+# Get-WorkflowFormConfig (called from /api/info). workflow-manifest.ps1 imports
+# it transitively, but dot-source + module scoping made the function invisible
+# to handlers in some runs. Mirror task-get-next/script.ps1: explicit absolute
+# path import + Get-Command assertion so failure is loud at startup, not 500
+# per request.
+$manifestConditionModule = Join-Path $botRoot "systems\runtime\modules\ManifestCondition.psm1"
+if (-not (Get-Module ManifestCondition)) {
+    Import-Module $manifestConditionModule -Force -DisableNameChecking -Global
+}
+if (-not (Get-Command Test-ManifestCondition -ErrorAction SilentlyContinue)) {
+    throw "Test-ManifestCondition not available after importing $manifestConditionModule. Re-run 'pwsh install.ps1' (dotbot repo) or 'dotbot init' (target project) to refresh .bot/ files."
+}
+
 # Write selected port so go.ps1 (and other tools) can discover it
 $Port.ToString() | Set-Content (Join-Path $controlDir "ui-port") -NoNewline -Encoding UTF8
 
