@@ -1144,11 +1144,11 @@ if (Test-Path $sentinel) {
     } finally { Pop-Location }
     if ($botIgnored) {
         $ignoreSource = & git -C $ProjectDir check-ignore -v -- ".bot/systems/mcp/dotbot-mcp.ps1" 2>$null
-        Write-DotbotWarning ".bot/ is gitignored — dotbot requires it to be tracked in git."
+        Write-DotbotError ".bot/ is gitignored. dotbot requires it to be tracked in git, otherwise framework integrity, worktree state sharing, and the pre-commit guard all silently break."
         if ($ignoreSource) {
             Write-DotbotCommand "Ignore source: $ignoreSource"
         }
-        Write-DotbotCommand "Remove the rule (or add '!/.bot/' to re-include) before using dotbot."
+        Write-DotbotCommand "Fix: remove the rule (or add '!/.bot/' to re-include), then re-run 'dotbot init --force'."
     }
 }
 
