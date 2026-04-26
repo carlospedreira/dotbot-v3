@@ -653,6 +653,22 @@ function renderWorkflowControls(workflows) {
         const ledClass = isRunning ? 'led pulse' : 'led off';
         const displayName = escapeHtml(wf.name);
         const desc = wf.description ? escapeHtml(wf.description.substring(0, 60)) : '';
+        const pendingCount = (wf.tasks?.todo ?? 0) + (wf.tasks?.in_progress ?? 0);
+        if (wf.is_synthetic && wf.name === 'pending-tasks') {
+            const label = `Pending Tasks${pendingCount > 0 ? `  [${pendingCount}]` : ''}`;
+            return `
+            <div class="process-control-row">
+                <div class="process-control-header">
+                    <span class="${ledClass} wf-led"></span>
+                    <span class="process-control-label" title="${desc}">${escapeHtml(label)}</span>
+                </div>
+                <div class="process-control-actions">
+                    <button class="ctrl-btn-xs primary wf-run-btn" title="Run any pending task (workflow-agnostic)" ${isRunning ? 'disabled' : ''}>Run</button>
+                    <button class="ctrl-btn-xs wf-stop-btn" title="Stop the pending-tasks runner" ${!isRunning ? 'disabled' : ''}>Stop</button>
+                </div>
+            </div>
+        `;
+        }
         return `
             <div class="process-control-row">
                 <div class="process-control-header">
@@ -676,10 +692,93 @@ function renderWorkflowControls(workflows) {
         const led = row.querySelector('.wf-led');
         if (led) led.id = `wf-led-${wf.name}`;
         const runBtn = row.querySelector('.wf-run-btn');
-        if (runBtn) runBtn.addEventListener('click', () => runWorkflow(wf.name, wf.has_form, runBtn));
         const stopBtn = row.querySelector('.wf-stop-btn');
-        if (stopBtn) stopBtn.addEventListener('click', () => stopWorkflow(wf.name));
+        if (wf.is_synthetic && wf.name === 'pending-tasks') {
+            // If the server says the runner is no longer active, release the
+            // in-flight guard so the Run button is usable again (it was kept
+            // locked after a successful launch to prevent a double-click window).
+            if (!(wf.has_running_process || wf.status === 'running')) {
+                runWorkflowInFlight.delete('pending-tasks');
+            }
+            if (runBtn) runBtn.addEventListener('click', () => runPendingTasks(runBtn));
+            if (stopBtn) stopBtn.addEventListener('click', () => stopPendingTasks());
+        } else {
+            if (runBtn) runBtn.addEventListener('click', () => runWorkflow(wf.name, wf.has_form, runBtn));
+            if (stopBtn) stopBtn.addEventListener('click', () => stopWorkflow(wf.name));
+        }
     });
+}
+
+/**
+ * Launch a workflow-agnostic task runner that drains pending todo tasks
+ * regardless of `task.workflow`. Reverses the gap left by PR #274.
+ */
+async function runPendingTasks(runBtn) {
+    if (runWorkflowInFlight.has('pending-tasks')) return;
+    runWorkflowInFlight.add('pending-tasks');
+    if (runBtn) runBtn.disabled = true;
+    let launched = false;
+    try {
+        const response = await fetch(`${API_BASE}/api/tasks/run-pending`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        const data = await response.json();
+        if (data.success) {
+            launched = true;
+            showSignalFeedback(`Launched pending-tasks runner: ${data.process_id ?? data.pid}`);
+            showToast('Pending-tasks runner started', 'success');
+        } else {
+            showSignalFeedback(`Error: ${data.error || 'Launch failed'}`);
+        }
+        await pollState();
+    } catch (error) {
+        console.error('runPendingTasks error:', error);
+        showSignalFeedback(`Error: ${error.message}`);
+    } finally {
+        // On a successful launch, leave the in-flight guard set and the button
+        // disabled. updateWorkflowControlStates skips the synthetic row to avoid
+        // LED flicker, so until the next /api/workflows/installed render swaps
+        // the row for one whose Run button reflects has_running_process, the
+        // old button must stay disabled to prevent a double-launch. On failure,
+        // restore both so the user can retry.
+        if (!launched) {
+            runWorkflowInFlight.delete('pending-tasks');
+            if (runBtn) runBtn.disabled = false;
+        }
+    }
+}
+
+/**
+ * Signal stop to all running pending-tasks runners.
+ */
+async function stopPendingTasks() {
+    try {
+        const response = await fetch(`${API_BASE}/api/tasks/stop-pending`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        const data = await response.json();
+        if (data.success) {
+            showSignalFeedback(`Stop signal sent (${data.stopped} runner${data.stopped === 1 ? '' : 's'})`);
+            showToast('Pending-tasks stop signal sent', 'success');
+        } else {
+            showSignalFeedback(`Error: ${data.error || 'Stop failed'}`);
+        }
+        // updateWorkflowControlStates explicitly skips the synthetic pending-tasks
+        // row, so pollState alone won't refresh its Run/Stop buttons. Force an
+        // immediate /api/workflows/installed render so the row reflects the new
+        // state without waiting for the next throttled refresh.
+        await pollState();
+        if (typeof updateInstalledWorkflowControls === 'function') {
+            await updateInstalledWorkflowControls();
+        }
+    } catch (error) {
+        console.error('stopPendingTasks error:', error);
+        showSignalFeedback(`Error: ${error.message}`);
+    }
 }
 
 /**
@@ -698,20 +797,20 @@ async function runWorkflow(name, hasForm, runBtn) {
     runWorkflowInFlight.add(name);
     if (runBtn) runBtn.disabled = true;
 
-    // If workflow has a form, open the kickstart modal so the user can provide
-    // project context and upload files before tasks are created.
-    // The modal submission routes to the task-runner engine (not kickstart).
+    // If workflow has a form, open the workflow-launch dialog so the user can
+    // provide project context and upload files before tasks are created.
+    // Submission routes to the task-runner engine.
     if (hasForm) {
         try {
-            if (typeof openKickstartModal === 'function') {
-                await openKickstartModal(name, { useTaskRunner: true });
+            if (typeof openWorkflowLaunchDialog === 'function') {
+                await openWorkflowLaunchDialog(name, { useTaskRunner: true });
             } else {
-                console.warn('Workflow requires a form but kickstart modal is not available');
-                showToast('Kickstart modal is not available', 'warning');
+                console.warn('Workflow requires a form but the workflow-launch dialog is not available');
+                showToast('Workflow-launch dialog is not available', 'warning');
             }
         } finally {
             // Release the in-flight guard and re-enable the button once the
-            // modal is open. The modal has its own kickstartSubmitting guard
+            // modal is open. The modal has its own workflowLaunchSubmitting guard
             // from here on.
             runWorkflowInFlight.delete(name);
             if (runBtn) runBtn.disabled = false;
@@ -803,6 +902,10 @@ function updateWorkflowControlStates(workflowsState) {
 
     container.querySelectorAll('.process-control-row[data-workflow]').forEach(row => {
         const name = row.dataset.workflow;
+        // Synthetic rows (e.g. pending-tasks) are not in /api/state's workflows
+        // map; their fresh state arrives with the next /api/workflows/installed
+        // re-render. Skip here to avoid resetting the LED to "off" between fetches.
+        if (name === 'pending-tasks') return;
         const wfState = workflowsState[name];
         const led = row.querySelector('.led');
         const runBtn = row.querySelector('.ctrl-btn-xs.primary');
