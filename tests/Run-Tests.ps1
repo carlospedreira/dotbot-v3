@@ -58,8 +58,10 @@ Write-Host ""
 $devDir = Split-Path $PSScriptRoot -Parent  # repo root
 $installDir = Join-Path $HOME "dotbot"
 if ((Test-Path $installDir) -and (2 -in $layersToRun -or 3 -in $layersToRun -or 4 -in $layersToRun)) {
-    $devNewest = (Get-ChildItem "$devDir\workflows","$devDir\stacks" -Recurse -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1).LastWriteTime
-    $installNewest = (Get-ChildItem "$installDir\workflows","$installDir\stacks" -Recurse -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1).LastWriteTime
+    # scripts/ is included so changes to init-project.ps1 / Platform-Functions.psm1
+    # / etc. trigger an auto-reinstall (and downstream golden rebuild).
+    $devNewest = (Get-ChildItem "$devDir\workflows","$devDir\stacks","$devDir\scripts" -Recurse -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1).LastWriteTime
+    $installNewest = (Get-ChildItem "$installDir\workflows","$installDir\stacks","$installDir\scripts" -Recurse -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1).LastWriteTime
     if ($devNewest -gt $installNewest) {
         Write-Host "  ⚠ Installed dotbot is stale (dev source is newer)" -ForegroundColor Yellow
         Write-Host "  → Auto-installing from dev source..." -ForegroundColor Yellow
@@ -70,6 +72,30 @@ if ((Test-Path $installDir) -and (2 -in $layersToRun -or 3 -in $layersToRun -or 
             Write-Host "  ✗ Install failed — tests may use stale code" -ForegroundColor Red
         }
         Write-Host ""
+    }
+}
+
+# ── Golden snapshot fixtures ─────────────────────────────────────────────
+# Most Layer 2+ tests just need a ready .bot/, not a fresh init. We build
+# .bot/ once per workflow flavor here and tests clone the matching golden
+# instead of paying the 30s init cost per section.
+if (2 -in $layersToRun -or 3 -in $layersToRun) {
+    if (-not (Test-Path $installDir)) {
+        Write-Host "  ✗ dotbot is not installed at $installDir" -ForegroundColor Red
+        Write-Host "  → Run: pwsh install.ps1" -ForegroundColor Yellow
+        Write-Host ""
+        exit 1
+    }
+    Import-Module "$PSScriptRoot\Test-Helpers.psm1" -DisableNameChecking
+    try {
+        Initialize-GoldenSnapshots -Flavors @('default', 'start-from-jira', 'start-from-pr', 'start-from-repo') | Out-Null
+        Write-Host ""
+    } catch {
+        # Layer 2/3 hard-depends on goldens. Continuing would only produce
+        # noisy downstream failures, so fail fast here.
+        Write-Host "  ✗ Golden snapshot build failed: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host ""
+        exit 1
     }
 }
 
