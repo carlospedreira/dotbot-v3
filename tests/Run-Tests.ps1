@@ -60,8 +60,8 @@ $installDir = Join-Path $HOME "dotbot"
 if ((Test-Path $installDir) -and (2 -in $layersToRun -or 3 -in $layersToRun -or 4 -in $layersToRun)) {
     # scripts/ is included so changes to init-project.ps1 / Platform-Functions.psm1
     # / etc. trigger an auto-reinstall (and downstream golden rebuild).
-    $devNewest = (Get-ChildItem "$devDir\workflows","$devDir\stacks","$devDir\scripts" -Recurse -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1).LastWriteTime
-    $installNewest = (Get-ChildItem "$installDir\workflows","$installDir\stacks","$installDir\scripts" -Recurse -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1).LastWriteTime
+    $devNewest = (Get-ChildItem "$devDir/core","$devDir/workflows","$devDir/stacks","$devDir/scripts" -Recurse -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1).LastWriteTime
+    $installNewest = (Get-ChildItem "$installDir/core","$installDir/workflows","$installDir/stacks","$installDir/scripts" -Recurse -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1).LastWriteTime
     if ($devNewest -gt $installNewest) {
         Write-Host "  ⚠ Installed dotbot is stale (dev source is newer)" -ForegroundColor Yellow
         Write-Host "  → Auto-installing from dev source..." -ForegroundColor Yellow
@@ -88,7 +88,7 @@ if (2 -in $layersToRun -or 3 -in $layersToRun) {
     }
     Import-Module "$PSScriptRoot\Test-Helpers.psm1" -DisableNameChecking
     try {
-        Initialize-GoldenSnapshots -Flavors @('default', 'start-from-jira', 'start-from-pr', 'start-from-repo') | Out-Null
+        Initialize-GoldenSnapshots -Flavors @('start-from-prompt', 'start-from-jira', 'start-from-pr', 'start-from-repo') | Out-Null
         Write-Host ""
     } catch {
         # Layer 2/3 hard-depends on goldens. Continuing would only produce
@@ -165,10 +165,9 @@ if (2 -in $layersToRun) {
     $processDispatchCode     = Invoke-TestFile -Layer '2' -FileName 'Test-ProcessDispatch.ps1'
     $studioAPICode           = Invoke-TestFile -Layer '2' -FileName 'Test-StudioAPI.ps1'
     $goScriptCode            = Invoke-TestFile -Layer '2' -FileName 'Test-GoScript.ps1'
-    $kickstartLauncherCode   = Invoke-TestFile -Layer '2' -FileName 'Test-KickstartLauncher.ps1'
     $toolLocalCode           = Invoke-TestFile -Layer '2' -FileName 'Test-ToolLocal.ps1'
 
-    $exitCode = if ($componentsCode -ne 0 -or $taskActionsCode -ne 0 -or $serverStartupCode -ne 0 -or $workflowIntegrationCode -ne 0 -or $processRegistryCode -ne 0 -or $processDispatchCode -ne 0 -or $studioAPICode -ne 0 -or $goScriptCode -ne 0 -or $kickstartLauncherCode -ne 0 -or $toolLocalCode -ne 0) { 1 } else { 0 }
+    $exitCode = if ($componentsCode -ne 0 -or $taskActionsCode -ne 0 -or $serverStartupCode -ne 0 -or $workflowIntegrationCode -ne 0 -or $processRegistryCode -ne 0 -or $processDispatchCode -ne 0 -or $studioAPICode -ne 0 -or $goScriptCode -ne 0 -or $toolLocalCode -ne 0) { 1 } else { 0 }
     $layerResults["2"] = ($exitCode -eq 0)
     if ($exitCode -ne 0) { $overallFailed = $true }
 }

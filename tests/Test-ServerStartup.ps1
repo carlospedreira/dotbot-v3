@@ -26,7 +26,7 @@ Write-Host ""
 Reset-TestResults
 
 # Check prerequisite: dotbot must be installed
-$dotbotInstalled = Test-Path (Join-Path $dotbotDir "workflows\default")
+$dotbotInstalled = Test-Path (Join-Path $dotbotDir "core")
 if (-not $dotbotInstalled) {
     Write-TestResult -Name "Layer 2 prerequisites" -Status Fail -Message "dotbot not installed globally — run install.ps1 first"
     Write-TestSummary -LayerName "Layer 2: Server Startup"
@@ -47,7 +47,7 @@ function Start-UiServer {
         [string]$BotDir
     )
 
-    $serverScript = Join-Path $BotDir "systems\ui\server.ps1"
+    $serverScript = Join-Path $BotDir "core/ui/server.ps1"
     if (-not (Test-Path $serverScript)) {
         throw "UI server script not found: $serverScript"
     }

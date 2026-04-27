@@ -70,7 +70,7 @@ if (-not $jiraEmailRecipient) {
     $missing += "DOTBOT_JIRA_EMAIL_RECIPIENT"
 }
 
-$dotbotInstalled = Test-Path (Join-Path $dotbotDir "workflows\default")
+$dotbotInstalled = Test-Path (Join-Path $dotbotDir "core")
 
 if (-not $dotbotInstalled) {
     Write-TestResult -Name "Layer 4 Jira prerequisites" -Status Fail -Message "dotbot not installed globally"
@@ -200,7 +200,7 @@ function Invoke-JiraRoundTrip {
         }
         ($control | ConvertTo-Json -Depth 10) | Set-Content -Path (Join-Path $controlDir "settings.json") -Encoding UTF8
 
-        $notifModule = Join-Path $botDir "systems\mcp\modules\NotificationClient.psm1"
+        $notifModule = Join-Path $botDir "core/mcp/modules/NotificationClient.psm1"
 
         if (-not (Test-Path $notifModule)) {
             Write-TestResult -Name "Jira[$label]: NotificationClient.psm1 present" -Status Fail -Message "Module missing at $notifModule"
@@ -442,3 +442,5 @@ $allPassed = Write-TestSummary -LayerName "Layer 4: E2E Jira Q&A"
 if (-not $allPassed) {
     exit 1
 }
+
+

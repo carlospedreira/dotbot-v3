@@ -25,7 +25,7 @@ Write-Host ""
 Reset-TestResults
 
 # Check prerequisite: dotbot must be installed
-$dotbotInstalled = Test-Path (Join-Path $dotbotDir "workflows\default")
+$dotbotInstalled = Test-Path (Join-Path $dotbotDir "core")
 if (-not $dotbotInstalled) {
     Write-TestResult -Name "Layer 2 prerequisites" -Status Fail -Message "dotbot not installed globally — run install.ps1 first"
     Write-TestSummary -LayerName "Layer 2: Components"
@@ -87,7 +87,7 @@ if (Test-Path $settingsPath) {
         -Message "Expected a valid GUID in settings.instance_id"
 }
 
-$instanceIdModule = Join-Path $botDir "systems\runtime\modules\InstanceId.psm1"
+$instanceIdModule = Join-Path $botDir "core/runtime/modules/InstanceId.psm1"
 if (Test-Path $instanceIdModule) {
     Import-Module $instanceIdModule -Force
 
@@ -115,7 +115,7 @@ if (Test-Path $instanceIdModule) {
     Write-TestResult -Name "InstanceId module exists" -Status Fail -Message "Module not found at $instanceIdModule"
 }
 
-$worktreeManagerModule = Join-Path $botDir "systems\runtime\modules\WorktreeManager.psm1"
+$worktreeManagerModule = Join-Path $botDir "core/runtime/modules/WorktreeManager.psm1"
 if (Test-Path $worktreeManagerModule) {
     Import-Module $worktreeManagerModule -Force
 
@@ -137,7 +137,7 @@ if (Test-Path $worktreeManagerModule) {
     Write-TestResult -Name "WorktreeManager module exists" -Status Fail -Message "Module not found at $worktreeManagerModule"
 }
 
-$promptBuilderScript = Join-Path $botDir "systems\runtime\modules\prompt-builder.ps1"
+$promptBuilderScript = Join-Path $botDir "core/runtime/modules/prompt-builder.ps1"
 if (Test-Path $promptBuilderScript) {
     . $promptBuilderScript
     $promptTask = [PSCustomObject]@{
@@ -169,7 +169,7 @@ if (Test-Path $promptBuilderScript) {
     Write-TestResult -Name "prompt-builder script exists" -Status Fail -Message "Script not found at $promptBuilderScript"
 }
 
-$extractCommitInfoScript = Join-Path $botDir "systems\mcp\modules\Extract-CommitInfo.ps1"
+$extractCommitInfoScript = Join-Path $botDir "core/mcp/modules/Extract-CommitInfo.ps1"
 if (Test-Path $extractCommitInfoScript) {
     . $extractCommitInfoScript
 
@@ -209,13 +209,13 @@ Write-Host ""
 Write-Host "  PROCESS STATUS SANITIZATION" -ForegroundColor Cyan
 Write-Host "  ────────────────────────────────────────────" -ForegroundColor DarkGray
 
-$fileWatcherModule = Join-Path $botDir "systems\ui\modules\FileWatcher.psm1"
-$controlApiModule = Join-Path $botDir "systems\ui\modules\ControlAPI.psm1"
-$processApiModule = Join-Path $botDir "systems\ui\modules\ProcessAPI.psm1"
-$stateBuilderModule = Join-Path $botDir "systems\ui\modules\StateBuilder.psm1"
-$steeringHeartbeatScript = Join-Path $botDir "systems\mcp\tools\steering-heartbeat\script.ps1"
-$dotBotLogModule = Join-Path $botDir "systems\runtime\modules\DotBotLog.psm1"
-$consoleSanitizerModule = Join-Path $botDir "systems\runtime\modules\ConsoleSequenceSanitizer.psm1"
+$fileWatcherModule = Join-Path $botDir "core/ui/modules/FileWatcher.psm1"
+$controlApiModule = Join-Path $botDir "core/ui/modules/ControlAPI.psm1"
+$processApiModule = Join-Path $botDir "core/ui/modules/ProcessAPI.psm1"
+$stateBuilderModule = Join-Path $botDir "core/ui/modules/StateBuilder.psm1"
+$steeringHeartbeatScript = Join-Path $botDir "core/mcp/tools/steering-heartbeat/script.ps1"
+$dotBotLogModule = Join-Path $botDir "core/runtime/modules/DotBotLog.psm1"
+$consoleSanitizerModule = Join-Path $botDir "core/runtime/modules/ConsoleSequenceSanitizer.psm1"
 $testControlDir = Join-Path $botDir ".control"
 $testProcessesDir = Join-Path $testControlDir "processes"
 $testLogsDir = Join-Path $testControlDir "logs"
@@ -413,7 +413,7 @@ if ((Test-Path $fileWatcherModule) -and (Test-Path $controlApiModule) -and (Test
 # Commit any framework file changes made by the tests above (e.g. config.json
 # stripping, settings backfill) so the integrity gate sees a clean state.
 Push-Location $testProject
-$manifestModule = Join-Path $botDir "systems\mcp\modules\FrameworkIntegrity.psm1"
+$manifestModule = Join-Path $botDir "core/mcp/modules/FrameworkIntegrity.psm1"
 if (Test-Path $manifestModule) {
     Import-Module $manifestModule -Force
     $frameworkPaths = Get-FrameworkProtectedPaths
@@ -2071,7 +2071,7 @@ Write-Host "  PROVIDERCLI MODULE" -ForegroundColor Cyan
 Write-Host "  ────────────────────────────────────────────" -ForegroundColor DarkGray
 
 # Test that ProviderCLI module loads (use dotbotDir which points to installed profiles)
-$providerCliPath = Join-Path $dotbotDir "workflows\default\systems\runtime\ProviderCLI\ProviderCLI.psm1"
+$providerCliPath = Join-Path $dotbotDir "core/runtime/ProviderCLI/ProviderCLI.psm1"
 $providerCliLoaded = $false
 try {
     Import-Module $providerCliPath -Force -ErrorAction Stop
@@ -2271,7 +2271,7 @@ Write-Host ""
 Write-Host ""
 Write-Host "--- NotificationClient Module ---" -ForegroundColor Cyan
 
-$notifModule = Join-Path $botDir "systems\mcp\modules\NotificationClient.psm1"
+$notifModule = Join-Path $botDir "core/mcp/modules/NotificationClient.psm1"
 
 if (Test-Path $notifModule) {
     Import-Module $notifModule -Force
@@ -2432,7 +2432,7 @@ if (Test-Path $notifModule) {
 Write-Host ""
 Write-Host "--- SettingsLoader Module ---" -ForegroundColor Cyan
 
-$settingsLoaderModule = Join-Path $botDir "systems\runtime\modules\SettingsLoader.psm1"
+$settingsLoaderModule = Join-Path $botDir "core/runtime/modules/SettingsLoader.psm1"
 
 if (Test-Path $settingsLoaderModule) {
     Import-Module $settingsLoaderModule -Force -DisableNameChecking
@@ -2555,7 +2555,7 @@ if (Test-Path $settingsLoaderModule) {
 Write-Host ""
 Write-Host "--- MergeConflictEscalation Module ---" -ForegroundColor Cyan
 
-$mergeEscModule = Join-Path $botDir "systems\runtime\modules\MergeConflictEscalation.psm1"
+$mergeEscModule = Join-Path $botDir "core/runtime/modules/MergeConflictEscalation.psm1"
 
 if (Test-Path $mergeEscModule) {
     Import-Module $mergeEscModule -Force
@@ -2671,7 +2671,7 @@ if (Test-Path $mergeEscModule) {
         # No .bot/ under $mceWorkspace → NotificationClient not found → notified=$false deterministically
         Assert-True -Name "Escalation reports notified=false when NotificationClient absent" `
             -Condition ($result.notified -eq $false) `
-            -Message "Expected notified=false when .bot/systems/mcp/modules/NotificationClient.psm1 is missing"
+            -Message "Expected notified=false when .bot/core/mcp/modules/NotificationClient.psm1 is missing"
 
         Assert-True -Name "Escalation reason is 'NotificationClient module not found'" `
             -Condition ($result.notification_reason -eq "NotificationClient module not found") `
@@ -2751,12 +2751,12 @@ if (Test-Path $mergeEscModule) {
         }
 
         # --- notified=$true path: stub NotificationClient under the temp root ---
-        # Materialise a fake .bot/systems/mcp/modules/NotificationClient.psm1 so the
+        # Materialise a fake .bot/core/mcp/modules/NotificationClient.psm1 so the
         # helper's Test-Path succeeds and Send-TaskNotification returns a canned
         # success payload. This is the direct unit-level guarantee for issue #224:
         # without it, the entire success branch (Add-Member notification, second
         # JSON write, notification metadata persistence) would be untested.
-        $stubModulesDir = Join-Path $mceWorkspace ".bot\systems\mcp\modules"
+        $stubModulesDir = Join-Path $mceWorkspace ".bot/core/mcp/modules"
         New-Item -ItemType Directory -Force -Path $stubModulesDir | Out-Null
         $stubModulePath = Join-Path $stubModulesDir "NotificationClient.psm1"
         $stubModuleContent = @'
@@ -2909,7 +2909,7 @@ Export-ModuleMember -Function 'Close-SessionOnTask'
 Write-Host ""
 Write-Host "--- NotificationPoller Module ---" -ForegroundColor Cyan
 
-$pollerModule = Join-Path $botDir "systems\ui\modules\NotificationPoller.psm1"
+$pollerModule = Join-Path $botDir "core/ui/modules/NotificationPoller.psm1"
 
 if (Test-Path $pollerModule) {
     Import-Module $pollerModule -Force
@@ -3342,7 +3342,7 @@ if (Test-Path $kickstartViaPrProfile) {
     Write-Host "  start-from-pr DIRECT TOOL TESTS" -ForegroundColor Cyan
     Write-Host "  ────────────────────────────────────────────" -ForegroundColor DarkGray
 
-    $prContextScript = Join-Path $kickstartViaPrProfile "systems\mcp\tools\pr-context\script.ps1"
+    $prContextScript = Join-Path $kickstartViaPrProfile "systems/mcp/tools/pr-context/script.ps1"
     if (Test-Path $prContextScript) {
         . $prContextScript
 
@@ -3626,7 +3626,7 @@ Write-Host "  PRODUCT API DIRECT TESTS" -ForegroundColor Cyan
 Write-Host "  ────────────────────────────────────────────" -ForegroundColor DarkGray
 
 $repoRoot = Split-Path $PSScriptRoot -Parent
-$productApiModule = Join-Path $repoRoot "workflows\default\systems\ui\modules\ProductAPI.psm1"
+$productApiModule = Join-Path $repoRoot "core/ui/modules/ProductAPI.psm1"
 if (Test-Path $productApiModule) {
     Import-Module $productApiModule -Force
 
@@ -3895,52 +3895,51 @@ if (Test-Path $productApiModule) {
         Set-Content -Path (Join-Path $kickstartProductDir 'task-groups.json') -Value '{"groups":[]}' -Encoding UTF8
         Set-Content -Path (Join-Path $kickstartDecisionsDir 'dec-0001.md') -Value '# Decision 1' -Encoding UTF8
 
-        # Minimal legacy kickstart phase list via settings.default.json — the
-        # Get-KickstartStatus fallback path. Avoids needing a YAML parser in
-        # the test environment.
-        $kickstartPhasesJson = @'
-{
-  "kickstart": {
-    "phases": [
-      {
-        "id": "product-documents",
-        "name": "Product Documents",
-        "type": "prompt",
-        "outputs": ["mission.md", "tech-stack.md", "entity-model.md"]
-      },
-      {
-        "id": "generate-decisions",
-        "name": "Generate Decisions",
-        "type": "prompt",
-        "outputs_dir": "decisions",
-        "min_output_count": 1
-      },
-      {
-        "id": "task-groups",
-        "name": "Task Groups",
-        "type": "prompt",
-        "outputs": ["task-groups.json"]
-      },
-      {
-        "id": "task-group-expansion",
-        "name": "Task Group Expansion",
-        "type": "script",
-        "script": "expand-task-groups.ps1",
-        "commit": { "paths": ["workspace/tasks/"] }
-      }
-    ]
-  }
-}
+        # PR-3 deletion removed the legacy settings.kickstart.phases fallback
+        # in Get-KickstartStatus. Tests now go through Get-ActiveWorkflowManifest
+        # which requires a workflow.yaml, which in turn needs powershell-yaml.
+        $haveYamlModule = $null -ne (Get-Module -ListAvailable powershell-yaml -ErrorAction SilentlyContinue)
+        if ($haveYamlModule) {
+            $kickstartManifestDir = Join-Path $kickstartBotRoot "workflows\test-flow"
+            New-Item -Path $kickstartManifestDir -ItemType Directory -Force | Out-Null
+            $kickstartManifestYaml = @'
+name: test-flow
+version: "1.0"
+description: Test manifest for Get-KickstartStatus integration
+tasks:
+  - name: "Product Documents"
+    id: product-documents
+    type: prompt
+    outputs: ["mission.md", "tech-stack.md", "entity-model.md"]
+  - name: "Generate Decisions"
+    id: generate-decisions
+    type: prompt
+    outputs_dir: "decisions"
+    min_output_count: 1
+  - name: "Task Groups"
+    id: task-groups
+    type: prompt
+    outputs: ["task-groups.json"]
+  - name: "Task Group Expansion"
+    id: task-group-expansion
+    type: script
+    script: "expand-task-groups.ps1"
+    outputs_dir: "tasks/todo"
+    min_output_count: 1
+    commit:
+      paths: ["workspace/tasks/"]
 '@
-        Set-Content -Path (Join-Path $kickstartSettings 'settings.default.json') -Value $kickstartPhasesJson -Encoding UTF8
+            Set-Content -Path (Join-Path $kickstartManifestDir 'workflow.yaml') -Value $kickstartManifestYaml -Encoding UTF8
+        }
+        Set-Content -Path (Join-Path $kickstartSettings 'settings.default.json') -Value '{}' -Encoding UTF8
 
-        # Get-KickstartStatus dot-sources $BotRoot/systems/runtime/modules/workflow-manifest.ps1
+        # Get-KickstartStatus dot-sources $BotRoot/core/runtime/modules/workflow-manifest.ps1
         # and that file imports ManifestCondition.psm1 from the same directory.
         # Copy both helpers into the test bot root so the integration test can run.
-        $runtimeModulesDir = Join-Path $kickstartBotRoot "systems\runtime\modules"
+        $runtimeModulesDir = Join-Path $kickstartBotRoot "core/runtime/modules"
         New-Item -Path $runtimeModulesDir -ItemType Directory -Force | Out-Null
         $repoRootForTest = Split-Path $PSScriptRoot -Parent
-        $realRuntimeModules = Join-Path $repoRootForTest "workflows\default\systems\runtime\modules"
+        $realRuntimeModules = Join-Path $repoRootForTest "core/runtime/modules"
         Copy-Item -Path (Join-Path $realRuntimeModules 'workflow-manifest.ps1') -Destination $runtimeModulesDir -Force
         Copy-Item -Path (Join-Path $realRuntimeModules 'ManifestCondition.psm1') -Destination $runtimeModulesDir -Force
 
@@ -4065,62 +4064,25 @@ if (Test-Path $productApiModule) {
         Set-Content -Path (Join-Path $kickstartTasksDir 'todo/expanded-task-1.json') `
             -Value '{"id":"t1","name":"test"}' -Encoding UTF8
 
-        $statusNoProc = Get-KickstartStatus
-        Assert-Equal -Name "Get-KickstartStatus: overall status with 4 complete phases (no proc)" `
-            -Expected "completed" -Actual $statusNoProc.status
-        $expansionPhase = $statusNoProc.phases | Where-Object { $_.id -eq 'task-group-expansion' }
-        Assert-Equal -Name "Get-KickstartStatus: expansion phase completed via filesystem inference" `
-            -Expected "completed" -Actual $expansionPhase.status
-        Assert-True -Name "Get-KickstartStatus: resume_from is null when all phases complete" `
-            -Condition ([string]::IsNullOrEmpty($statusNoProc.resume_from)) `
-            -Message "Expected resume_from null/empty, got '$($statusNoProc.resume_from)'"
-
-        # ── Defect 1: process-type filter (P2) ──
-
         $procDir = Join-Path $kickstartControl 'processes'
 
-        # P2 positive: task-runner process with matching workflow_name IS picked up.
-        # This case requires a real YAML manifest so that $workflowName gets
-        # populated inside Get-KickstartStatus (the legacy settings.default.json
-        # fallback leaves workflowName null, which would short-circuit the match).
-        # Skip if powershell-yaml is unavailable in the test environment.
-        $haveYamlModule = $null -ne (Get-Module -ListAvailable powershell-yaml -ErrorAction SilentlyContinue)
         if ($haveYamlModule) {
-            $manifestDir = Join-Path $kickstartBotRoot "workflows\start-from-prompt"
-            New-Item -Path $manifestDir -ItemType Directory -Force | Out-Null
-            $manifestYaml = @'
-name: start-from-prompt
-version: "1.0"
-description: Test manifest for #244 regression
-tasks:
-  - name: "Product Documents"
-    id: product-documents
-    type: prompt
-    outputs: ["mission.md", "tech-stack.md", "entity-model.md"]
-  - name: "Generate Decisions"
-    id: generate-decisions
-    type: prompt
-    outputs_dir: "decisions"
-    min_output_count: 1
-  - name: "Task Groups"
-    id: task-groups
-    type: prompt
-    outputs: ["task-groups.json"]
-  - name: "Task Group Expansion"
-    id: task-group-expansion
-    type: script
-    script: "expand-task-groups.ps1"
-    outputs_dir: "tasks/todo"
-    min_output_count: 1
-    commit:
-      paths: ["workspace/tasks/"]
-'@
-            Set-Content -Path (Join-Path $manifestDir 'workflow.yaml') -Value $manifestYaml -Encoding UTF8
+            $statusNoProc = Get-KickstartStatus
+            Assert-Equal -Name "Get-KickstartStatus: overall status with 4 complete phases (no proc)" `
+                -Expected "completed" -Actual $statusNoProc.status
+            $expansionPhase = $statusNoProc.phases | Where-Object { $_.id -eq 'task-group-expansion' }
+            Assert-Equal -Name "Get-KickstartStatus: expansion phase completed via filesystem inference" `
+                -Expected "completed" -Actual $expansionPhase.status
+            Assert-True -Name "Get-KickstartStatus: resume_from is null when all phases complete" `
+                -Condition ([string]::IsNullOrEmpty($statusNoProc.resume_from)) `
+                -Message "Expected resume_from null/empty, got '$($statusNoProc.resume_from)'"
 
+            # ── Defect 1: process-type filter (P2) ──
+            # P2 positive: task-runner process with matching workflow_name IS picked up.
             $matchingProc = @{
                 id = 'proc-test-match'
                 type = 'task-runner'
-                workflow_name = 'start-from-prompt'
+                workflow_name = 'test-flow'
                 status = 'completed'
                 phases = @()
             } | ConvertTo-Json -Depth 4
@@ -4129,11 +4091,18 @@ tasks:
             Assert-Equal -Name "Get-KickstartStatus P2: task-runner proc with matching workflow_name → process_id populated" `
                 -Expected 'proc-test-match' -Actual $statusMatch.process_id
             Assert-Equal -Name "Get-KickstartStatus P2: workflow_name surfaced in response" `
-                -Expected 'start-from-prompt' -Actual $statusMatch.workflow_name
+                -Expected 'test-flow' -Actual $statusMatch.workflow_name
             Remove-Item (Join-Path $procDir 'proc-test-match.json') -Force
-            # Leave the manifest in place for the remaining P2 tests.
         } else {
-            Write-TestResult -Name "Get-KickstartStatus P2: task-runner proc with matching workflow_name" `
+            Write-TestResult -Name "Get-KickstartStatus: overall status with 4 complete phases (no proc)" `
+                -Status Skip -Message "powershell-yaml module not available"
+            Write-TestResult -Name "Get-KickstartStatus: expansion phase completed via filesystem inference" `
+                -Status Skip -Message "powershell-yaml module not available"
+            Write-TestResult -Name "Get-KickstartStatus: resume_from is null when all phases complete" `
+                -Status Skip -Message "powershell-yaml module not available"
+            Write-TestResult -Name "Get-KickstartStatus P2: task-runner proc with matching workflow_name → process_id populated" `
+                -Status Skip -Message "powershell-yaml module not available"
+            Write-TestResult -Name "Get-KickstartStatus P2: workflow_name surfaced in response" `
                 -Status Skip -Message "powershell-yaml module not available"
         }
 
@@ -4186,7 +4155,7 @@ tasks:
 Write-Host "  INVOKE-KICKSTARTPROCESS: task_gen dispatch" -ForegroundColor Cyan
 Write-Host "  ────────────────────────────────────────────" -ForegroundColor DarkGray
 
-$kickstartDispatchScript = Join-Path $dotbotDir "workflows\default\systems\runtime\modules\ProcessTypes\Invoke-KickstartProcess.ps1"
+$kickstartDispatchScript = Join-Path $dotbotDir "core/runtime/modules/ProcessTypes/Invoke-KickstartProcess.ps1"
 if (Test-Path $kickstartDispatchScript) {
     # Run in an isolated subprocess to avoid polluting test scope and to allow
     # function stubs to shadow real module exports cleanly.
@@ -4208,7 +4177,7 @@ if (Test-Path $kickstartDispatchScript) {
             $tasksDir  = Join-Path $workspace "tasks"
             $todoDir   = Join-Path $tasksDir "todo"
             $settings  = Join-Path $botRoot "settings"
-            $rtMods    = Join-Path $botRoot "systems\runtime\modules"
+            $rtMods    = Join-Path $botRoot "core/runtime/modules"
             $wfDir     = Join-Path $botRoot "workflows\test-wf"
             $prompts   = Join-Path $botRoot "recipes\prompts"
 
@@ -4377,7 +4346,7 @@ tasks:
 Write-Host "  DOTBOTLOG MODULE" -ForegroundColor Cyan
 Write-Host "  ────────────────────────────────────────────" -ForegroundColor DarkGray
 
-$dotBotLogModule = Join-Path $dotbotDir "workflows\default\systems\runtime\modules\DotBotLog.psm1"
+$dotBotLogModule = Join-Path $dotbotDir "core/runtime/modules/DotBotLog.psm1"
 if (Test-Path $dotBotLogModule) {
     # Use a dedicated temp directory for DotBotLog tests
     $logTestDir = Join-Path ([System.IO.Path]::GetTempPath()) "dotbot-log-test-$([guid]::NewGuid().ToString().Substring(0,6))"
@@ -4509,8 +4478,8 @@ Write-Host "  FRAMEWORK INTEGRITY" -ForegroundColor Cyan
 Write-Host "  ────────────────────────────────────────────" -ForegroundColor DarkGray
 
 $repoRoot = Get-RepoRoot
-$manifestModule = Join-Path $dotbotDir "workflows" "default" "systems" "mcp" "modules" "Manifest.psm1"
-$frameworkIntegrityModule = Join-Path $dotbotDir "workflows" "default" "systems" "mcp" "modules" "FrameworkIntegrity.psm1"
+$manifestModule = Join-Path $dotbotDir "core" "mcp" "modules" "Manifest.psm1"
+$frameworkIntegrityModule = Join-Path $dotbotDir "core" "mcp" "modules" "FrameworkIntegrity.psm1"
 
 if ((Test-Path $manifestModule) -and (Test-Path $frameworkIntegrityModule)) {
     Import-Module $manifestModule -Force
@@ -4526,11 +4495,11 @@ if ((Test-Path $manifestModule) -and (Test-Path $frameworkIntegrityModule)) {
         & git config user.name "Test" 2>$null
 
         # Create a .bot/ structure with two protected dirs and a protected file.
-        # Include the sentinel file (dotbot-mcp.ps1) that Test-FrameworkIntegrity
-        # uses to detect pre-first-commit state via git log.
-        $protectedPaths = @('.bot/systems', '.bot/go.ps1')
-        New-Item -ItemType Directory -Path (Join-Path $fiTestDir ".bot/systems/mcp") -Force | Out-Null
-        Set-Content -Path (Join-Path $fiTestDir ".bot/systems/mcp/dotbot-mcp.ps1") -Value "# mcp server" -Encoding UTF8
+        # Include the sentinel file (dotbot-mcp.ps1) at .bot/core/mcp/ that
+        # Test-FrameworkIntegrity uses to detect pre-first-commit state via git log.
+        $protectedPaths = @('.bot/core', '.bot/go.ps1')
+        New-Item -ItemType Directory -Path (Join-Path $fiTestDir ".bot/core/mcp") -Force | Out-Null
+        Set-Content -Path (Join-Path $fiTestDir ".bot/core/mcp/dotbot-mcp.ps1") -Value "# mcp server" -Encoding UTF8
         Set-Content -Path (Join-Path $fiTestDir ".bot/go.ps1") -Value "# go" -Encoding UTF8
 
         # ── New-DotbotManifest: generates valid JSON with correct hashes ──
@@ -4602,15 +4571,15 @@ if ((Test-Path $manifestModule) -and (Test-Path $frameworkIntegrityModule)) {
 
         # ── Test-DotbotManifest: added file ──
 
-        Set-Content -Path (Join-Path $fiTestDir ".bot/systems/extra.ps1") -Value "# extra" -Encoding UTF8
+        Set-Content -Path (Join-Path $fiTestDir ".bot/core/extra.ps1") -Value "# extra" -Encoding UTF8
         $addResult = Test-DotbotManifest -ProjectRoot $fiTestDir -ProtectedPaths $protectedPaths
         Assert-True -Name "Test-DotbotManifest added: success=false" `
             -Condition ($addResult.success -eq $false) `
             -Message "Expected failure for added file"
         Assert-True -Name "Test-DotbotManifest added: flags the new file" `
-            -Condition ($addResult.files -contains '.bot/systems/extra.ps1') `
-            -Message "Expected .bot/systems/extra.ps1 in files, got $($addResult.files -join ', ')"
-        Remove-Item (Join-Path $fiTestDir ".bot/systems/extra.ps1") -Force
+            -Condition ($addResult.files -contains '.bot/core/extra.ps1') `
+            -Message "Expected .bot/core/extra.ps1 in files, got $($addResult.files -join ', ')"
+        Remove-Item (Join-Path $fiTestDir ".bot/core/extra.ps1") -Force
 
         # ── Test-DotbotManifest: deleted file ──
 
@@ -4704,7 +4673,7 @@ if ((Test-Path $manifestModule) -and (Test-Path $frameworkIntegrityModule)) {
 Write-Host ""
 Write-Host "--- InboxWatcher Module ---" -ForegroundColor Cyan
 
-$inboxWatcherModule = Join-Path $botDir "systems\ui\modules\InboxWatcher.psm1"
+$inboxWatcherModule = Join-Path $botDir "core/ui/modules/InboxWatcher.psm1"
 
 if (Test-Path $inboxWatcherModule) {
     # DotBotLog may have been removed by the preceding DotBotLog test section — re-import it
@@ -5038,7 +5007,7 @@ if (Test-Path $inboxWatcherModule) {
 # --- Test-TaskIsMandatory (#213 mandatory halt) ---
 # ═══════════════════════════════════════════════════════════════════
 
-$workflowProcessScript = Join-Path $dotbotDir "workflows\default\systems\runtime\modules\ProcessTypes\Invoke-WorkflowProcess.ps1"
+$workflowProcessScript = Join-Path $dotbotDir "core/runtime/modules/ProcessTypes/Invoke-WorkflowProcess.ps1"
 if (Test-Path $workflowProcessScript) {
     # Extract Test-TaskIsMandatory via AST so we test the real function without running the full script
     $ast = [System.Management.Automation.Language.Parser]::ParseFile($workflowProcessScript, [ref]$null, [ref]$null)
@@ -5087,7 +5056,7 @@ if (Test-Path $workflowProcessScript) {
 }
 
 # New-WorkflowTask optional propagation
-$workflowManifestScript = Join-Path $dotbotDir "workflows\default\systems\runtime\modules\workflow-manifest.ps1"
+$workflowManifestScript = Join-Path $dotbotDir "core/runtime/modules/workflow-manifest.ps1"
 if (Test-Path $workflowManifestScript) {
     $manifestTmpDir = Join-Path ([System.IO.Path]::GetTempPath()) "dotbot-manifest-test-$(Get-Random)"
     $manifestTasksDir = Join-Path $manifestTmpDir "workspace\tasks\todo"
@@ -5133,3 +5102,5 @@ $allPassed = Write-TestSummary -LayerName "Layer 2: Components"
 if (-not $allPassed) {
     exit 1
 }
+
+
