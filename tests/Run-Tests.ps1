@@ -149,8 +149,10 @@ if (1 -in $layersToRun) {
     $mdRefsCode          = Invoke-TestFile -Layer '1' -FileName 'Test-MdRefs.ps1'
     $skillCodeReviewCode = Invoke-TestFile -Layer '1' -FileName 'Test-SkillCodeReview.ps1'
     $legacyVocabularyCode = Invoke-TestFile -Layer '1' -FileName 'Test-NoLegacyVocabulary.ps1'
+    $activityLogCode     = Invoke-TestFile -Layer '1' -FileName 'Test-ActivityLogHygiene.ps1'
+    $privacyScanCode     = Invoke-TestFile -Layer '1' -FileName 'Test-PrivacyScan.ps1'
 
-    $exitCode = if ($structureCode -ne 0 -or $compilationCode -ne 0 -or $workflowManifestCode -ne 0 -or $mdRefsCode -ne 0 -or $skillCodeReviewCode -ne 0 -or $legacyVocabularyCode -ne 0) { 1 } else { 0 }
+    $exitCode = if ($structureCode -ne 0 -or $compilationCode -ne 0 -or $workflowManifestCode -ne 0 -or $mdRefsCode -ne 0 -or $skillCodeReviewCode -ne 0 -or $legacyVocabularyCode -ne 0 -or $activityLogCode -ne 0 -or $privacyScanCode -ne 0) { 1 } else { 0 }
     $layerResults["1"] = ($exitCode -eq 0)
     if ($exitCode -ne 0) { $overallFailed = $true }
 }
@@ -166,8 +168,9 @@ if (2 -in $layersToRun) {
     $studioAPICode           = Invoke-TestFile -Layer '2' -FileName 'Test-StudioAPI.ps1'
     $goScriptCode            = Invoke-TestFile -Layer '2' -FileName 'Test-GoScript.ps1'
     $toolLocalCode           = Invoke-TestFile -Layer '2' -FileName 'Test-ToolLocal.ps1'
+    $mcpHandshakeCode        = Invoke-TestFile -Layer '2' -FileName 'Test-MCPHandshake.ps1'
 
-    $exitCode = if ($componentsCode -ne 0 -or $taskActionsCode -ne 0 -or $serverStartupCode -ne 0 -or $workflowIntegrationCode -ne 0 -or $processRegistryCode -ne 0 -or $processDispatchCode -ne 0 -or $studioAPICode -ne 0 -or $goScriptCode -ne 0 -or $toolLocalCode -ne 0) { 1 } else { 0 }
+    $exitCode = if ($componentsCode -ne 0 -or $taskActionsCode -ne 0 -or $serverStartupCode -ne 0 -or $workflowIntegrationCode -ne 0 -or $processRegistryCode -ne 0 -or $processDispatchCode -ne 0 -or $studioAPICode -ne 0 -or $goScriptCode -ne 0 -or $toolLocalCode -ne 0 -or $mcpHandshakeCode -ne 0) { 1 } else { 0 }
     $layerResults["2"] = ($exitCode -eq 0)
     if ($exitCode -ne 0) { $overallFailed = $true }
 }

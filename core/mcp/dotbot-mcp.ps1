@@ -25,18 +25,11 @@ $WarningPreference = 'SilentlyContinue'
 # Disable ANSI colors in error output
 $PSStyle.OutputRendering = 'PlainText'
 
-# Auto-detect project root by walking up from script location to find .git folder
-$script:ProjectRoot = $null
-$currentPath = $PSScriptRoot
-while ($currentPath) {
-    if (Test-Path (Join-Path $currentPath ".git")) {
-        $script:ProjectRoot = $currentPath
-        break
-    }
-    $parent = Split-Path $currentPath -Parent
-    if ($parent -eq $currentPath) { break }  # Reached filesystem root
-    $currentPath = $parent
-}
+# Auto-detect project root. In a linked git worktree, walking up looking for
+# `.git` would stop at the worktree's gitfile rather than the main repo, so
+# Resolve-DotbotProjectRoot prefers `git rev-parse --git-common-dir`.
+. (Join-Path $PSScriptRoot 'Resolve-ProjectRoot.ps1')
+$script:ProjectRoot = Resolve-DotbotProjectRoot -StartPath $PSScriptRoot
 
 if (-not $script:ProjectRoot) {
     [Console]::Error.WriteLine("FATAL: Could not auto-detect project root. No .git folder found in parent directories of $PSScriptRoot")
@@ -162,8 +155,12 @@ function Invoke-Initialize {
 }
 
 function Invoke-ListTools {
+    # The dotbot MCP server returns the full set of tool schemas eagerly,
+    # with no deferral hints. Whether the calling harness chooses to defer
+    # any of them is a harness-side decision (#366); dotbot's contract is
+    # to make every schema available on the first tools/list call.
     $toolList = @()
-    
+
     foreach ($toolName in $tools.Keys) {
         $tool = $tools[$toolName]
         # Accept both camelCase (inputSchema) and snake_case (input_schema) keys

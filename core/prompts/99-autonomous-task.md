@@ -12,6 +12,8 @@ You are an autonomous AI coding agent operating in Go Mode. Your mission is to c
 
 **Built-in tools** (`WebSearch`, `WebFetch`, `Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`) are always available — never use ToolSearch for them.
 
+> The Bash tool runs Bash, not PowerShell. Do not use `$obj.property`, `$_.Name`, `Get-ChildItem`, or `Where-Object`. Use `jq` for JSON, `awk` or `cut` for fields, `$(command)` for substitution, `grep` and `find` for filtering. If you need PowerShell semantics, run `pwsh -Command "<script>"` explicitly.
+
 **Load dotbot tools** (single bulk call — `select:` accepts a comma-separated list):
 
 ```
@@ -200,7 +202,6 @@ If `task_get_context` returns `has_analysis: false`, use targeted exploration:
 
 2. **Read context files only when needed:**
    - `.bot/workspace/product/entity-model.md` - domain knowledge
-   - `.bot/recipes/standards/global/*.md` - coding standards
    - Agent persona: {{APPLICABLE_AGENTS}}
 
 3. **Avoid over-reading:**

@@ -1329,14 +1329,26 @@ Assert-True -Name "Fix#C: 98-analyse-task.md mission read is marked skip-if-outp
 Assert-True -Name "Fix#C: 98-analyse-task.md refers to task outputs list for the guard" `
     -Condition ($analyseTaskSrc -match "task's\s+``outputs``\s+list")
 
-# ── Batch 2, Fix D: 98-analyse-task.md must treat .bot/recipes/standards/global
-# as an optional directory; skip the glob if it does not exist.
-Assert-True -Name "Fix#D: 98-analyse-task.md marks standards/global listing as skip-if-missing" `
-    -Condition ($analyseTaskSrc -match '(?s)List\s+available\s+standards\s+\(skip\s+if\s+directory\s+missing\)')
-Assert-True -Name "Fix#D: 98-analyse-task.md describes standards/global as optional" `
-    -Condition ($analyseTaskSrc -match '`\.bot/recipes/standards/global/`\s+directory\s+is\s+optional')
-Assert-True -Name "Fix#D: 98-analyse-task.md tells agent not to treat missing standards/global as error" `
-    -Condition ($analyseTaskSrc -match 'Do\s+\*\*not\*\*\s+treat\s+the\s+missing\s+directory\s+as\s+an\s+error')
+# ── #365: 98-analyse-task.md must not probe .bot/recipes/standards/global with
+# a Glob, and 99-autonomous-task.md must not list it as a context-file source.
+# The prompt now relies on {{APPLICABLE_STANDARDS}} plus the task's
+# `applicable_standards` list. Both checks must hold even if a future edit
+# reorders the Glob keys or splits the call across lines.
+Assert-True -Name "#365: 98-analyse-task.md no longer issues a Glob over .bot/recipes/standards/global" `
+    -Condition (-not ($analyseTaskSrc -match '(?s)Glob\([^)]*\.bot/recipes/standards/global'))
+Assert-True -Name "#365: 98-analyse-task.md tells the agent not to probe .bot/recipes/standards/global" `
+    -Condition ($analyseTaskSrc -match 'Do\s+not\s+probe\s+`\.bot/recipes/standards/global/`')
+
+$execPromptSrc = Get-Content (Join-Path $repoRoot "core/prompts/99-autonomous-task.md") -Raw
+Assert-True -Name "#365: 99-autonomous-task.md no longer cites .bot/recipes/standards/global/*.md as a context file" `
+    -Condition (-not ($execPromptSrc -match '\.bot/recipes/standards/global/\*\.md'))
+
+# Runtime fallback must not push agents back toward the directory the prompts
+# now tell them to avoid. prompt-builder.ps1's APPLICABLE_STANDARDS fallback
+# previously said "use global standards from .bot/recipes/standards/global/".
+$promptBuilderSrc = Get-Content (Join-Path $repoRoot "core/runtime/modules/prompt-builder.ps1") -Raw
+Assert-True -Name "#365: prompt-builder APPLICABLE_STANDARDS fallback does not mention recipes/standards/global" `
+    -Condition (-not ($promptBuilderSrc -match '(?s)applicableStandards\s*=\s*"[^"]*\.bot/recipes/standards/global'))
 
 # ── Batch 2, Fix E: 03a category_hint field-reference row must list the full
 # six-value enum and forbid inventing new categories like `frontend`.
@@ -1418,6 +1430,26 @@ Assert-True -Name "Fix#H: 03a example task-groups.json includes applicable_decis
     -Condition ($planTaskGroupsSrc -match '"applicable_decisions":\s*\[')
 Assert-True -Name "Fix#H: 03a Field Reference declares applicable_decisions as a required field" `
     -Condition ($planTaskGroupsSrc -match '\|\s+`applicable_decisions`\s+\|\s+Yes\s+\|')
+
+# ── #364: Both core prompts must warn that the Bash tool runs Bash, not
+# PowerShell. Agents picked up PowerShell's $obj.property syntax from the
+# project's PowerShell-heavy code and got `extglob.project_name: command not
+# found` errors when piping JSON through Bash.
+$bashWarningPrompts = @(
+    (Join-Path $repoRoot "core/prompts/99-autonomous-task.md"),
+    (Join-Path $repoRoot "core/prompts/98-analyse-task.md")
+)
+foreach ($pf in $bashWarningPrompts) {
+    $relName = Split-Path $pf -Leaf
+    Assert-PathExists -Name "#364: $relName exists" -Path $pf
+    $src = Get-Content $pf -Raw
+    Assert-True -Name "#364: $relName warns the Bash tool runs Bash, not PowerShell" `
+        -Condition ($src -match 'Bash\s+tool\s+runs\s+Bash,\s+not\s+PowerShell')
+    Assert-True -Name "#364: $relName names `$obj.property as a forbidden idiom" `
+        -Condition ($src -match '\$obj\.property')
+    Assert-True -Name "#364: $relName tells the agent to use pwsh -Command for PowerShell semantics" `
+        -Condition ($src -match 'pwsh\s+-Command')
+}
 
 Write-Host ""
 
